@@ -2,6 +2,7 @@ using Application.DIResolver;
 using Domain.Constants;
 using Domain.Entities.AppSettings;
 using Domain.Entities.Response;
+using Infrastructure.Services.V1.Excel;
 using Infrastructure.ServicesConfiguration;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.OpenApi.Models;
@@ -24,6 +25,11 @@ builder.WebHost.ConfigureKestrel(k => k.Limits.MaxRequestBodySize = (long)maxMb 
 // ── services ───────────────────────────────────────────────────────────
 builder.Services.AddInfrastructure(builder.Configuration);
 builder.Services.AddPlatformServices();
+// ── decision engines, recommendation, analytics (Application) + their Excel writers (Infrastructure) ─
+builder.Services.AddRecommendationServices();
+builder.Services.AddRecommendationExcel();
+builder.Services.AddGrcAnalyticsServices();
+builder.Services.AddGrcExcelExport();
 builder.Services.AddAuthorization();
 
 builder.Services.AddControllers()

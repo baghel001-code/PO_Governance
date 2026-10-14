@@ -1,0 +1,404 @@
+@* "Action Required — Detailed List" (showDetailView / setEngineTab / renderDetailHeader / filterAssTable /
+   setDecFilter / toggleAssReason). The rows, groups, texts and colours are Tool2DetailViewDto from
+   POST …/detail; this component lays them out, pages long lists and sorts the Multi Concept table. *@
+<div id="ass-detail-view" style="margin-bottom:16px">
+    <div class="t2-dv-top">
+        <button class="t2-back" @onclick="OnBack">← Summary</button>
+        <span class="t2-dv-title">Action Required — Detailed List</span>
+        <div class="t2-tabs">
+            <button id="eng-tab-B" class="t2-tab b @(Filter.Tab != "A" ? "on" : "")" @onclick='() => SetTab("B")'>Single Concept MRP · Colour STR</button>
+            <button id="eng-tab-A" class="t2-tab a @(Filter.Tab == "A" ? "on" : "")" @onclick='() => SetTab("A")'>Multi Concept MRP · Peer BSR</button>
+        </div>
+    </div>
+
+    <div id="eng-context-banner" class="t2-banner" style="background:@Detail.BannerBg;border-left-color:@Detail.BannerColor;color:@Detail.BannerColor">
+        <strong>@Detail.BannerTitle</strong> — @Detail.BannerText
+    </div>
+
+    <div class="t2-filters">
+        <div class="t2-filters-h">Filter &amp; Action Selection</div>
+        <div class="t2-frow">
+            @Select("Brand Type", "ass-filter-brand", "brand", "All Brands", Options.Brands, Filter.Brand, 120)
+            @Select("Division", "ass-filter-div", "div", "All Divisions", Options.Divisions, Filter.Div, 140)
+            @Select("MC", "ass-filter-mc", "mc", "All MCs", Options.Mcs, Filter.Mc, 160)
+            @Select("MRP", "ass-filter-mrp", "mrp", "All MRPs", Options.Mrps, Filter.Mrp, 110)
+            @Select("Del. Month", "ass-filter-mon", "mon", "All Months", Options.Months, Filter.Mon, 115)
+            <div class="t2-f">
+                <label>Action</label>
+                <div class="t2-chips">
+                    @foreach (var c in Chips)
+                    {
+                        var cc = c;
+                        var on = (Filter.Dec ?? "") == cc.Dec;
+                        <button id="filt-btn-@cc.Id" class="t2-chip @(on ? "on" : "")" title="@cc.Title"
+                                style="border-color:@cc.Border;background:@cc.Bg;color:@cc.Color" @onclick="() => SetDec(cc.Dec)">@cc.Text</button>
+                    }
+                </div>
+            </div>
+            <div class="t2-f-right">@Actions</div>
+        </div>
+    </div>
+
+    <div class="t2-card flush">
+        <div class="t2-act-head">
+            <span class="t">⚠ Action Required</span>
+            <span class="c" id="detail-row-count">@Detail.CountText</span>
+            <span class="s">· Sorted by highest Qty at Risk · Click row for detailed computation</span>
+            @if (Busy)
+            {
+                <span class="s">⏳</span>
+            }
+        </div>
+        <div class="t2-clip">
+            <div class="t2-tbl-wrap @(Busy ? "t2-busy" : "")">
+                <table class="t2-dtbl">
+                    <thead>
+                        <tr id="ass-table-header">
+                            @for (var i = 0; i < Detail.Header.Count; i++)
+                            {
+                                var h = Detail.Header[i];
+                                var col = i;
+                                var sortable = Detail.Tab == "A" && i < Detail.Header.Count - 1;
+                                <th class="@(sortable ? "sort" : "")" style="text-align:@h.Align;@(h.MinWidth != null ? "min-width:" + h.MinWidth : "")"
+                                    title="@(sortable ? "Click to sort" : h.Label == "▼" ? "Click row — details inside" : null)"
+                                    @onclick="() => Sort(col, sortable)">
+                                    @h.Label
+                                    @if (sortable && _sortCol == col)
+                                    {
+                                        <span class="t2-sort-ind">@(_sortDesc ? "▼" : "▲")</span>
+                                    }
+                                </th>
+                            }
+                        </tr>
+                    </thead>
+                    <tbody id="ass-table-body">
+                        @if (!Detail.Empty)
+                        {
+                            if (Detail.Tab == "A")
+                            {
+                                @TabA()
+                            }
+                            else
+                            {
+                                @TabB()
+                            }
+                        }
+                    </tbody>
+                </table>
+            </div>
+            @if (Detail.Empty)
+            {
+                <div class="t2-noaction" id="ass-no-action">✓ No action required for the selected filters</div>
+            }
+            else if (_total > _limit)
+            {
+                <div class="t2-more">
+                    <span>Showing @Math.Min(_limit, _total) of @_total @(Detail.Tab == "A" ? "rows" : "colour groups")</span>
+                    <button @onclick="() => _limit += PageSize">Show @Math.Min(PageSize, _total - _limit) more</button>
+                    <button @onclick="() => _limit = int.MaxValue">Show all</button>
+                </div>
+            }
+        </div>
+    </div>
+</div>
+
+@code {
+    [Parameter] public Tool2DetailViewDto Detail { get; set; } = new();
+    [Parameter] public Tool2FilterOptionsDto Options { get; set; } = new();
+    [Parameter] public Tool2DetailFilterDto Filter { get; set; } = new();
+    [Parameter] public IReadOnlyDictionary<int, Tool2LineDto> Lines { get; set; } = new Dictionary<int, Tool2LineDto>();
+    [Parameter] public bool Busy { get; set; }
+    [Parameter] public EventCallback OnFilterChanged { get; set; }
+    [Parameter] public EventCallback OnBack { get; set; }
+    [Parameter] public EventCallback<Tool2LineDto> OnRecommend { get; set; }
+    [Parameter] public EventCallback<Tool2ColourGroupDto> OnRecommendGroup { get; set; }
+    /// <summary>Category Head picker + ⬇ Excel (owned by the page).</summary>
+    [Parameter] public RenderFragment? Actions { get; set; }
+
+    private const int PageSize = 100;
+    private int _limit = PageSize;
+    private int _total;
+    private int? _sortCol;
+    private bool _sortDesc = true;
+    private readonly HashSet<string> _open = new();
+    private Tool2DetailViewDto? _seen;
+    private List<int> _rowsA = new();
+
+    private sealed record Chip(string Id, string Dec, string Text, string Title, string Border, string Bg, string Color);
+
+    private static readonly Chip[] Chips =
+    {
+        new("cancel", "Cancel", "🚫 Cancel", "Show Cancel decisions", "#DC2626", "#FEF2F2", "#DC2626"),
+        new("reduce", "Reduce Qty", "⬇ Reduce", "Show Reduce decisions", "#D97706", "#FFFBEB", "#D97706"),
+        new("watch", "Watch List", "👁 Watch", "Show Watch List decisions", "#D97706", "#FFF7ED", "#92400E"),
+        new("retain", "Retain", "✅ Retain", "Show Retain decisions", "#00873E", "#DCFCE7", "#00873E"),
+        new("all", "", "All", "Show every decision", "var(--vmm-navy)", "var(--vmm-navy)", "#fff"),
+    };
+
+    protected override void OnParametersSet()
+    {
+        if (ReferenceEquals(_seen, Detail)) return;
+        _seen = Detail;
+        _open.Clear();
+        _limit = PageSize;
+        if (Detail.Tab != "A") _sortCol = null;
+        ApplySort();
+        _total = Detail.Tab == "A" ? _rowsA.Count : Detail.Months?.Sum(m => m.Groups.Count) ?? 0;
+    }
+
+    private void ApplySort()
+    {
+        var rows = Detail.Rows ?? new List<int>();
+        if (_sortCol is not { } c)
+        {
+            _rowsA = rows;
+            return;
+        }
+        var lines = rows.Where(Lines.ContainsKey).Select(i => Lines[i]).ToList();
+        // Display-only re-ordering of the API's rows by the clicked column.
+        IOrderedEnumerable<Tool2LineDto> o = c switch
+        {
+            6 => Order(lines, l => double.TryParse(l.Mrp, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var m) ? m : double.MinValue),
+            8 => Order(lines, l => l.RelQty),
+            11 => Order(lines, l => l.Percentile ?? double.MinValue),
+            _ => OrderText(lines, l => c switch
+            {
+                0 => l.PoNum,
+                1 => l.Gm,
+                2 => l.Colour,
+                3 => l.Brand,
+                4 => l.Div,
+                5 => l.McDesc,
+                7 => DmSortKey(l.Dm),
+                9 => l.OptionType ?? "",
+                10 => l.Quartile ?? "",
+                _ => l.Decision,
+            }),
+        };
+        _rowsA = o.ThenByDescending(l => l.RelQty).Select(l => l.Idx).ToList();
+    }
+
+    private IOrderedEnumerable<Tool2LineDto> Order(IEnumerable<Tool2LineDto> src, Func<Tool2LineDto, double> key) =>
+        _sortDesc ? src.OrderByDescending(key) : src.OrderBy(key);
+
+    private IOrderedEnumerable<Tool2LineDto> OrderText(IEnumerable<Tool2LineDto> src, Func<Tool2LineDto, string> key) =>
+        _sortDesc ? src.OrderByDescending(key, StringComparer.OrdinalIgnoreCase) : src.OrderBy(key, StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>"MM.YYYY" sorts by year then month.</summary>
+    private static string DmSortKey(string dm) => dm.Length == 7 && dm[2] == '.' ? dm[3..] + dm[..2] : dm;
+
+    private void Sort(int col, bool sortable)
+    {
+        if (!sortable) return;
+        if (_sortCol == col) _sortDesc = !_sortDesc;
+        else { _sortCol = col; _sortDesc = col is 6 or 8 or 11; }
+        ApplySort();
+    }
+
+    private void Toggle(string key)
+    {
+        if (!_open.Remove(key)) _open.Add(key);
+    }
+
+    private async Task SetTab(string tab)
+    {
+        if (Filter.Tab == tab) return;
+        Filter.Tab = tab;
+        _sortCol = null;
+        await OnFilterChanged.InvokeAsync();
+    }
+
+    private async Task SetDec(string dec)
+    {
+        Filter.Dec = dec == "" ? null : dec;
+        await OnFilterChanged.InvokeAsync();
+    }
+
+    private async Task SetFilter(string which, ChangeEventArgs e)
+    {
+        var v = e.Value?.ToString();
+        if (string.IsNullOrEmpty(v)) v = null;
+        switch (which)
+        {
+            case "brand": Filter.Brand = v; break;
+            case "div": Filter.Div = v; break;
+            case "mc": Filter.Mc = v; break;
+            case "mrp": Filter.Mrp = v; break;
+            case "mon": Filter.Mon = v; break;
+        }
+        await OnFilterChanged.InvokeAsync();
+    }
+
+    private RenderFragment Select(string label, string id, string which, string all, List<string> opts, string? value, int minWidth) => __builder =>
+    {
+        <div class="t2-f">
+            <label for="@id">@label</label>
+            <select id="@id" class="t2-sel" style="min-width:@(minWidth)px" @onchange="e => SetFilter(which, e)">
+                <option value="" selected="@string.IsNullOrEmpty(value)">@all</option>
+                @foreach (var o in opts)
+                {
+                    <option value="@o" selected="@(o == value)">@o</option>
+                }
+            </select>
+        </div>
+    };
+
+    // ── Tab A: one row per PO (Multi Concept) ──
+    private RenderFragment TabA() => __builder =>
+    {
+        var shown = 0;
+        foreach (var idx in _rowsA)
+        {
+            if (shown >= _limit) break;
+            if (!Lines.TryGetValue(idx, out var r)) continue;
+            var key = "a" + idx;
+            var open = _open.Contains(key);
+            var (dCol, _) = T2Ui.ReasonColors(r.Decision);
+            var qc = T2Ui.QuartileColor(r.Quartile);
+            <tr class="t2-drow @(shown % 2 == 0 ? "even" : "odd") @(open ? "open" : "")" id="row-ar-@idx" title="Click row to expand/collapse decision reason" @onclick="() => Toggle(key)">
+                <td class="mono" style="color:var(--ink3)">@(string.IsNullOrEmpty(r.PoNum) ? "—" : r.PoNum)</td>
+                <td class="mono" style="font-weight:600;color:var(--ink)">@r.Gm</td>
+                <td style="color:var(--ink2)">@r.Colour</td>
+                <td style="font-weight:600;color:var(--ink2);white-space:nowrap">@r.Brand</td>
+                <td style="color:var(--ink3)"><div class="t2-ell sm" title="@r.Div">@r.Div</div></td>
+                <td><div class="t2-ell" title="@r.McDesc">@r.McDesc</div></td>
+                <td class="t2-r mono">@T2Ui.MrpText(r.Mrp)</td>
+                <td class="t2-c mono" style="white-space:nowrap">@r.Dm</td>
+                <td class="t2-r mono" style="font-weight:600">@T2Ui.Fmt(r.RelQty)</td>
+                <td style="color:var(--ink2)">@(r.OptionType ?? "—")</td>
+                <td class="t2-c">
+                    @if (!string.IsNullOrEmpty(r.Quartile))
+                    {
+                        <span class="t2-qchip" style="background:@(qc)22;color:@qc">@r.Quartile</span>
+                    }
+                    else
+                    {
+                        <span style="color:var(--ink3)">—</span>
+                    }
+                </td>
+                <td class="t2-r mono" style="color:var(--ink2)">@T2Ui.Pct(r.Percentile)</td>
+                <td class="t2-c"><T2DecisionPill Text="@r.Decision" Color="@r.DecisionColor" Bg="@r.DecisionBg" Tooltip="@r.Tooltip" /></td>
+                <td class="t2-c" style="width:28px;padding:8px"><span class="t2-rbtn lg @(open ? "open" : "")" title="Show reason">@(open ? "▲" : "▼")</span></td>
+            </tr>
+            if (open)
+            {
+                <tr id="ar-reason-@idx">
+                    <td colspan="14" class="t2-reason-cell" style="border-bottom:2px solid @(dCol)22">
+                        <T2LineReason Line="r" Separator=" — " OnRecommend="OnRecommend" />
+                    </td>
+                </tr>
+            }
+            shown++;
+        }
+    };
+
+    // ── Tab B: month sections of colour groups (Single Concept) ──
+    private RenderFragment TabB() => __builder =>
+    {
+        var shown = 0;
+        foreach (var m in Detail.Months ?? new List<Tool2MonthSectionDto>())
+        {
+            if (shown >= _limit) break;
+            <tr class="t2-mon-row">
+                <td colspan="14">
+                    <span class="m">📅 @m.Month</span><span class="g">@m.GroupsText</span><span class="x">@m.ExcessText</span><span class="t">@m.TotalQtyText</span>
+                </td>
+            </tr>
+            foreach (var g in m.Groups)
+            {
+                if (shown >= _limit) break;
+                shown++;
+                var key = "b" + g.Key;
+                var open = _open.Contains(key);
+                <tr class="t2-drow @(shown % 2 == 0 ? "even" : "odd") @(open ? "open" : "")" title="Click to see PO-wise allocation" @onclick="() => Toggle(key)">
+                    <td style="padding:8px 12px"><span class="t2-colchip">@g.Colour</span></td>
+                    <td style="font-weight:600;color:var(--ink2);white-space:nowrap">@g.Brand</td>
+                    <td><div class="t2-ell" title="@g.McDesc">@g.McDesc</div></td>
+                    <td class="t2-r mono">@T2Ui.MrpText(g.Mrp)</td>
+                    <td class="t2-c" style="font-size:10px;color:var(--ink3)">@g.Flag</td>
+                    <td class="t2-c mono">@g.Dm</td>
+                    <td class="t2-c mono" style="color:var(--ink3)">@g.PoCount</td>
+                    <td class="t2-r mono" style="font-weight:600">@g.TotalQtyText</td>
+                    <td class="t2-r mono" style="font-weight:600;color:@(g.MixOk ? "#00873E" : "#D97706")">@g.MixText</td>
+                    <td class="t2-r mono" style="font-weight:700;color:@g.StrColor">@g.StrText</td>
+                    <td class="t2-r mono t2-pink">@g.MaxPermText</td>
+                    <td class="t2-c"><T2DecisionPill Text="@g.ColourDecision" Color="@g.DecisionColor" Bg="@g.DecisionBg" Tooltip="@g.RowDecisionReason" /></td>
+                    <td class="t2-c" style="width:28px;padding:8px"><span class="t2-rbtn lg cyan @(open ? "open" : "")">@(open ? "▲" : "▼")</span></td>
+                </tr>
+                if (open)
+                {
+                    <tr>
+                        <td colspan="14" class="t2-reason-cell" style="border-bottom:2px solid @(g.DecisionColor)22">
+                            @GroupPanel(g)
+                        </td>
+                    </tr>
+                }
+            }
+        }
+    };
+
+    private RenderFragment GroupPanel(Tool2ColourGroupDto g) => __builder =>
+    {
+        <div class="t2-cg" style="background:@g.DecisionBg;border-left-color:@g.DecisionColor">
+            <div class="t2-cg-title" style="color:@g.DecisionColor">
+                <span>@g.PanelTitle</span>
+                @if (OnRecommendGroup.HasDelegate && !string.IsNullOrEmpty(g.Gm))
+                {
+                    <button class="t2-rec-btn" @onclick="() => OnRecommendGroup.InvokeAsync(g)" @onclick:stopPropagation="true">📊 View Recommendation</button>
+                }
+            </div>
+            @if (g.WhyNoStr != null)
+            {
+                <div class="t2-whyno" style="border-color:@(g.DecisionColor)44;border-left-color:@g.DecisionColor">
+                    <strong style="color:@g.DecisionColor">Why no STR was computed: </strong>@g.WhyNoStr
+                </div>
+            }
+            <div class="t2-kvs" style="margin-bottom:12px">
+                @foreach (var kv in g.Kvs)
+                {
+                    <div class="t2-kv"><div class="t2-kv-l">@kv.Label</div><div class="t2-kv-v">@kv.Value</div></div>
+                }
+            </div>
+            @if (g.Formula is { Count: > 0 })
+            {
+                <div class="t2-formula">
+                    @foreach (var line in g.Formula)
+                    {
+                        var cont = line.Count > 0 && line[0].Text.StartsWith("=");
+                        <div class="@(cont ? "cont" : "")"><T2Segs Segs="line" /></div>
+                    }
+                </div>
+            }
+            <div class="t2-alloc-h">PO-wise Allocation (FIFO: largest PO cut first)</div>
+            <div style="overflow-x:auto">
+                <table class="t2-alloc">
+                    <thead>
+                        <tr><th>Colour</th><th>Generic Material</th><th>PO Number</th><th class="t2-r">Released Qty</th><th class="t2-c">Recommended Action</th><th class="t2-r">Max Permissible Qty</th></tr>
+                    </thead>
+                    <tbody>
+                        @for (var pi = 0; pi < g.PoActions.Count; pi++)
+                        {
+                            var pa = g.PoActions[pi];
+                            var bg = pa.Action == "Cancel" ? "#FEF2F2" : pa.Action == "Reduce Qty" ? "#FFFBEB" : pi % 2 == 0 ? "#fff" : "#f8faff";
+                            <tr style="background:@bg">
+                                <td><span class="t2-colchip sm">@g.Colour</span></td>
+                                <td class="mono" style="font-weight:600;color:var(--ink)">@pa.Gm</td>
+                                <td class="mono" style="color:var(--ink3)">@pa.PoNum</td>
+                                <td class="t2-r mono" style="font-weight:600">@T2Ui.Fmt(pa.RelQty)</td>
+                                <td class="t2-c"><span style="font-size:10px;font-weight:700;padding:2px 10px;border-radius:8px;background:@(pa.ActionColor)22;color:@pa.ActionColor;border:1px solid @(pa.ActionColor)44">@pa.Action</span></td>
+                                <td class="t2-r mono t2-pink">@(pa.RecQty > 0 ? T2Ui.Fmt(pa.RecQty) : "0")</td>
+                            </tr>
+                        }
+                        <tr class="tot">
+                            <td colspan="2" style="color:var(--vmm-navy);font-size:10px">TOTAL</td>
+                            <td></td>
+                            <td class="t2-r mono" style="color:var(--ink)">@T2Ui.Fmt(g.TotalQty)</td>
+                            <td></td>
+                            <td class="t2-r mono" style="color:#E8006E">@T2Ui.Fmt(g.TotalRetain)</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    };
+}

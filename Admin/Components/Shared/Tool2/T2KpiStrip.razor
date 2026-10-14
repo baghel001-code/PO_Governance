@@ -1,0 +1,22 @@
+@* KPI strip of renderAssessmentDashboard: 8 tiles from Tool2ViewDto.kpis. A tile with a decision opens
+   the Detail View filtered on it. *@
+<div class="t2-kpis" id="ass-kpi">
+    @foreach (var k in Kpis)
+    {
+        var kk = k;
+        var click = kk.Decision != null && OnKpiClick.HasDelegate;
+        <div class="t2-kpi @(click ? "click" : "")" title="@(click ? "Show " + kk.Label + " in the Detail View" : null)"
+             style="background:@kk.Bg;border:1px solid @(kk.Color)33;box-shadow:0 1px 4px @(kk.Color)11"
+             @onclick="() => Click(kk)">
+            <div class="t2-kpi-val" style="color:@kk.Color">@kk.Value</div>
+            <div class="t2-kpi-lbl" style="color:@kk.Color">@kk.Label</div>
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter] public List<Tool2KpiDto> Kpis { get; set; } = new();
+    [Parameter] public EventCallback<string> OnKpiClick { get; set; }
+
+    private Task Click(Tool2KpiDto k) => k.Decision != null && OnKpiClick.HasDelegate ? OnKpiClick.InvokeAsync(k.Decision) : Task.CompletedTask;
+}

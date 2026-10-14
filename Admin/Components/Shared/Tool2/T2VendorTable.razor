@@ -1,0 +1,62 @@
+@* "By Vendor" (renderRollupTables → ass-vendor-body); follows the rollup filter of the Division × MC card. *@
+<div class="t2-card flush" style="margin-bottom:0" id="ass-vendor">
+    <div class="t2-rhdr">
+        <span class="t">By Vendor</span>
+        <span class="s">Click a row to expand GM / colour / MRP / PO breakdown</span>
+    </div>
+    <div class="t2-clip">
+        <div style="overflow-x:auto" class="@(Busy ? "t2-busy" : "")">
+            <table class="t2-rtbl">
+                <thead>
+                    <tr><th>Vendor</th><th>Total</th><th>Retain</th><th>Reduce</th><th>Cancel</th><th>Watch</th><th>Qty at Risk</th><th>₹ Value</th></tr>
+                </thead>
+                <tbody id="ass-vendor-body">
+                    @if (Rollup.Vendors.Count == 0)
+                    {
+                        <tr><td colspan="8" class="none">No rows match the selected filters</td></tr>
+                    }
+                    @for (var i = 0; i < Rollup.Vendors.Count; i++)
+                    {
+                        var v = Rollup.Vendors[i];
+                        var id = i;
+                        var has = v.Rows.Count > 0;
+                        var open = _open.Contains(id);
+                        <tr class="@(i % 2 == 1 ? "alt" : "") @(has ? "click" : "")" @onclick="() => Toggle(id, has)">
+                            <td><div class="t2-ell" style="max-width:220px" title="@v.Vendor"><span class="ic">@(has ? (open ? "▾" : "▸") : "")</span> @v.Vendor</div></td>
+                            <td class="n">@v.Total</td>
+                            <td class="n" style="color:#00873E">@v.Retain</td>
+                            <td class="n" style="color:#D97706">@v.Reduce</td>
+                            <td class="n" style="color:#DC2626">@v.Cancel</td>
+                            <td class="n" style="color:#D97706">@v.Watch</td>
+                            <td class="n" style="color:#E8006E;font-weight:600">@v.AtRiskText</td>
+                            <td class="n" style="color:#7C3AED;font-weight:600">@v.ValueText</td>
+                        </tr>
+                        @if (open)
+                        {
+                            <tr><td colspan="8" class="det"><T2RollupBreakdown Rows="v.Rows" Lines="Rollup.Lines" /></td></tr>
+                        }
+                    }
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+@code {
+    [Parameter] public Tool2RollupDto Rollup { get; set; } = new();
+    [Parameter] public bool Busy { get; set; }
+
+    private readonly HashSet<int> _open = new();
+    private Tool2RollupDto? _seen;
+
+    protected override void OnParametersSet()
+    {
+        if (!ReferenceEquals(_seen, Rollup)) { _seen = Rollup; _open.Clear(); }
+    }
+
+    private void Toggle(int id, bool has)
+    {
+        if (!has) return;
+        if (!_open.Remove(id)) _open.Add(id);
+    }
+}

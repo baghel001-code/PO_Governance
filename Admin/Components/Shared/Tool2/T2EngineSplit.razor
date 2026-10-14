@@ -1,0 +1,18 @@
+@* "Engine Split" card (renderAssessmentDashboard → ass-engine-split). *@
+@using System.Globalization
+<div class="t2-split" id="ass-engine-split">
+    @foreach (var e in Rows)
+    {
+        <div class="t2-split-row">
+            <div style="flex:1">
+                <div class="lbl">@e.Label</div>
+                <div class="trk" style="background:@e.Bg"><div style="width:@(e.Width.ToString("0.###", CultureInfo.InvariantCulture))%;background:@e.Color"></div></div>
+            </div>
+            <div class="cnt" style="color:@e.Color">@e.Count</div>
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter] public List<Tool2EngineSplitDto> Rows { get; set; } = new();
+}

@@ -1,0 +1,10 @@
+@* decPillHoverable(r): decision pill in decColor / decBg, hover = buildDecisionTooltip(r) (title). *@
+<span class="t2-pill @(string.IsNullOrEmpty(Tooltip) ? "" : "help")" title="@Tooltip"
+      style="background:@Bg;color:@Color;border:1px solid @(Color)44">@Text</span>
+
+@code {
+    [Parameter] public string Text { get; set; } = "";
+    [Parameter] public string Color { get; set; } = "#6B7280";
+    [Parameter] public string Bg { get; set; } = "#F3F4F6";
+    [Parameter] public string? Tooltip { get; set; }
+}

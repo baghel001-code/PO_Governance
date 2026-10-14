@@ -1,0 +1,113 @@
+@* "Division × MC — Excess Concentration" (renderRollupTables → ass-divmc-body) with its filter row. Every
+   filter change goes back to the page, which asks POST …/rollup. *@
+<div class="t2-card flush" id="ass-divmc">
+    <div class="t2-rhdr">
+        <span class="t">Division &times; MC — Excess Concentration</span>
+        <span class="s">Click a row to expand GM / colour / MRP / PO breakdown</span>
+    </div>
+    <div class="t2-rfilters">
+        <span class="lbl">Filter:</span>
+        <select id="rollup-filter-div" class="t2-sel sm" style="min-width:130px" @onchange='e => Set("div", e)'>
+            <option value="" selected="@string.IsNullOrEmpty(Filter.Div)">All Divisions</option>
+            @foreach (var o in Options.Divisions) { <option value="@o" selected="@(o == Filter.Div)">@o</option> }
+        </select>
+        <select id="rollup-filter-mc" class="t2-sel sm" style="min-width:150px" @onchange='e => Set("mc", e)'>
+            <option value="" selected="@string.IsNullOrEmpty(Filter.Mc)">All MCs</option>
+            @foreach (var o in Options.Mcs) { <option value="@o" selected="@(o == Filter.Mc)">@o</option> }
+        </select>
+        <select id="rollup-filter-mrp" class="t2-sel sm" style="min-width:100px" @onchange='e => Set("mrp", e)'>
+            <option value="" selected="@string.IsNullOrEmpty(Filter.Mrp)">All MRPs</option>
+            @foreach (var o in Options.Mrps) { <option value="@o" selected="@(o == Filter.Mrp)">@o</option> }
+        </select>
+        <select id="rollup-filter-mon" class="t2-sel sm" style="min-width:110px" @onchange='e => Set("mon", e)'>
+            <option value="" selected="@string.IsNullOrEmpty(Filter.Mon)">All Months</option>
+            @foreach (var o in Options.Months) { <option value="@o" selected="@(o == Filter.Mon)">@o</option> }
+        </select>
+        <select id="rollup-filter-dec" class="t2-sel sm" style="min-width:120px" @onchange='e => Set("dec", e)'>
+            <option value="" selected="@string.IsNullOrEmpty(Filter.Dec)">All Decisions</option>
+            @foreach (var o in Options.RollupDecisions) { <option value="@o" selected="@(o == Filter.Dec)">@o</option> }
+        </select>
+        <button class="clr" @onclick="Clear">Clear</button>
+    </div>
+    <div class="t2-clip">
+        <div style="overflow-x:auto" class="@(Busy ? "t2-busy" : "")">
+            <table class="t2-rtbl">
+                <thead>
+                    <tr><th>Brand</th><th>Division</th><th>MC</th><th>Lines</th><th>Reduce</th><th>Cancel</th><th>Watch</th><th>Qty at Risk</th><th>₹ Value</th><th>% of Total Risk</th></tr>
+                </thead>
+                <tbody id="ass-divmc-body">
+                    @if (Rollup.DivMc.Count == 0)
+                    {
+                        <tr><td colspan="10" class="none">No rows match the selected filters</td></tr>
+                    }
+                    @for (var i = 0; i < Rollup.DivMc.Count; i++)
+                    {
+                        var v = Rollup.DivMc[i];
+                        var id = i;
+                        var has = v.Rows.Count > 0;
+                        var open = _open.Contains(id);
+                        <tr class="@(i % 2 == 1 ? "alt" : "") @(has ? "click" : "")" @onclick="() => Toggle(id, has)">
+                            <td style="font-weight:600;color:var(--ink2)"><span class="ic">@(has ? (open ? "▾" : "▸") : "")</span> @v.Brand</td>
+                            <td style="font-weight:500">@v.Div</td>
+                            <td><div class="t2-ell" style="max-width:180px" title="@v.Mc">@v.Mc</div></td>
+                            <td class="n">@v.Lines</td>
+                            <td class="n" style="color:#D97706">@v.Reduce</td>
+                            <td class="n" style="color:#DC2626">@v.Cancel</td>
+                            <td class="n" style="color:#D97706">@v.Watch</td>
+                            <td class="n" style="color:#E8006E;font-weight:600">@v.AtRiskText</td>
+                            <td class="n" style="color:#7C3AED;font-weight:600">@v.ValueText</td>
+                            <td class="n" style="color:var(--ink3);font-family:var(--font)">@v.PctText</td>
+                        </tr>
+                        @if (open)
+                        {
+                            <tr><td colspan="10" class="det"><T2RollupBreakdown Rows="v.Rows" Lines="Rollup.Lines" /></td></tr>
+                        }
+                    }
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+@code {
+    [Parameter] public Tool2RollupDto Rollup { get; set; } = new();
+    [Parameter] public Tool2FilterOptionsDto Options { get; set; } = new();
+    [Parameter] public Tool2RollupFilterDto Filter { get; set; } = new();
+    [Parameter] public bool Busy { get; set; }
+    [Parameter] public EventCallback OnFilterChanged { get; set; }
+
+    private readonly HashSet<int> _open = new();
+    private Tool2RollupDto? _seen;
+
+    protected override void OnParametersSet()
+    {
+        if (!ReferenceEquals(_seen, Rollup)) { _seen = Rollup; _open.Clear(); }
+    }
+
+    private void Toggle(int id, bool has)
+    {
+        if (!has) return;
+        if (!_open.Remove(id)) _open.Add(id);
+    }
+
+    private async Task Set(string which, ChangeEventArgs e)
+    {
+        var v = e.Value?.ToString();
+        if (string.IsNullOrEmpty(v)) v = null;
+        switch (which)
+        {
+            case "div": Filter.Div = v; break;
+            case "mc": Filter.Mc = v; break;
+            case "mrp": Filter.Mrp = v; break;
+            case "mon": Filter.Mon = v; break;
+            case "dec": Filter.Dec = v; break;
+        }
+        await OnFilterChanged.InvokeAsync();
+    }
+
+    private async Task Clear()
+    {
+        Filter.Div = Filter.Mc = Filter.Mrp = Filter.Mon = Filter.Dec = null;
+        await OnFilterChanged.InvokeAsync();
+    }
+}

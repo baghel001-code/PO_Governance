@@ -1,0 +1,23 @@
+@* Text segments of the API (bold / coloured parts of a reason or formula line). *@
+@if (Segs != null)
+{
+    @foreach (var s in Segs)
+    {
+        if (s.Bold)
+        {
+            <strong style="@(s.Color != null ? "color:" + s.Color : null)">@s.Text</strong>
+        }
+        else if (s.Color != null)
+        {
+            <span style="color:@s.Color">@s.Text</span>
+        }
+        else
+        {
+            @s.Text
+        }
+    }
+}
+
+@code {
+    [Parameter] public IEnumerable<TextSegDto>? Segs { get; set; }
+}

@@ -1,0 +1,35 @@
+@* buildRollupDetailTable(rows): GM / colour / MRP / PO breakdown under a rollup row. *@
+@if (Rows.Count == 0)
+{
+    <div class="t2-rdet-none">No action-required lines</div>
+}
+else
+{
+    <div style="overflow-x:auto;border-radius:6px;overflow:hidden;margin:4px 0">
+        <table class="t2-rdet">
+            <thead>
+                <tr><th>GM</th><th>Colour</th><th class="t2-r">MRP</th><th>PO Number</th><th class="t2-r">Released</th><th class="t2-r">Cut Qty</th><th>Decision</th></tr>
+            </thead>
+            <tbody>
+                @foreach (var idx in Rows)
+                {
+                    if (!Lines.TryGetValue(idx, out var r)) continue;
+                    <tr>
+                        <td class="mono">@r.Gm</td>
+                        <td>@(string.IsNullOrEmpty(r.Colour) ? "—" : r.Colour)</td>
+                        <td class="t2-r mono">@r.MrpText</td>
+                        <td class="mono" style="color:var(--ink2)">@(string.IsNullOrEmpty(r.PoNum) ? "—" : r.PoNum)</td>
+                        <td class="t2-r mono">@r.Released</td>
+                        <td class="t2-r mono" style="color:@(r.CutPositive ? "#E8006E" : "var(--ink3)");font-weight:@(r.CutPositive ? "700" : "400")">@r.CutQty</td>
+                        <td style="font-size:10px"><span style="padding:2px 8px;border-radius:8px;background:@(r.DecisionColor)18;color:@r.DecisionColor;font-weight:700">@r.Decision</span></td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+}
+
+@code {
+    [Parameter] public List<int> Rows { get; set; } = new();
+    [Parameter] public IReadOnlyDictionary<int, Tool2RollupLineDto> Lines { get; set; } = new Dictionary<int, Tool2RollupLineDto>();
+}

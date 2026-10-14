@@ -1,0 +1,165 @@
+@* "📊 PO Assessment — Brand Summary": the Brand → Division → MC → MRP tree (renderBrandSummary / _treeRow /
+   toggleTreeSection / collapseAllTree / toggleAssReason). Nodes come sorted from the API (Tool2ViewDto.tree);
+   children are rendered only while their parent is open, so large runs stay light. *@
+<div class="t2-card flush" id="ass-brand-summary">
+    <div class="t2-dhdr">
+        <span class="t2-dhdr-title">📊 PO Assessment — Brand Summary</span>
+        <span class="t2-dhdr-sub mono" id="tree-breadcrumb">@_crumb</span>
+        <div class="t2-dhdr-actions">
+            <button class="t2-hbtn" @onclick="CollapseAll">⊟ Collapse All</button>
+            <button class="t2-hbtn" style="padding:5px 14px;background:rgba(255,255,255,.12);border-color:rgba(255,255,255,.2)" @onclick="OnDetailView">☰ Detail View</button>
+            @Actions
+        </div>
+    </div>
+    <div class="t2-clip">
+        <div class="t2-tree-scroll">
+            <div>
+                <div class="t2-tree-grid t2-tree-head">
+                    <div>Hierarchy</div>
+                    <div>Total POs</div>
+                    <div style="color:#00873E">Retain</div>
+                    <div style="color:#D97706">Reduce</div>
+                    <div style="color:#DC2626">Cancel</div>
+                    <div style="color:#D97706">Watch</div>
+                    <div style="color:#6B21A8">% Action</div>
+                    <div style="color:#E8006E">Qty at Risk</div>
+                    <div></div>
+                </div>
+                <div class="t2-tree-body" id="ass-tree-body">
+                    @if (Nodes.Count == 0)
+                    {
+                        <div class="t2-tree-none">No results to display</div>
+                    }
+                    else
+                    {
+                        @Level(Nodes, "")
+                    }
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+@code {
+    [Parameter] public List<Tool2TreeNodeDto> Nodes { get; set; } = new();
+    [Parameter] public IReadOnlyDictionary<int, Tool2LineDto> Lines { get; set; } = new Dictionary<int, Tool2LineDto>();
+    [Parameter] public EventCallback OnDetailView { get; set; }
+    [Parameter] public EventCallback<Tool2LineDto> OnRecommend { get; set; }
+    /// <summary>Category Head picker + ⬇ Excel (owned by the page).</summary>
+    [Parameter] public RenderFragment? Actions { get; set; }
+
+    private readonly HashSet<string> _open = new();
+    private readonly HashSet<int> _openLines = new();
+    private string _crumb = "Collapsed by Brand Type · Click to expand";
+    private List<Tool2TreeNodeDto>? _seen;
+
+    protected override void OnParametersSet()
+    {
+        // A new run (new tree) starts fully collapsed.
+        if (!ReferenceEquals(_seen, Nodes))
+        {
+            _seen = Nodes;
+            _open.Clear();
+            _openLines.Clear();
+            _crumb = "Collapsed by Brand Type · Click to expand";
+        }
+    }
+
+    private void Toggle(string id)
+    {
+        var open = _open.Add(id);
+        if (!open) _open.Remove(id);
+        _crumb = open ? "Expanded - Click rows to drill deeper" : "Collapsed - Click arrow to expand";
+    }
+
+    public void CollapseAll()
+    {
+        _open.Clear();
+        _openLines.Clear();
+        _crumb = "Collapsed by Brand Type - Click arrow to expand";
+        StateHasChanged();
+    }
+
+    private void ToggleLine(int idx)
+    {
+        if (!_openLines.Remove(idx)) _openLines.Add(idx);
+    }
+
+    private RenderFragment Level(List<Tool2TreeNodeDto> nodes, string prefix) => __builder =>
+    {
+        for (var i = 0; i < nodes.Count; i++)
+        {
+            var n = nodes[i];
+            var id = prefix + "-" + i;
+            var open = _open.Contains(id);
+            var lv = Math.Clamp(n.Level, 0, 3);
+            <div class="t2-tree-grid t2-tr lv@(lv)" id="tree-row@(id)" @onclick="() => Toggle(id)">
+                <div class="t2-tr-lbl" style="padding-left:@(14 + lv * 18)px">
+                    <span class="t2-icon">@(open ? "▼" : "►")</span><span>@n.Label</span><span class="t2-depth">@n.Depth</span>
+                </div>
+                <div class="t2-tot">@n.Total</div>
+                <div class="c-ret">@(n.Retain > 0 ? n.Retain : "—")</div>
+                <div class="c-red @(n.Reduce > 0 ? "b" : "")">@(n.Reduce > 0 ? n.Reduce : "—")</div>
+                <div class="c-can @(n.Cancel > 0 ? "b" : "")">@(n.Cancel > 0 ? n.Cancel : "—")</div>
+                <div class="c-wat @(n.Watch > 0 ? "b" : "")">@(n.Watch > 0 ? n.Watch : "—")</div>
+                <div class="c-pct" style="color:@n.PctColor">@(Domain.Entities.Common.Js.NumberToString(n.Pct))%</div>
+                <div class="c-risk">@n.AtRiskText</div>
+                <div class="t2-arrow">►</div>
+            </div>
+            @if (open)
+            {
+                if (n.Children.Count > 0)
+                {
+                    @Level(n.Children, id)
+                }
+                if (n.Rows is { Count: > 0 })
+                {
+                    @PoTable(n.Rows)
+                }
+            }
+        }
+    };
+
+    private RenderFragment PoTable(List<int> rows) => __builder =>
+    {
+        <div class="t2-potbl-wrap">
+            <table class="t2-potbl">
+                <thead>
+                    <tr>
+                        <th>PO Number</th><th>Gen. Material</th><th>Colour</th><th>Del. Month</th>
+                        <th class="t2-r">Qty ↓</th><th class="t2-r">STR</th><th class="t2-c">Decision</th>
+                        <th class="t2-r">Rec. Qty</th><th></th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @for (var ri = 0; ri < rows.Count; ri++)
+                    {
+                        var idx = rows[ri];
+                        if (!Lines.TryGetValue(idx, out var r)) continue;
+                        var open = _openLines.Contains(idx);
+                        var (dCol, _) = T2Ui.ReasonColors(r.Decision);
+                        <tr class="t2-po @(ri % 2 == 0 ? "even" : "odd") @(open ? "open" : "")" title="@r.Tooltip" id="trr-@idx" @onclick="() => ToggleLine(idx)">
+                            <td class="mono" style="color:var(--ink3)">@(string.IsNullOrEmpty(r.PoNum) ? "—" : r.PoNum)</td>
+                            <td class="mono" style="font-weight:600">@r.Gm</td>
+                            <td>@r.Colour</td>
+                            <td class="mono">@r.Dm</td>
+                            <td class="t2-r mono" style="font-weight:700">@T2Ui.Fmt(r.RelQty)</td>
+                            <td class="t2-r mono" style="color:@(r.StrBreach ? "#DC2626" : "var(--ink2)")">@r.StrText</td>
+                            <td class="t2-c"><T2DecisionPill Text="@r.Decision" Color="@r.DecisionColor" Bg="@r.DecisionBg" Tooltip="@r.Tooltip" /></td>
+                            <td class="t2-r mono t2-pink">@(r.RecQty > 0 ? T2Ui.Fmt(r.RecQty) : "—")</td>
+                            <td class="t2-c" style="padding:5px 8px"><span class="t2-rbtn @(open ? "open" : "")">@(open ? "▲" : "▼")</span></td>
+                        </tr>
+                        @if (open)
+                        {
+                            <tr id="trd-@idx">
+                                <td colspan="9" class="t2-reason-cell" style="border-bottom:2px solid @(dCol)22">
+                                    <T2LineReason Line="r" Separator=" - " OnRecommend="OnRecommend" />
+                                </td>
+                            </tr>
+                        }
+                    }
+                </tbody>
+            </table>
+        </div>
+    };
+}

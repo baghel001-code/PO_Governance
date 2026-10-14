@@ -1,0 +1,76 @@
+@* "👤 All Category Heads ▾" export picker (toggleCatHeadExportPanel / _populateCatHeadExportPanel). The
+   selection set is owned by the page and shared by both pickers; it is cleared on every new run. *@
+<div class="t2-ch-wrap" id="@(Id)-wrap">
+    <button type="button" id="@(Id)-btn" class="t2-ch-btn @(Light ? "light" : "")" @onclick="Toggle">@ButtonText</button>
+    @if (_open)
+    {
+        <div class="t2-ch-backdrop" @onclick="Close"></div>
+        <div class="t2-ch-panel" id="@(Id)-panel">
+            <div class="t2-ch-top">
+                <button type="button" @onclick="SelectAll">Select All</button>
+                <button type="button" @onclick="ClearAll">Clear</button>
+            </div>
+            @if (Names.Count == 0)
+            {
+                <div class="t2-ch-none">No data yet — run assessment first.</div>
+            }
+            else
+            {
+                @foreach (var n in Names)
+                {
+                    var nn = n;
+                    <label class="t2-ch-item">
+                        <input type="checkbox" checked="@Selected.Contains(nn)" @onchange="() => ToggleName(nn)" />
+                        @nn
+                    </label>
+                }
+                <label class="t2-ch-sep" title="With several names selected: one workbook per Category Head in a ZIP (unticked: one workbook scoped to all of them, as v1.1.4)">
+                    <input type="checkbox" checked="@SeparateFiles" @onchange="ToggleSeparate" />
+                    One file per Category Head (ZIP)
+                </label>
+            }
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter] public string Id { get; set; } = "cathead-exp";
+    [Parameter] public List<string> Names { get; set; } = new();
+    [Parameter] public HashSet<string> Selected { get; set; } = new();
+    [Parameter] public bool SeparateFiles { get; set; } = true;
+    [Parameter] public EventCallback<bool> SeparateFilesChanged { get; set; }
+    /// <summary>White button (detail filter card) instead of the dark header style.</summary>
+    [Parameter] public bool Light { get; set; }
+    [Parameter] public EventCallback OnChanged { get; set; }
+
+    private bool _open;
+
+    private string ButtonText => Selected.Count > 0 ? $"👤 {Selected.Count} selected ▾" : "👤 All Category Heads ▾";
+
+    private void Toggle() => _open = !_open;
+    private void Close() => _open = false;
+
+    private async Task ToggleName(string n)
+    {
+        if (!Selected.Remove(n)) Selected.Add(n);
+        await OnChanged.InvokeAsync();
+    }
+
+    private async Task SelectAll()
+    {
+        foreach (var n in Names) Selected.Add(n);
+        await OnChanged.InvokeAsync();
+    }
+
+    private async Task ClearAll()
+    {
+        Selected.Clear();
+        await OnChanged.InvokeAsync();
+    }
+
+    private async Task ToggleSeparate()
+    {
+        SeparateFiles = !SeparateFiles;
+        await SeparateFilesChanged.InvokeAsync(SeparateFiles);
+    }
+}

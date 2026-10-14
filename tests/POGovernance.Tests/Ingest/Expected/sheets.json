@@ -1,0 +1,1318 @@
+{
+ "ArticleMaster_raw.xlsx": {
+  "sheetNames": [
+   "Article"
+  ],
+  "sheets": {
+   "Article": [
+    [
+     "Generic Material",
+     "",
+     "Brand Type",
+     "Division",
+     "Merchandise Category",
+     "",
+     "MRP",
+     "Planning Flag",
+     "Style",
+     "Cut & Fit",
+     "Base Material",
+     "Design",
+     "Vendor",
+     "",
+     "Season"
+    ],
+    [
+     "1234567890",
+     "Crew neck tee",
+     "PL",
+     "MENS",
+     "1012",
+     "T-SHIRT",
+     "499",
+     "NON-BOGO",
+     "CASUAL",
+     "SLIM",
+     "COTTON",
+     "SOLID",
+     "70001",
+     "ACME LTD",
+     "SS26"
+    ],
+    [
+     "1234567891",
+     "Polo",
+     "PL",
+     "MENS",
+     "1012",
+     "T-SHIRT",
+     "599",
+     "BOGO",
+     "",
+     "REGULAR",
+     "",
+     "STRIPE",
+     "70002",
+     "",
+     "AW25"
+    ]
+   ]
+  }
+ },
+ "AttrRel_master.xlsx": {
+  "sheetNames": [
+   "Sheet1",
+   "ATTR"
+  ],
+  "sheets": {
+   "Sheet1": [
+    [
+     "lookup"
+    ],
+    [
+     "a"
+    ],
+    [
+     "b"
+    ]
+   ],
+   "ATTR": [
+    [
+     "Brand Type",
+     "Division",
+     "MC CD",
+     "Assessment Dimension",
+     "Relevant"
+    ],
+    [
+     "PL",
+     "MENS",
+     "1012",
+     "Style",
+     "Y"
+    ],
+    [
+     "PL",
+     "MENS",
+     "1012",
+     "Fit",
+     "N"
+    ]
+   ]
+  }
+ },
+ "BSR_Kids.xlsx": {
+  "sheetNames": [
+   "KIDS SS26",
+   "KIDS AW25"
+  ],
+  "sheets": {
+   "KIDS SS26": [
+    [
+     "Division",
+     "MC CD",
+     "Generic Material",
+     "Color",
+     "WEEK ON FLOOR",
+     "AVG PERDAY SELL THRU%"
+    ],
+    [
+     "KIDS",
+     "2000",
+     "5000000",
+     "BLUE",
+     "4",
+     "1.25%"
+    ],
+    [
+     "KIDS",
+     "2001",
+     "5000001",
+     "RED",
+     "5",
+     "2.50%"
+    ],
+    [
+     "KIDS",
+     "2002",
+     "5000002",
+     "BLUE",
+     "6",
+     "3.75%"
+    ]
+   ],
+   "KIDS AW25": [
+    [
+     "Division",
+     "MC CD",
+     "Generic Material",
+     "Color",
+     "WEEK ON FLOOR",
+     "AVG PERDAY SELL THRU%"
+    ],
+    [
+     "KIDS",
+     "2000",
+     "5000010",
+     "BLUE",
+     "4",
+     "1.25%"
+    ],
+    [
+     "KIDS",
+     "2001",
+     "5000011",
+     "RED",
+     "5",
+     "2.50%"
+    ],
+    [
+     "KIDS",
+     "2002",
+     "5000012",
+     "BLUE",
+     "6",
+     "3.75%"
+    ]
+   ]
+  }
+ },
+ "BSR_Ladies.xlsx": {
+  "sheetNames": [
+   "LADIES SS26",
+   "LADIES AW25"
+  ],
+  "sheets": {
+   "LADIES SS26": [
+    [
+     "Division",
+     "MC CD",
+     "Generic Material",
+     "Color",
+     "WEEK ON FLOOR",
+     "AVG PERDAY SELL THRU%"
+    ],
+    [
+     "LADIES",
+     "2000",
+     "5000000",
+     "BLUE",
+     "4",
+     "1.25%"
+    ],
+    [
+     "LADIES",
+     "2001",
+     "5000001",
+     "RED",
+     "5",
+     "2.50%"
+    ],
+    [
+     "LADIES",
+     "2002",
+     "5000002",
+     "BLUE",
+     "6",
+     "3.75%"
+    ]
+   ],
+   "LADIES AW25": [
+    [
+     "Division",
+     "MC CD",
+     "Generic Material",
+     "Color",
+     "WEEK ON FLOOR",
+     "AVG PERDAY SELL THRU%"
+    ],
+    [
+     "LADIES",
+     "2000",
+     "5000010",
+     "BLUE",
+     "4",
+     "1.25%"
+    ],
+    [
+     "LADIES",
+     "2001",
+     "5000011",
+     "RED",
+     "5",
+     "2.50%"
+    ],
+    [
+     "LADIES",
+     "2002",
+     "5000012",
+     "BLUE",
+     "6",
+     "3.75%"
+    ]
+   ]
+  }
+ },
+ "BSR_detail_raw.xlsx": {
+  "sheetNames": [
+   "BSR DETAIL"
+  ],
+  "sheets": {
+   "BSR DETAIL": [
+    [
+     "BSR detail",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     ""
+    ],
+    [
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     ""
+    ],
+    [
+     "DIV",
+     "MC CD",
+     "MC DESC",
+     "MRP",
+     "Generic Material",
+     "Colour",
+     "Brand Type",
+     "Article Type",
+     "WEEK\nON\nFLOOR",
+     "AVG PERDAY SELL THRU%"
+    ],
+    [
+     "MENS",
+     "1012",
+     "T-SHIRT",
+     "499",
+     "1234567890",
+     "NAVY",
+     "PL",
+     "NON-BOGO",
+     "6",
+     "2.34%"
+    ],
+    [
+     "MENS",
+     "1012",
+     "T-SHIRT",
+     "499",
+     "1234567891",
+     "RED",
+     "PL",
+     "BOGO",
+     "2",
+     "50.00%"
+    ]
+   ]
+  }
+ },
+ "Colour_Master.csv": {
+  "sheetNames": [
+   "Sheet1"
+  ],
+  "sheets": {
+   "Sheet1": [
+    [
+     "Colour Code",
+     "Colour Name",
+     "Family",
+     "Updated",
+     "Note"
+    ],
+    [
+     "C01",
+     "NAVY",
+     "BLUE, DARK",
+     "6/1/26",
+     "1/2/01"
+    ],
+    [
+     "C02",
+     "RED \"HOT\"",
+     "RED",
+     "6/1/26",
+     "10/12/01"
+    ],
+    [
+     "C03",
+     "  WHITE ",
+     "WHITE",
+     "1/6/26",
+     "x"
+    ],
+    [
+     "C04",
+     "BLACK",
+     "",
+     "6/1/26",
+     ""
+    ],
+    [
+     "C05",
+     "GREY",
+     "GREY",
+     "13/1/2026",
+     "1,234"
+    ],
+    [
+     "",
+     "",
+     "",
+     "",
+     ""
+    ],
+    [
+     "C06",
+     "Café",
+     "BROWN",
+     "1/2/03",
+     "TRUE"
+    ],
+    [
+     "C07",
+     "PINK",
+     "RED",
+     "2026",
+     "$12.50"
+    ],
+    [
+     "C08",
+     "ROSE",
+     "RED",
+     "Jun-26",
+     "(45)"
+    ],
+    [
+     "C09",
+     "PEACH",
+     "RED",
+     "6-2026",
+     "5%"
+    ]
+   ]
+  }
+ },
+ "F1_STOCK_portal.xlsx": {
+  "sheetNames": [
+   "STOCK"
+  ],
+  "sheets": {
+   "STOCK": [
+    [
+     "Stock report as of",
+     "1-Jun-26",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     ""
+    ],
+    [
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     ""
+    ],
+    [
+     "DIV",
+     " Brand Type ",
+     "MC CD",
+     "MRP",
+     "Generic Material",
+     "Color",
+     "OP STK",
+     "OP STK",
+     "2025",
+     "Pct",
+     "Date A",
+     "Date B",
+     "Flag",
+     "Err",
+     "",
+     "Amount",
+     "Small",
+     "Sci",
+     "",
+     ""
+    ],
+    [
+     "MENS",
+     "PL",
+     "1012",
+     "499",
+     "1.23457E+12",
+     "NAVY",
+     "10",
+     "11",
+     "x",
+     "12.50%",
+     "15-06-2026",
+     "6/1/26",
+     "TRUE",
+     "",
+     "",
+     "1,234,567.89",
+     "0.0001",
+     "1.23457E+19",
+     "",
+     ""
+    ],
+    [
+     "MENS",
+     "NON-PL",
+     "1013",
+     "0",
+     "4000012345",
+     " RED ",
+     "-5",
+     "0",
+     "2025",
+     "50.00%",
+     "31-12-2025",
+     "3/15/23",
+     "FALSE",
+     null,
+     "",
+     "-9,876.50",
+     "0.0000",
+     "1.23457E+11",
+     "",
+     ""
+    ],
+    [
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     ""
+    ],
+    [
+     "LADIES",
+     "PL",
+     "1014",
+     "1,300",
+     "40000123456",
+     "BLACK",
+     "2",
+     "2",
+     "y",
+     "100.00%",
+     "29-02-2024",
+     "2/29/00",
+     "TRUE",
+     "",
+     "orphan",
+     "0.00",
+     "2.5000",
+     "3.141592654",
+     "",
+     ""
+    ],
+    [
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     ""
+    ],
+    [
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     ""
+    ],
+    [
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     ""
+    ],
+    [
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     ""
+    ],
+    [
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     ""
+    ],
+    [
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     ""
+    ],
+    [
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     ""
+    ],
+    [
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     ""
+    ],
+    [
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     ""
+    ],
+    [
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     ""
+    ],
+    [
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     ""
+    ],
+    [
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     ""
+    ],
+    [
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     ""
+    ]
+   ]
+  }
+ },
+ "F4_FORECAST.xlsb": {
+  "sheetNames": [
+   "FORCAST"
+  ],
+  "sheets": {
+   "FORCAST": [
+    [
+     "Forecast plan",
+     "",
+     "",
+     "",
+     ""
+    ],
+    [
+     "KEY-2",
+     "Brand Type",
+     "06.2026",
+     "07.2026",
+     "08.2026"
+    ],
+    [
+     "PL-1012-499-NON-BOGO",
+     "PL",
+     "120",
+     "130.5",
+     "0"
+    ],
+    [
+     "PL-1014-799-BOGO",
+     "PL",
+     "1234567",
+     "0.333333333",
+     "99999999999"
+    ]
+   ]
+  }
+ },
+ "GRC_monthly.xlsx": {
+  "sheetNames": [
+   "GRC"
+  ],
+  "sheets": {
+   "GRC": [
+    [
+     "Company Level Purchase Report",
+     "",
+     "",
+     "",
+     "",
+     "",
+     ""
+    ],
+    [
+     "Cal. year / month",
+     "",
+     "",
+     "",
+     "04.2026",
+     "05.2026",
+     "06.2026"
+    ],
+    [
+     "Brand Type",
+     "Generic Material",
+     "",
+     "Color",
+     "GRC Q",
+     "GRC Q",
+     "GRC Q"
+    ],
+    [
+     "PL",
+     "1234567890",
+     "Crew tee",
+     "NAVY",
+     "1,234",
+     "0",
+     "57"
+    ],
+    [
+     "",
+     "1234567891.0",
+     "Polo",
+     "RED",
+     "",
+     "7",
+     "-3"
+    ],
+    [
+     "Result",
+     "",
+     "",
+     "",
+     "1,234",
+     "7",
+     "54"
+    ]
+   ]
+  }
+ },
+ "GRC_weekly.xlsx": {
+  "sheetNames": [
+   "GRC"
+  ],
+  "sheets": {
+   "GRC": [
+    [
+     "",
+     "",
+     "",
+     "",
+     "GRC Q",
+     "GRC V",
+     "GRC Q",
+     "GRC V",
+     "GRC Q"
+    ],
+    [
+     "Brand Type",
+     "Generic Material",
+     "",
+     "Color | Calendar year / week",
+     "15.2026",
+     "15.2026",
+     "14.2026",
+     "14.2026",
+     "16.2026"
+    ],
+    [
+     "PL",
+     "1234567890",
+     "Crew tee",
+     "NAVY",
+     "10",
+     "4,990",
+     "5",
+     "0",
+     ""
+    ],
+    [
+     "NON-PL",
+     "1234567891",
+     "",
+     "RED",
+     "0",
+     "100",
+     "1,200",
+     "5,98,800",
+     "3"
+    ]
+   ]
+  }
+ },
+ "PO_raw.xlsx": {
+  "sheetNames": [
+   "TOP BS CRITERIA",
+   "PO DETAIL"
+  ],
+  "sheets": {
+   "TOP BS CRITERIA": [
+    [
+     "Row Labels",
+     "Sum of Qty"
+    ],
+    [
+     "PL",
+     "100"
+    ]
+   ],
+   "PO DETAIL": [
+    [
+     "Pending PO report",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     ""
+    ],
+    [
+     "PO",
+     "Division",
+     "MC CD",
+     "MC DESC",
+     "MRP",
+     "GEN ART",
+     "Brand Type",
+     "BOGO/NON-BOGO",
+     "Colour",
+     "Delivery Month",
+     "Vendor Name",
+     "Sum of Pending Qty (Each)",
+     "Sum of Pending Value"
+    ],
+    [
+     "4500001234",
+     "MENS",
+     "1012",
+     "T-SHIRT",
+     "499",
+     "1234567890",
+     "PL",
+     "NON-BOGO",
+     "NAVY",
+     "06.2026",
+     "ACME",
+     "120",
+     "59,880.00"
+    ],
+    [
+     "4500001235",
+     "MENS",
+     "1012",
+     "T-SHIRT",
+     "499",
+     "1234567891",
+     "PL",
+     "BOGO",
+     "",
+     "07.2026",
+     "ACME",
+     "0",
+     "0.00"
+    ],
+    [
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     ""
+    ],
+    [
+     "4500001236",
+     "LADIES",
+     "1014",
+     "KURTA",
+     "799",
+     "1234567892",
+     "NON-PL",
+     "NON-BOGO",
+     "RED",
+     "06.2026",
+     "BETA",
+     "1500.5",
+     "1,199,000.25"
+    ]
+   ]
+  }
+ },
+ "SCR_PRODUCTS.csv": {
+  "sheetNames": [
+   "Sheet1"
+  ],
+  "sheets": {
+   "Sheet1": [
+    [
+     "Brand Type",
+     "Division",
+     "MC CD",
+     "MRP",
+     "Category Head",
+     "Buyer"
+    ],
+    [
+     "PL",
+     "MENS",
+     "1012",
+     "499",
+     "Anil Kumar",
+     "Ravi"
+    ],
+    [
+     "PL",
+     "LADIES",
+     "1014",
+     "799",
+     "Sunita",
+     "Meena"
+    ]
+   ]
+  }
+ },
+ "Sales_raw.xlsx": {
+  "sheetNames": [
+   "Sales"
+  ],
+  "sheets": {
+   "Sales": [
+    [
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "",
+     "Calendar Day",
+     "02.06.2026",
+     "01.06.2026",
+     "46176",
+     "bad",
+     "30.05.2026"
+    ],
+    [
+     "Division",
+     "Brand Type",
+     "Merchandise Category",
+     "",
+     "MRP",
+     "Planning Flag",
+     "Generic Material",
+     "Color",
+     "Sales Qty",
+     "Sales Qty",
+     "Sales Qty",
+     "Sales Qty",
+     "Sales Qty"
+    ],
+    [
+     "MENS",
+     "PL",
+     "1012",
+     "T-SHIRT",
+     "499",
+     "NON-BOGO",
+     "1234567890",
+     "NAVY",
+     "2",
+     "1",
+     "3",
+     "9",
+     ""
+    ],
+    [
+     "MENS",
+     "PL",
+     "1012",
+     "T-SHIRT",
+     "499",
+     "NON-BOGO",
+     "1234567890",
+     "RED",
+     "",
+     "4",
+     "0",
+     "1",
+     "7"
+    ]
+   ]
+  }
+ },
+ "Stock_raw.xlsx": {
+  "sheetNames": [
+   "Stock"
+  ],
+  "sheets": {
+   "Stock": [
+    [
+     "Division",
+     "Brand Type",
+     "Merchandise Category",
+     "",
+     "MRP",
+     "Planning Flag",
+     "Generic Material",
+     "Color",
+     "Stk q\n+ In Q",
+     "Intransit Qty"
+    ],
+    [
+     "MENS",
+     "PL",
+     "1012",
+     "T-SHIRT",
+     "499",
+     "NON-BOGO",
+     "1234567890",
+     "NAVY",
+     "35",
+     "5"
+    ],
+    [
+     "MENS",
+     "PL",
+     "1012",
+     "T-SHIRT",
+     "499",
+     "NON-BOGO",
+     "1234567890",
+     "WHITE",
+     "0",
+     "0"
+    ]
+   ]
+  }
+ },
+ "Universe_Master.xls": {
+  "sheetNames": [
+   "Universe_Master"
+  ],
+  "sheets": {
+   "Universe_Master": [
+    [
+     "Generic Material",
+     "Brand Type",
+     "Division",
+     "MC CD",
+     "MC DES",
+     "MRP",
+     "Flag"
+    ],
+    [
+     "1234567890",
+     "PL",
+     "MENS",
+     "1012",
+     "T-SHIRT",
+     "499",
+     "NON-BOGO"
+    ],
+    [
+     "1234567891",
+     "PL",
+     "MENS",
+     "1012",
+     "T-SHIRT",
+     "599.99",
+     "BOGO"
+    ],
+    [
+     "1234567892",
+     "NON-PL",
+     "LADIES",
+     "1014",
+     "KURTA",
+     "1299",
+     "TRUE"
+    ]
+   ]
+  }
+ },
+ "corrupt.xlsx": {
+  "error": "Unsupported ZIP encryption"
+ }
+}

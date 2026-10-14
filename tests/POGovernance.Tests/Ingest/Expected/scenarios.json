@@ -1,0 +1,1483 @@
+{
+ "file_f1": {
+  "keys": [
+   {
+    "key": "f1",
+    "label": "✓ 3 rows — F1_STOCK_portal.xlsx",
+    "payload": {
+     "rows": [
+      {
+       "2025": "x",
+       "DIV": "MENS",
+       "Brand Type": "PL",
+       "MC CD": "1012",
+       "MRP": "499",
+       "Generic Material": "1.23457E+12",
+       "Color": "NAVY",
+       "OP STK": "11",
+       "Pct": "12.50%",
+       "Date A": "15-06-2026",
+       "Date B": "6/1/26",
+       "Flag": "TRUE",
+       "Err": "",
+       "Amount": "1,234,567.89",
+       "Small": "0.0001",
+       "Sci": "1.23457E+19"
+      },
+      {
+       "2025": "2025",
+       "DIV": "MENS",
+       "Brand Type": "NON-PL",
+       "MC CD": "1013",
+       "MRP": "0",
+       "Generic Material": "4000012345",
+       "Color": " RED ",
+       "OP STK": "0",
+       "Pct": "50.00%",
+       "Date A": "31-12-2025",
+       "Date B": "3/15/23",
+       "Flag": "FALSE",
+       "Err": "",
+       "Amount": "-9,876.50",
+       "Small": "0.0000",
+       "Sci": "1.23457E+11"
+      },
+      {
+       "2025": "y",
+       "DIV": "LADIES",
+       "Brand Type": "PL",
+       "MC CD": "1014",
+       "MRP": "1,300",
+       "Generic Material": "40000123456",
+       "Color": "BLACK",
+       "OP STK": "2",
+       "Pct": "100.00%",
+       "Date A": "29-02-2024",
+       "Date B": "2/29/00",
+       "Flag": "TRUE",
+       "Err": "",
+       "Amount": "0.00",
+       "Small": "2.5000",
+       "Sci": "3.141592654"
+      }
+     ]
+    }
+   }
+  ],
+  "emptyKeys": [],
+  "status": "✓ 3 rows — F1_STOCK_portal.xlsx",
+  "statusIsError": false,
+  "slotStatus": {
+   "f1": "✓ 3 rows — F1_STOCK_portal.xlsx"
+  },
+  "toasts": [
+   "Loaded 3 rows"
+  ],
+  "alerts": [],
+  "lines": [],
+  "picker": null
+ },
+ "file_attrrel_decoy_sheet": {
+  "keys": [
+   {
+    "key": "attrrel",
+    "label": "✓ 2 rows — AttrRel_master.xlsx",
+    "payload": {
+     "rows": [
+      {
+       "Brand Type": "PL",
+       "Division": "MENS",
+       "MC CD": "1012",
+       "Assessment Dimension": "Style",
+       "Relevant": "Y"
+      },
+      {
+       "Brand Type": "PL",
+       "Division": "MENS",
+       "MC CD": "1012",
+       "Assessment Dimension": "Fit",
+       "Relevant": "N"
+      }
+     ]
+    }
+   }
+  ],
+  "emptyKeys": [],
+  "status": "✓ 2 rows — AttrRel_master.xlsx",
+  "statusIsError": false,
+  "slotStatus": {
+   "attrrel": "✓ 2 rows — AttrRel_master.xlsx"
+  },
+  "toasts": [
+   "Loaded 2 rows"
+  ],
+  "alerts": [],
+  "lines": [],
+  "picker": null
+ },
+ "file_bsr_two_files": {
+  "keys": [
+   {
+    "key": "bsr",
+    "label": "✓ 12 rows total (+12 from this upload)",
+    "payload": {
+     "rows": [
+      {
+       "Division": "KIDS",
+       "MC CD": "2000",
+       "Generic Material": "5000000",
+       "Color": "BLUE",
+       "WEEK ON FLOOR": "4",
+       "AVG PERDAY SELL THRU%": "1.25%"
+      },
+      {
+       "Division": "KIDS",
+       "MC CD": "2001",
+       "Generic Material": "5000001",
+       "Color": "RED",
+       "WEEK ON FLOOR": "5",
+       "AVG PERDAY SELL THRU%": "2.50%"
+      },
+      {
+       "Division": "KIDS",
+       "MC CD": "2002",
+       "Generic Material": "5000002",
+       "Color": "BLUE",
+       "WEEK ON FLOOR": "6",
+       "AVG PERDAY SELL THRU%": "3.75%"
+      },
+      {
+       "Division": "KIDS",
+       "MC CD": "2000",
+       "Generic Material": "5000010",
+       "Color": "BLUE",
+       "WEEK ON FLOOR": "4",
+       "AVG PERDAY SELL THRU%": "1.25%"
+      },
+      {
+       "Division": "KIDS",
+       "MC CD": "2001",
+       "Generic Material": "5000011",
+       "Color": "RED",
+       "WEEK ON FLOOR": "5",
+       "AVG PERDAY SELL THRU%": "2.50%"
+      },
+      {
+       "Division": "KIDS",
+       "MC CD": "2002",
+       "Generic Material": "5000012",
+       "Color": "BLUE",
+       "WEEK ON FLOOR": "6",
+       "AVG PERDAY SELL THRU%": "3.75%"
+      },
+      {
+       "Division": "LADIES",
+       "MC CD": "2000",
+       "Generic Material": "5000000",
+       "Color": "BLUE",
+       "WEEK ON FLOOR": "4",
+       "AVG PERDAY SELL THRU%": "1.25%"
+      },
+      {
+       "Division": "LADIES",
+       "MC CD": "2001",
+       "Generic Material": "5000001",
+       "Color": "RED",
+       "WEEK ON FLOOR": "5",
+       "AVG PERDAY SELL THRU%": "2.50%"
+      },
+      {
+       "Division": "LADIES",
+       "MC CD": "2002",
+       "Generic Material": "5000002",
+       "Color": "BLUE",
+       "WEEK ON FLOOR": "6",
+       "AVG PERDAY SELL THRU%": "3.75%"
+      },
+      {
+       "Division": "LADIES",
+       "MC CD": "2000",
+       "Generic Material": "5000010",
+       "Color": "BLUE",
+       "WEEK ON FLOOR": "4",
+       "AVG PERDAY SELL THRU%": "1.25%"
+      },
+      {
+       "Division": "LADIES",
+       "MC CD": "2001",
+       "Generic Material": "5000011",
+       "Color": "RED",
+       "WEEK ON FLOOR": "5",
+       "AVG PERDAY SELL THRU%": "2.50%"
+      },
+      {
+       "Division": "LADIES",
+       "MC CD": "2002",
+       "Generic Material": "5000012",
+       "Color": "BLUE",
+       "WEEK ON FLOOR": "6",
+       "AVG PERDAY SELL THRU%": "3.75%"
+      }
+     ]
+    }
+   }
+  ],
+  "emptyKeys": [],
+  "status": "✓ 12 rows total (+12 from this upload)",
+  "statusIsError": false,
+  "slotStatus": {
+   "bsr": "✓ 12 rows total (+12 from this upload)"
+  },
+  "toasts": [
+   "Loaded 12 rows"
+  ],
+  "alerts": [],
+  "lines": [],
+  "picker": null
+ },
+ "file_bsr_accumulates": {
+  "keys": [
+   {
+    "key": "bsr",
+    "label": "✓ 12 rows total (+6 from this upload)",
+    "payload": {
+     "rows": [
+      {
+       "Division": "KIDS",
+       "MC CD": "2000",
+       "Generic Material": "5000000",
+       "Color": "BLUE",
+       "WEEK ON FLOOR": "4",
+       "AVG PERDAY SELL THRU%": "1.25%"
+      },
+      {
+       "Division": "KIDS",
+       "MC CD": "2001",
+       "Generic Material": "5000001",
+       "Color": "RED",
+       "WEEK ON FLOOR": "5",
+       "AVG PERDAY SELL THRU%": "2.50%"
+      },
+      {
+       "Division": "KIDS",
+       "MC CD": "2002",
+       "Generic Material": "5000002",
+       "Color": "BLUE",
+       "WEEK ON FLOOR": "6",
+       "AVG PERDAY SELL THRU%": "3.75%"
+      },
+      {
+       "Division": "KIDS",
+       "MC CD": "2000",
+       "Generic Material": "5000010",
+       "Color": "BLUE",
+       "WEEK ON FLOOR": "4",
+       "AVG PERDAY SELL THRU%": "1.25%"
+      },
+      {
+       "Division": "KIDS",
+       "MC CD": "2001",
+       "Generic Material": "5000011",
+       "Color": "RED",
+       "WEEK ON FLOOR": "5",
+       "AVG PERDAY SELL THRU%": "2.50%"
+      },
+      {
+       "Division": "KIDS",
+       "MC CD": "2002",
+       "Generic Material": "5000012",
+       "Color": "BLUE",
+       "WEEK ON FLOOR": "6",
+       "AVG PERDAY SELL THRU%": "3.75%"
+      },
+      {
+       "Division": "LADIES",
+       "MC CD": "2000",
+       "Generic Material": "5000000",
+       "Color": "BLUE",
+       "WEEK ON FLOOR": "4",
+       "AVG PERDAY SELL THRU%": "1.25%"
+      },
+      {
+       "Division": "LADIES",
+       "MC CD": "2001",
+       "Generic Material": "5000001",
+       "Color": "RED",
+       "WEEK ON FLOOR": "5",
+       "AVG PERDAY SELL THRU%": "2.50%"
+      },
+      {
+       "Division": "LADIES",
+       "MC CD": "2002",
+       "Generic Material": "5000002",
+       "Color": "BLUE",
+       "WEEK ON FLOOR": "6",
+       "AVG PERDAY SELL THRU%": "3.75%"
+      },
+      {
+       "Division": "LADIES",
+       "MC CD": "2000",
+       "Generic Material": "5000010",
+       "Color": "BLUE",
+       "WEEK ON FLOOR": "4",
+       "AVG PERDAY SELL THRU%": "1.25%"
+      },
+      {
+       "Division": "LADIES",
+       "MC CD": "2001",
+       "Generic Material": "5000011",
+       "Color": "RED",
+       "WEEK ON FLOOR": "5",
+       "AVG PERDAY SELL THRU%": "2.50%"
+      },
+      {
+       "Division": "LADIES",
+       "MC CD": "2002",
+       "Generic Material": "5000012",
+       "Color": "BLUE",
+       "WEEK ON FLOOR": "6",
+       "AVG PERDAY SELL THRU%": "3.75%"
+      }
+     ]
+    }
+   }
+  ],
+  "emptyKeys": [],
+  "status": "✓ 12 rows total (+6 from this upload)",
+  "statusIsError": false,
+  "slotStatus": {
+   "bsr": "✓ 12 rows total (+6 from this upload)"
+  },
+  "toasts": [
+   "Loaded 6 rows"
+  ],
+  "alerts": [],
+  "lines": [],
+  "picker": null
+ },
+ "file_f4_xlsb": {
+  "keys": [
+   {
+    "key": "f4",
+    "label": "✓ 3 rows — F4_FORECAST.xlsb",
+    "payload": {
+     "rows": [
+      {
+       "Forecast plan": "KEY-2"
+      },
+      {
+       "Forecast plan": "PL-1012-499-NON-BOGO"
+      },
+      {
+       "Forecast plan": "PL-1014-799-BOGO"
+      }
+     ]
+    }
+   }
+  ],
+  "emptyKeys": [],
+  "status": "✓ 3 rows — F4_FORECAST.xlsb",
+  "statusIsError": false,
+  "slotStatus": {
+   "f4": "✓ 3 rows — F4_FORECAST.xlsb"
+  },
+  "toasts": [
+   "Loaded 3 rows"
+  ],
+  "alerts": [],
+  "lines": [],
+  "picker": null
+ },
+ "file_um_xls": {
+  "keys": [
+   {
+    "key": "um",
+    "label": "✓ 3 rows — Universe_Master.xls",
+    "payload": {
+     "rows": [
+      {
+       "Generic Material": "1234567890",
+       "Brand Type": "PL",
+       "Division": "MENS",
+       "MC CD": "1012",
+       "MC DES": "T-SHIRT",
+       "MRP": "499",
+       "Flag": "NON-BOGO"
+      },
+      {
+       "Generic Material": "1234567891",
+       "Brand Type": "PL",
+       "Division": "MENS",
+       "MC CD": "1012",
+       "MC DES": "T-SHIRT",
+       "MRP": "599.99",
+       "Flag": "BOGO"
+      },
+      {
+       "Generic Material": "1234567892",
+       "Brand Type": "NON-PL",
+       "Division": "LADIES",
+       "MC CD": "1014",
+       "MC DES": "KURTA",
+       "MRP": "1299",
+       "Flag": "TRUE"
+      }
+     ]
+    }
+   }
+  ],
+  "emptyKeys": [],
+  "status": "✓ 3 rows — Universe_Master.xls",
+  "statusIsError": false,
+  "slotStatus": {
+   "um": "✓ 3 rows — Universe_Master.xls"
+  },
+  "toasts": [
+   "Loaded 3 rows"
+  ],
+  "alerts": [],
+  "lines": [],
+  "picker": null
+ },
+ "file_colmaster_csv": {
+  "keys": [
+   {
+    "key": "colmaster",
+    "label": "✓ 9 rows — Colour_Master.csv",
+    "payload": {
+     "rows": [
+      {
+       "Colour Code": "C01",
+       "Colour Name": "NAVY",
+       "Family": "BLUE, DARK",
+       "Updated": "6/1/26",
+       "Note": "1/2/01"
+      },
+      {
+       "Colour Code": "C02",
+       "Colour Name": "RED \"HOT\"",
+       "Family": "RED",
+       "Updated": "6/1/26",
+       "Note": "10/12/01"
+      },
+      {
+       "Colour Code": "C03",
+       "Colour Name": "  WHITE ",
+       "Family": "WHITE",
+       "Updated": "1/6/26",
+       "Note": "x"
+      },
+      {
+       "Colour Code": "C04",
+       "Colour Name": "BLACK",
+       "Family": "",
+       "Updated": "6/1/26",
+       "Note": ""
+      },
+      {
+       "Colour Code": "C05",
+       "Colour Name": "GREY",
+       "Family": "GREY",
+       "Updated": "13/1/2026",
+       "Note": "1,234"
+      },
+      {
+       "Colour Code": "C06",
+       "Colour Name": "Café",
+       "Family": "BROWN",
+       "Updated": "1/2/03",
+       "Note": "TRUE"
+      },
+      {
+       "Colour Code": "C07",
+       "Colour Name": "PINK",
+       "Family": "RED",
+       "Updated": "2026",
+       "Note": "$12.50"
+      },
+      {
+       "Colour Code": "C08",
+       "Colour Name": "ROSE",
+       "Family": "RED",
+       "Updated": "Jun-26",
+       "Note": "(45)"
+      },
+      {
+       "Colour Code": "C09",
+       "Colour Name": "PEACH",
+       "Family": "RED",
+       "Updated": "6-2026",
+       "Note": "5%"
+      }
+     ]
+    }
+   }
+  ],
+  "emptyKeys": [],
+  "status": "✓ 9 rows — Colour_Master.csv",
+  "statusIsError": false,
+  "slotStatus": {
+   "colmaster": "✓ 9 rows — Colour_Master.csv"
+  },
+  "toasts": [
+   "Loaded 9 rows"
+  ],
+  "alerts": [],
+  "lines": [],
+  "picker": null
+ },
+ "file_catheadmap_csv": {
+  "keys": [
+   {
+    "key": "catheadmap",
+    "label": "✓ 2 rows — SCR_PRODUCTS.csv",
+    "payload": {
+     "rows": [
+      {
+       "Brand Type": "PL",
+       "Division": "MENS",
+       "MC CD": "1012",
+       "MRP": "499",
+       "Category Head": "Anil Kumar",
+       "Buyer": "Ravi"
+      },
+      {
+       "Brand Type": "PL",
+       "Division": "LADIES",
+       "MC CD": "1014",
+       "MRP": "799",
+       "Category Head": "Sunita",
+       "Buyer": "Meena"
+      }
+     ]
+    }
+   }
+  ],
+  "emptyKeys": [],
+  "status": "✓ 2 rows — SCR_PRODUCTS.csv",
+  "statusIsError": false,
+  "slotStatus": {
+   "catheadmap": "✓ 2 rows — SCR_PRODUCTS.csv"
+  },
+  "toasts": [
+   "Loaded 2 rows"
+  ],
+  "alerts": [],
+  "lines": [],
+  "picker": null
+ },
+ "file_f1_partial_error": {
+  "keys": [
+   {
+    "key": "f1",
+    "label": "✓ 3 rows from 2 files",
+    "payload": {
+     "rows": [
+      {
+       "2025": "x",
+       "DIV": "MENS",
+       "Brand Type": "PL",
+       "MC CD": "1012",
+       "MRP": "499",
+       "Generic Material": "1.23457E+12",
+       "Color": "NAVY",
+       "OP STK": "11",
+       "Pct": "12.50%",
+       "Date A": "15-06-2026",
+       "Date B": "6/1/26",
+       "Flag": "TRUE",
+       "Err": "",
+       "Amount": "1,234,567.89",
+       "Small": "0.0001",
+       "Sci": "1.23457E+19"
+      },
+      {
+       "2025": "2025",
+       "DIV": "MENS",
+       "Brand Type": "NON-PL",
+       "MC CD": "1013",
+       "MRP": "0",
+       "Generic Material": "4000012345",
+       "Color": " RED ",
+       "OP STK": "0",
+       "Pct": "50.00%",
+       "Date A": "31-12-2025",
+       "Date B": "3/15/23",
+       "Flag": "FALSE",
+       "Err": "",
+       "Amount": "-9,876.50",
+       "Small": "0.0000",
+       "Sci": "1.23457E+11"
+      },
+      {
+       "2025": "y",
+       "DIV": "LADIES",
+       "Brand Type": "PL",
+       "MC CD": "1014",
+       "MRP": "1,300",
+       "Generic Material": "40000123456",
+       "Color": "BLACK",
+       "OP STK": "2",
+       "Pct": "100.00%",
+       "Date A": "29-02-2024",
+       "Date B": "2/29/00",
+       "Flag": "TRUE",
+       "Err": "",
+       "Amount": "0.00",
+       "Small": "2.5000",
+       "Sci": "3.141592654"
+      }
+     ]
+    }
+   }
+  ],
+  "emptyKeys": [],
+  "status": "✓ 3 rows from 2 files",
+  "statusIsError": false,
+  "slotStatus": {
+   "f1": "✓ 3 rows from 2 files"
+  },
+  "toasts": [
+   "Loaded 3 rows",
+   "Error: corrupt.xlsx"
+  ],
+  "alerts": [],
+  "lines": [],
+  "picker": null
+ },
+ "file_error_only": {
+  "keys": [],
+  "emptyKeys": [],
+  "status": "✗ Error reading file(s)",
+  "statusIsError": true,
+  "slotStatus": {
+   "f2": "✗ Error reading file(s)"
+  },
+  "toasts": [
+   "Error: corrupt.xlsx"
+  ],
+  "alerts": [],
+  "lines": [],
+  "picker": null
+ },
+ "zip_bundle": {
+  "keys": [
+   {
+    "key": "f1",
+    "label": "✓ 3 rows (via zip)",
+    "payload": {
+     "rows": [
+      {
+       "2025": "x",
+       "DIV": "MENS",
+       "Brand Type": "PL",
+       "MC CD": "1012",
+       "MRP": "499",
+       "Generic Material": "1.23457E+12",
+       "Color": "NAVY",
+       "OP STK": "11",
+       "Pct": "12.50%",
+       "Date A": "15-06-2026",
+       "Date B": "6/1/26",
+       "Flag": "TRUE",
+       "Err": "",
+       "Amount": "1,234,567.89",
+       "Small": "0.0001",
+       "Sci": "1.23457E+19"
+      },
+      {
+       "2025": "2025",
+       "DIV": "MENS",
+       "Brand Type": "NON-PL",
+       "MC CD": "1013",
+       "MRP": "0",
+       "Generic Material": "4000012345",
+       "Color": " RED ",
+       "OP STK": "0",
+       "Pct": "50.00%",
+       "Date A": "31-12-2025",
+       "Date B": "3/15/23",
+       "Flag": "FALSE",
+       "Err": "",
+       "Amount": "-9,876.50",
+       "Small": "0.0000",
+       "Sci": "1.23457E+11"
+      },
+      {
+       "2025": "y",
+       "DIV": "LADIES",
+       "Brand Type": "PL",
+       "MC CD": "1014",
+       "MRP": "1,300",
+       "Generic Material": "40000123456",
+       "Color": "BLACK",
+       "OP STK": "2",
+       "Pct": "100.00%",
+       "Date A": "29-02-2024",
+       "Date B": "2/29/00",
+       "Flag": "TRUE",
+       "Err": "",
+       "Amount": "0.00",
+       "Small": "2.5000",
+       "Sci": "3.141592654"
+      }
+     ]
+    }
+   },
+   {
+    "key": "f2",
+    "label": "✓ 3 rows (via zip)",
+    "payload": {
+     "rows": [
+      {
+       "PO Number": "4500001234",
+       "DIV": "MENS",
+       "MC CD": "1012",
+       "MC DESC": "T-SHIRT",
+       "MRP": "499",
+       "Generic Material": "1234567890",
+       "Brand Type": "PL",
+       "BOGO/NON-BOGO": "NON-BOGO",
+       "Color": "NAVY",
+       "Delivery Month": "06.2026",
+       "Vendor Name": "ACME",
+       "Pending Qty": "120",
+       "PO Value": "59,880.00"
+      },
+      {
+       "PO Number": "4500001235",
+       "DIV": "MENS",
+       "MC CD": "1012",
+       "MC DESC": "T-SHIRT",
+       "MRP": "499",
+       "Generic Material": "1234567891",
+       "Brand Type": "PL",
+       "BOGO/NON-BOGO": "BOGO",
+       "Color": "",
+       "Delivery Month": "07.2026",
+       "Vendor Name": "ACME",
+       "Pending Qty": "0",
+       "PO Value": "0.00"
+      },
+      {
+       "PO Number": "4500001236",
+       "DIV": "LADIES",
+       "MC CD": "1014",
+       "MC DESC": "KURTA",
+       "MRP": "799",
+       "Generic Material": "1234567892",
+       "Brand Type": "NON-PL",
+       "BOGO/NON-BOGO": "NON-BOGO",
+       "Color": "RED",
+       "Delivery Month": "06.2026",
+       "Vendor Name": "BETA",
+       "Pending Qty": "1500.5",
+       "PO Value": "1,199,000.25"
+      }
+     ]
+    }
+   },
+   {
+    "key": "f4",
+    "label": "✓ 3 rows (via zip)",
+    "payload": {
+     "rows": [
+      {
+       "Forecast plan": "KEY-2"
+      },
+      {
+       "Forecast plan": "PL-1012-499-NON-BOGO"
+      },
+      {
+       "Forecast plan": "PL-1014-799-BOGO"
+      }
+     ]
+    }
+   },
+   {
+    "key": "um",
+    "label": "✓ 3 rows (via zip)",
+    "payload": {
+     "rows": [
+      {
+       "Generic Material": "1234567890",
+       "Brand Type": "PL",
+       "Division": "MENS",
+       "MC CD": "1012",
+       "MC DES": "T-SHIRT",
+       "MRP": "499",
+       "Flag": "NON-BOGO"
+      },
+      {
+       "Generic Material": "1234567891",
+       "Brand Type": "PL",
+       "Division": "MENS",
+       "MC CD": "1012",
+       "MC DES": "T-SHIRT",
+       "MRP": "599.99",
+       "Flag": "BOGO"
+      },
+      {
+       "Generic Material": "1234567892",
+       "Brand Type": "NON-PL",
+       "Division": "LADIES",
+       "MC CD": "1014",
+       "MC DES": "KURTA",
+       "MRP": "1299",
+       "Flag": "TRUE"
+      }
+     ]
+    }
+   },
+   {
+    "key": "bsr",
+    "label": "✓ 12 rows (via zip)",
+    "payload": {
+     "rows": [
+      {
+       "Division": "KIDS",
+       "MC CD": "2000",
+       "MC DESC": "",
+       "MRP": "",
+       "Generic Material": "5000000",
+       "Color": "BLUE",
+       "Brand Type": "",
+       "BOGO/NON-BOGO": "",
+       "WEEK ON FLOOR": "4",
+       "AVG PERDAY SELL THRU%": "1.25%"
+      },
+      {
+       "Division": "KIDS",
+       "MC CD": "2001",
+       "MC DESC": "",
+       "MRP": "",
+       "Generic Material": "5000001",
+       "Color": "RED",
+       "Brand Type": "",
+       "BOGO/NON-BOGO": "",
+       "WEEK ON FLOOR": "5",
+       "AVG PERDAY SELL THRU%": "2.50%"
+      },
+      {
+       "Division": "KIDS",
+       "MC CD": "2002",
+       "MC DESC": "",
+       "MRP": "",
+       "Generic Material": "5000002",
+       "Color": "BLUE",
+       "Brand Type": "",
+       "BOGO/NON-BOGO": "",
+       "WEEK ON FLOOR": "6",
+       "AVG PERDAY SELL THRU%": "3.75%"
+      },
+      {
+       "Division": "KIDS",
+       "MC CD": "2000",
+       "MC DESC": "",
+       "MRP": "",
+       "Generic Material": "5000010",
+       "Color": "BLUE",
+       "Brand Type": "",
+       "BOGO/NON-BOGO": "",
+       "WEEK ON FLOOR": "4",
+       "AVG PERDAY SELL THRU%": "1.25%"
+      },
+      {
+       "Division": "KIDS",
+       "MC CD": "2001",
+       "MC DESC": "",
+       "MRP": "",
+       "Generic Material": "5000011",
+       "Color": "RED",
+       "Brand Type": "",
+       "BOGO/NON-BOGO": "",
+       "WEEK ON FLOOR": "5",
+       "AVG PERDAY SELL THRU%": "2.50%"
+      },
+      {
+       "Division": "KIDS",
+       "MC CD": "2002",
+       "MC DESC": "",
+       "MRP": "",
+       "Generic Material": "5000012",
+       "Color": "BLUE",
+       "Brand Type": "",
+       "BOGO/NON-BOGO": "",
+       "WEEK ON FLOOR": "6",
+       "AVG PERDAY SELL THRU%": "3.75%"
+      },
+      {
+       "Division": "LADIES",
+       "MC CD": "2000",
+       "MC DESC": "",
+       "MRP": "",
+       "Generic Material": "5000000",
+       "Color": "BLUE",
+       "Brand Type": "",
+       "BOGO/NON-BOGO": "",
+       "WEEK ON FLOOR": "4",
+       "AVG PERDAY SELL THRU%": "1.25%"
+      },
+      {
+       "Division": "LADIES",
+       "MC CD": "2001",
+       "MC DESC": "",
+       "MRP": "",
+       "Generic Material": "5000001",
+       "Color": "RED",
+       "Brand Type": "",
+       "BOGO/NON-BOGO": "",
+       "WEEK ON FLOOR": "5",
+       "AVG PERDAY SELL THRU%": "2.50%"
+      },
+      {
+       "Division": "LADIES",
+       "MC CD": "2002",
+       "MC DESC": "",
+       "MRP": "",
+       "Generic Material": "5000002",
+       "Color": "BLUE",
+       "Brand Type": "",
+       "BOGO/NON-BOGO": "",
+       "WEEK ON FLOOR": "6",
+       "AVG PERDAY SELL THRU%": "3.75%"
+      },
+      {
+       "Division": "LADIES",
+       "MC CD": "2000",
+       "MC DESC": "",
+       "MRP": "",
+       "Generic Material": "5000010",
+       "Color": "BLUE",
+       "Brand Type": "",
+       "BOGO/NON-BOGO": "",
+       "WEEK ON FLOOR": "4",
+       "AVG PERDAY SELL THRU%": "1.25%"
+      },
+      {
+       "Division": "LADIES",
+       "MC CD": "2001",
+       "MC DESC": "",
+       "MRP": "",
+       "Generic Material": "5000011",
+       "Color": "RED",
+       "Brand Type": "",
+       "BOGO/NON-BOGO": "",
+       "WEEK ON FLOOR": "5",
+       "AVG PERDAY SELL THRU%": "2.50%"
+      },
+      {
+       "Division": "LADIES",
+       "MC CD": "2002",
+       "MC DESC": "",
+       "MRP": "",
+       "Generic Material": "5000012",
+       "Color": "BLUE",
+       "Brand Type": "",
+       "BOGO/NON-BOGO": "",
+       "WEEK ON FLOOR": "6",
+       "AVG PERDAY SELL THRU%": "3.75%"
+      }
+     ]
+    }
+   },
+   {
+    "key": "colmaster",
+    "label": "✓ 9 rows (via zip)",
+    "payload": {
+     "rows": [
+      {
+       "Colour Code": "C01",
+       "Colour Name": "NAVY",
+       "Family": "BLUE, DARK",
+       "Updated": "6/1/26",
+       "Note": "1/2/01"
+      },
+      {
+       "Colour Code": "C02",
+       "Colour Name": "RED \"HOT\"",
+       "Family": "RED",
+       "Updated": "6/1/26",
+       "Note": "10/12/01"
+      },
+      {
+       "Colour Code": "C03",
+       "Colour Name": "  WHITE ",
+       "Family": "WHITE",
+       "Updated": "1/6/26",
+       "Note": "x"
+      },
+      {
+       "Colour Code": "C04",
+       "Colour Name": "BLACK",
+       "Family": "",
+       "Updated": "6/1/26",
+       "Note": ""
+      },
+      {
+       "Colour Code": "C05",
+       "Colour Name": "GREY",
+       "Family": "GREY",
+       "Updated": "13/1/2026",
+       "Note": "1,234"
+      },
+      {
+       "Colour Code": "C06",
+       "Colour Name": "Café",
+       "Family": "BROWN",
+       "Updated": "1/2/03",
+       "Note": "TRUE"
+      },
+      {
+       "Colour Code": "C07",
+       "Colour Name": "PINK",
+       "Family": "RED",
+       "Updated": "2026",
+       "Note": "$12.50"
+      },
+      {
+       "Colour Code": "C08",
+       "Colour Name": "ROSE",
+       "Family": "RED",
+       "Updated": "Jun-26",
+       "Note": "(45)"
+      },
+      {
+       "Colour Code": "C09",
+       "Colour Name": "PEACH",
+       "Family": "RED",
+       "Updated": "6-2026",
+       "Note": "5%"
+      }
+     ]
+    }
+   }
+  ],
+  "emptyKeys": [],
+  "status": "⚠ Zip loaded but 1 required file(s) missing",
+  "statusIsError": true,
+  "slotStatus": {
+   "f1": "✓ 3 rows (via zip)",
+   "f2": "✓ 3 rows (via zip)",
+   "f4": "✓ 3 rows (via zip)",
+   "um": "✓ 3 rows (via zip)",
+   "bsr": "✓ 12 rows (via zip)",
+   "colmaster": "✓ 9 rows (via zip)"
+  },
+  "toasts": [
+   "Zip loaded: 6 categories, 33 rows"
+  ],
+  "alerts": [
+   "⚠ Required file(s) missing from this zip:\n\n• F3 — Sales Trend\n\nThe zip was still loaded for everything it did contain, but you must add the missing file(s) — either re-zip with them included, or upload them individually in the slots below — before running Tool 1 or Tool 2."
+  ],
+  "lines": [
+   "⚠ Missing required files: F3 — Sales Trend",
+   "",
+   "Matched by filename (already portal-format):",
+   "✓ F1_STOCK_portal.xlsx → F1 — Stock (3 rows)",
+   "✓ F4_FORECAST.xlsb → F4 — Forecast (3 rows)",
+   "✓ Universe_Master.xls → Universe Master (3 rows)",
+   "✓ Colour_Master.csv → Colour Master (9 rows)",
+   "",
+   "Auto-converted (raw system exports):",
+   "✓ PO_raw.xlsx → PO DETAIL → F2 — Pending PO (3 rows)",
+   "✓ BSR_Kids.xlsx → KIDS SS26 → BSR — All Seasons (3 rows)",
+   "✓ BSR_Kids.xlsx → KIDS AW25 → BSR — All Seasons (3 rows)",
+   "✓ BSR_Ladies.xlsx → LADIES SS26 → BSR — All Seasons (3 rows)",
+   "✓ BSR_Ladies.xlsx → LADIES AW25 → BSR — All Seasons (3 rows)",
+   "",
+   "Not recognized at all — upload these individually below:",
+   "✗ AttrRel_master.xlsx",
+   "✗ Notes.csv"
+  ],
+  "picker": null
+ },
+ "raw_import": {
+  "keys": [
+   {
+    "key": "f2",
+    "label": "✓ 3 rows (via Raw Import)",
+    "payload": {
+     "rows": [
+      {
+       "PO Number": "4500001234",
+       "DIV": "MENS",
+       "MC CD": "1012",
+       "MC DESC": "T-SHIRT",
+       "MRP": "499",
+       "Generic Material": "1234567890",
+       "Brand Type": "PL",
+       "BOGO/NON-BOGO": "NON-BOGO",
+       "Color": "NAVY",
+       "Delivery Month": "06.2026",
+       "Vendor Name": "ACME",
+       "Pending Qty": "120",
+       "PO Value": "59,880.00"
+      },
+      {
+       "PO Number": "4500001235",
+       "DIV": "MENS",
+       "MC CD": "1012",
+       "MC DESC": "T-SHIRT",
+       "MRP": "499",
+       "Generic Material": "1234567891",
+       "Brand Type": "PL",
+       "BOGO/NON-BOGO": "BOGO",
+       "Color": "",
+       "Delivery Month": "07.2026",
+       "Vendor Name": "ACME",
+       "Pending Qty": "0",
+       "PO Value": "0.00"
+      },
+      {
+       "PO Number": "4500001236",
+       "DIV": "LADIES",
+       "MC CD": "1014",
+       "MC DESC": "KURTA",
+       "MRP": "799",
+       "Generic Material": "1234567892",
+       "Brand Type": "NON-PL",
+       "BOGO/NON-BOGO": "NON-BOGO",
+       "Color": "RED",
+       "Delivery Month": "06.2026",
+       "Vendor Name": "BETA",
+       "Pending Qty": "1500.5",
+       "PO Value": "1,199,000.25"
+      }
+     ]
+    }
+   },
+   {
+    "key": "f1",
+    "label": "✓ 2 rows (via Raw Import)",
+    "payload": {
+     "rows": [
+      {
+       "DIV": "MENS",
+       "Brand Type": "PL",
+       "MC CD": "1012",
+       "MC DESC": "T-SHIRT",
+       "MRP": "499",
+       "BOGO/NON-BOGO": "NON-BOGO",
+       "Generic Material": "1234567890",
+       "Color": "NAVY",
+       "OP STK": "35"
+      },
+      {
+       "DIV": "MENS",
+       "Brand Type": "PL",
+       "MC CD": "1012",
+       "MC DESC": "T-SHIRT",
+       "MRP": "499",
+       "BOGO/NON-BOGO": "NON-BOGO",
+       "Generic Material": "1234567890",
+       "Color": "WHITE",
+       "OP STK": "0"
+      }
+     ]
+    }
+   },
+   {
+    "key": "f3",
+    "label": "✓ 2 rows (via Raw Import)",
+    "payload": {
+     "rows": [
+      {
+       "DIV": "MENS",
+       "Brand Type": "PL",
+       "MC CD": "1012",
+       "MC DESC": "T-SHIRT",
+       "MRP": "499",
+       "BOGO/NON-BOGO": "NON-BOGO",
+       "Generic Material": "1234567890",
+       "Color": "NAVY",
+       "KEY-1": "PL-1012",
+       "KEY-2": "PL-1012-499-NON-BOGO",
+       "KEY-3": "PL-1012-499-NON-BOGO-NAVY",
+       "Day 1": "1",
+       "Day 2": "2",
+       "Day 3": "3",
+       "Day 4": "9",
+       "Day 5": ""
+      },
+      {
+       "DIV": "MENS",
+       "Brand Type": "PL",
+       "MC CD": "1012",
+       "MC DESC": "T-SHIRT",
+       "MRP": "499",
+       "BOGO/NON-BOGO": "NON-BOGO",
+       "Generic Material": "1234567890",
+       "Color": "RED",
+       "KEY-1": "PL-1012",
+       "KEY-2": "PL-1012-499-NON-BOGO",
+       "KEY-3": "PL-1012-499-NON-BOGO-RED",
+       "Day 1": "4",
+       "Day 2": "",
+       "Day 3": "0",
+       "Day 4": "1",
+       "Day 5": "7"
+      }
+     ]
+    }
+   },
+   {
+    "key": "artmaster",
+    "label": "✓ 2 rows (via Raw Import)",
+    "payload": {
+     "rows": [
+      {
+       "Generic Material": "1234567890",
+       "ART DESC": "Crew neck tee",
+       "Brand Type": "PL",
+       "Division": "MENS",
+       "MC CD": "1012",
+       "MC DESC": "T-SHIRT",
+       "MRP": "499",
+       "Flag (BOGO/NON-BOGO)": "NON-BOGO",
+       "Style": "CASUAL",
+       "Fit": "SLIM",
+       "Product Material": "COTTON",
+       "Design": "SOLID",
+       "Vendor": "70001",
+       "VENDOR NAME": "ACME LTD",
+       "Season": "SS26"
+      },
+      {
+       "Generic Material": "1234567891",
+       "ART DESC": "Polo",
+       "Brand Type": "PL",
+       "Division": "MENS",
+       "MC CD": "1012",
+       "MC DESC": "T-SHIRT",
+       "MRP": "599",
+       "Flag (BOGO/NON-BOGO)": "BOGO",
+       "Style": "",
+       "Fit": "REGULAR",
+       "Product Material": "",
+       "Design": "STRIPE",
+       "Vendor": "70002",
+       "VENDOR NAME": "",
+       "Season": "AW25"
+      }
+     ]
+    }
+   },
+   {
+    "key": "bsr",
+    "label": "✓ 2 rows (via Raw Import)",
+    "payload": {
+     "rows": [
+      {
+       "Division": "MENS",
+       "MC CD": "1012",
+       "MC DESC": "T-SHIRT",
+       "MRP": "499",
+       "Generic Material": "1234567890",
+       "Color": "NAVY",
+       "Brand Type": "PL",
+       "BOGO/NON-BOGO": "NON-BOGO",
+       "WEEK ON FLOOR": "6",
+       "AVG PERDAY SELL THRU%": "2.34%"
+      },
+      {
+       "Division": "MENS",
+       "MC CD": "1012",
+       "MC DESC": "T-SHIRT",
+       "MRP": "499",
+       "Generic Material": "1234567891",
+       "Color": "RED",
+       "Brand Type": "PL",
+       "BOGO/NON-BOGO": "BOGO",
+       "WEEK ON FLOOR": "2",
+       "AVG PERDAY SELL THRU%": "50.00%"
+      }
+     ]
+    }
+   }
+  ],
+  "emptyKeys": [],
+  "status": "✓ 11 rows converted across 5 input(s)",
+  "statusIsError": false,
+  "slotStatus": {
+   "f2": "✓ 3 rows (via Raw Import)",
+   "f1": "✓ 2 rows (via Raw Import)",
+   "f3": "✓ 2 rows (via Raw Import)",
+   "artmaster": "✓ 2 rows (via Raw Import)",
+   "bsr": "✓ 2 rows (via Raw Import)"
+  },
+  "toasts": [
+   "Raw import: 11 rows converted"
+  ],
+  "alerts": [],
+  "lines": [
+   "Detected & converted:",
+   "✓ PO_raw.xlsx → PO DETAIL → F2 — Pending PO (3 rows)",
+   "✓ Stock_raw.xlsx → Stock → F1 — Stock (2 rows)",
+   "✓ Sales_raw.xlsx → Sales → F3 — Sales Trend (2 rows)",
+   "✓ ArticleMaster_raw.xlsx → Article → Article Master (2 rows)",
+   "✓ BSR_detail_raw.xlsx → BSR DETAIL → BSR — All Seasons (2 rows)",
+   "",
+   "Skipped:",
+   "— PO_raw.xlsx → TOP BS CRITERIA: no recognized column pattern (likely a pivot-summary tab)",
+   "— F1_STOCK_portal.xlsx → STOCK: no recognized column pattern (likely a pivot-summary tab)",
+   "— corrupt.xlsx → —: could not read file: Unsupported ZIP encryption"
+  ],
+  "picker": null
+ },
+ "grc_monthly": {
+  "keys": [
+   {
+    "key": "grc",
+    "label": "✓ 4 rows across 3 months (04.2026 – 06.2026)",
+    "payload": {
+     "rows": [
+      {
+       "brand": "PL",
+       "gm": "1234567890",
+       "artdesc": "Crew tee",
+       "colour": "NAVY",
+       "period": "04.2026",
+       "periodType": "month",
+       "qty": 1234,
+       "value": null
+      },
+      {
+       "brand": "PL",
+       "gm": "1234567890",
+       "artdesc": "Crew tee",
+       "colour": "NAVY",
+       "period": "06.2026",
+       "periodType": "month",
+       "qty": 57,
+       "value": null
+      },
+      {
+       "brand": "NON-PL",
+       "gm": "1234567891",
+       "artdesc": "Polo",
+       "colour": "RED",
+       "period": "05.2026",
+       "periodType": "month",
+       "qty": 7,
+       "value": null
+      },
+      {
+       "brand": "NON-PL",
+       "gm": "1234567891",
+       "artdesc": "Polo",
+       "colour": "RED",
+       "period": "06.2026",
+       "periodType": "month",
+       "qty": -3,
+       "value": null
+      }
+     ],
+     "meta": {
+      "grcPeriodType": "month"
+     }
+    }
+   }
+  ],
+  "emptyKeys": [],
+  "status": "✓ 4 rows across 3 months (04.2026 – 06.2026)",
+  "statusIsError": false,
+  "slotStatus": {
+   "grc": "✓ 4 rows across 3 months (04.2026 – 06.2026)"
+  },
+  "toasts": [
+   "GRC loaded ✓ — 3 months found"
+  ],
+  "alerts": [],
+  "lines": [],
+  "picker": [
+   "04.2026",
+   "05.2026",
+   "06.2026"
+  ]
+ },
+ "grc_weekly": {
+  "keys": [
+   {
+    "key": "grc",
+    "label": "✓ 4 rows across 3 weeks (14.2026 – 16.2026)",
+    "payload": {
+     "rows": [
+      {
+       "brand": "PL",
+       "gm": "1234567890",
+       "artdesc": "Crew tee",
+       "colour": "NAVY",
+       "period": "15.2026",
+       "periodType": "week",
+       "qty": 10,
+       "value": 4990
+      },
+      {
+       "brand": "PL",
+       "gm": "1234567890",
+       "artdesc": "Crew tee",
+       "colour": "NAVY",
+       "period": "14.2026",
+       "periodType": "week",
+       "qty": 5,
+       "value": null
+      },
+      {
+       "brand": "NON-PL",
+       "gm": "1234567891",
+       "artdesc": "",
+       "colour": "RED",
+       "period": "14.2026",
+       "periodType": "week",
+       "qty": 1200,
+       "value": 598800
+      },
+      {
+       "brand": "NON-PL",
+       "gm": "1234567891",
+       "artdesc": "",
+       "colour": "RED",
+       "period": "16.2026",
+       "periodType": "week",
+       "qty": 3,
+       "value": null
+      }
+     ],
+     "meta": {
+      "grcPeriodType": "week"
+     }
+    }
+   }
+  ],
+  "emptyKeys": [],
+  "status": "✓ 4 rows across 3 weeks (14.2026 – 16.2026)",
+  "statusIsError": false,
+  "slotStatus": {
+   "grc": "✓ 4 rows across 3 weeks (14.2026 – 16.2026)"
+  },
+  "toasts": [
+   "GRC loaded ✓ — 3 weeks found"
+  ],
+  "alerts": [],
+  "lines": [],
+  "picker": [
+   "14.2026",
+   "15.2026",
+   "16.2026"
+  ]
+ },
+ "grc_wrong_file": {
+  "keys": [],
+  "emptyKeys": [],
+  "status": "✗ Could not find the \"Cal. year / month\" row — is this the right file?",
+  "statusIsError": true,
+  "slotStatus": {
+   "grc": "✗ Could not find the \"Cal. year / month\" row — is this the right file?"
+  },
+  "toasts": [],
+  "alerts": [],
+  "lines": [],
+  "picker": null
+ }
+}

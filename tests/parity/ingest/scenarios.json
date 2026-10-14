@@ -1,0 +1,17 @@
+[
+  { "name": "file_f1", "kind": "file", "key": "f1", "files": ["F1_STOCK_portal.xlsx"] },
+  { "name": "file_attrrel_decoy_sheet", "kind": "file", "key": "attrrel", "files": ["AttrRel_master.xlsx"] },
+  { "name": "file_bsr_two_files", "kind": "file", "key": "bsr", "files": ["BSR_Kids.xlsx", "BSR_Ladies.xlsx"] },
+  { "name": "file_bsr_accumulates", "kind": "file", "key": "bsr", "files": ["BSR_Ladies.xlsx"], "before": ["BSR_Kids.xlsx"] },
+  { "name": "file_f4_xlsb", "kind": "file", "key": "f4", "files": ["F4_FORECAST.xlsb"] },
+  { "name": "file_um_xls", "kind": "file", "key": "um", "files": ["Universe_Master.xls"] },
+  { "name": "file_colmaster_csv", "kind": "file", "key": "colmaster", "files": ["Colour_Master.csv"] },
+  { "name": "file_catheadmap_csv", "kind": "file", "key": "catheadmap", "files": ["SCR_PRODUCTS.csv"] },
+  { "name": "file_f1_partial_error", "kind": "file", "key": "f1", "files": ["F1_STOCK_portal.xlsx", "corrupt.xlsx"] },
+  { "name": "file_error_only", "kind": "file", "key": "f2", "files": ["corrupt.xlsx"] },
+  { "name": "zip_bundle", "kind": "zip", "files": ["bundle.zip"] },
+  { "name": "raw_import", "kind": "raw", "files": ["PO_raw.xlsx", "Stock_raw.xlsx", "Sales_raw.xlsx", "ArticleMaster_raw.xlsx", "BSR_detail_raw.xlsx", "F1_STOCK_portal.xlsx", "corrupt.xlsx"] },
+  { "name": "grc_monthly", "kind": "grc", "files": ["GRC_monthly.xlsx"] },
+  { "name": "grc_weekly", "kind": "grc", "files": ["GRC_weekly.xlsx"] },
+  { "name": "grc_wrong_file", "kind": "grc", "files": ["F1_STOCK_portal.xlsx"] }
+]

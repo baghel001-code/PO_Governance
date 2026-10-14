@@ -1,0 +1,79 @@
+/* Port of index.html view-analytics styles (.pg-title, .card, .rc-hdr, .rc-badge + the inline styles of
+   renderGRCImpact / renderArticleTrace). */
+.pg-title { font-family: var(--font-brand); font-size: 26px; font-weight: 800; color: var(--vmm-navy); letter-spacing: -0.3px; line-height: 1.1; }
+.pg-accent { height: 3px; width: 60px; background: linear-gradient(90deg, var(--vmm-pink), var(--vmm-cyan)); border-radius: 2px; margin: 5px 0 6px; }
+.pg-sub { font-size: 12px; color: var(--ink3); margin-top: 4px; line-height: 1.6; }
+
+.grc-card {
+    background: var(--sur); border: 1px solid var(--brd); border-radius: var(--r); padding: 20px 22px; margin-bottom: 14px;
+    box-shadow: var(--sh); position: relative; overflow: hidden; transition: box-shadow .18s;
+}
+.grc-card::before { content: ''; position: absolute; top: 0; left: 0; right: 0; height: 3px; background: linear-gradient(90deg, var(--vmm-pink), var(--vmm-cyan)); }
+.grc-card:hover { box-shadow: var(--shm); }
+.rc-hdr { font-size: 11px; font-weight: 700; color: var(--vmm-navy); margin-bottom: 16px; display: flex; align-items: center; gap: 10px; text-transform: uppercase; letter-spacing: .07em; }
+.rc-badge { font-size: 10px; font-weight: 700; background: var(--vmm-pink); color: #fff; padding: 3px 10px; border-radius: 10px; letter-spacing: 0; text-transform: none; }
+
+.grc-ph { text-align: center; padding: 40px 24px; color: var(--ink3); }
+.grc-msg { padding: 20px; color: var(--ink3); font-size: 12px; }
+
+/* Controls */
+.grc-controls { display: flex; flex-direction: column; gap: 10px; margin-bottom: 14px; padding: 12px 14px; background: #F9FAFB; border-radius: 10px; }
+.grc-row { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.grc-row2 { padding-top: 10px; border-top: 1px solid var(--brd2); }
+.grc-f { display: flex; flex-direction: column; gap: 2px; }
+.grc-f label { font-size: 9px; font-weight: 700; color: var(--ink3); text-transform: uppercase; }
+.grc-sel { font-size: 11px; padding: 6px 10px; border-radius: 6px; border: 1.5px solid var(--brd2); background: #fff; color: var(--ink); font-family: var(--font); }
+.grc-sel.asof { border-color: var(--vmm-pink); font-weight: 600; }
+.grc-btn-export { margin-left: auto; font-size: 11px; padding: 7px 16px; background: #fff; color: var(--vmm-navy); border: 1.5px solid var(--brd2); border-radius: 6px; font-weight: 700; cursor: pointer; font-family: var(--font); }
+.grc-btn-clear { margin-left: auto; font-size: 11px; padding: 7px 14px; background: #fff; color: var(--ink2); border: 1.5px solid var(--brd2); border-radius: 6px; cursor: pointer; font-family: var(--font); }
+.grc-btn-pink { font-size: 11px; padding: 7px 16px; background: var(--vmm-pink); color: #fff; border: none; border-radius: 6px; font-weight: 700; cursor: pointer; font-family: var(--font); }
+.grc-trace-in { font-size: 12px; padding: 7px 10px; border-radius: 6px; border: 1.5px solid var(--brd2); min-width: 200px; font-family: var(--mono, monospace); }
+
+.grc-body { transition: opacity .15s; }
+.grc-body.busy { opacity: .55; pointer-events: none; }
+
+/* Body sections */
+.grc-warn { padding: 10px 14px; background: #FEF2F2; border: 1px solid #FECACA; border-radius: 8px; font-size: 11.5px; color: #7F1D1D; margin-bottom: 18px; }
+.grc-legend { display: flex; gap: 14px; margin-bottom: 14px; flex-wrap: wrap; font-size: 11px; color: var(--ink3); }
+.grc-legend > span { display: flex; align-items: center; gap: 5px; }
+.sq { width: 9px; height: 9px; border-radius: 3px; display: inline-block; }
+.grc-sect { font-size: 10.5px; font-weight: 700; color: var(--ink3); text-transform: uppercase; letter-spacing: .05em; margin-bottom: 10px; }
+.grc-box { padding: 14px 16px; background: #F9FAFB; border-radius: 10px; margin-bottom: 20px; }
+.grc-scroll { overflow-x: auto; }
+
+.grc-tbl { width: 100%; border-collapse: collapse; font-size: 12px; }
+.grc-tbl thead tr { background: var(--vmm-navy-l); }
+.grc-tbl th { padding: 8px 12px; text-align: left; font-size: 10px; text-transform: uppercase; color: var(--vmm-navy); }
+.grc-tbl td { padding: 8px 12px; }
+.grc-tbl.ledger th, .grc-tbl.ledger td { padding: 9px 12px; }
+.grc-tbl tbody tr { border-bottom: 1px solid var(--brd2); }
+.grc-tbl .r { text-align: right; }
+.grc-tbl .mono, .mono { font-family: monospace; }
+.grc-tbl tr.tot { border-top: 2px solid var(--vmm-navy); background: #F5F8FF; font-weight: 700; }
+
+/* Coverage bars */
+.grc-cov { display: flex; gap: 8px; align-items: center; margin-bottom: 8px; }
+.grc-cov .p { width: 56px; font-size: 10.5px; color: var(--ink3); font-weight: 600; font-family: monospace; }
+.grc-cov .track { flex: 1; height: 7px; background: var(--brd2); border-radius: 5px; overflow: hidden; }
+.grc-cov .v { width: 42px; text-align: right; font-size: 11px; font-weight: 700; font-family: monospace; }
+
+/* Before / onward cards */
+.grc-cards { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-bottom: 20px; }
+.grc-gcard { background: #fff; border: 1px solid var(--brd2); border-radius: 12px; padding: 18px 20px; }
+.grc-gcard.empty { background: #F9FAFB; font-size: 12px; color: var(--ink3); }
+.grc-gcard .t { font-size: 11px; font-weight: 700; color: var(--ink3); text-transform: uppercase; letter-spacing: .05em; margin-bottom: 2px; }
+.grc-gcard .s { font-size: 10.5px; color: var(--ink3); margin-bottom: 2px; }
+.grc-gcard .s b { font-family: monospace; color: var(--ink2); }
+.grc-gcard .bk { display: flex; justify-content: space-between; padding: 6px 0; border-bottom: 1px solid var(--brd2); font-size: 12px; }
+.grc-gcard .bk .l { display: flex; align-items: center; gap: 6px; color: var(--ink2); }
+
+.grc-note { margin-top: 16px; padding: 12px 14px; background: #F0F9FF; border: 1px solid #0891B233; border-radius: 8px; font-size: 11.5px; color: #0C4A6E; line-height: 1.65; }
+.grc-foot { margin-top: 16px; font-size: 11px; color: var(--ink3); line-height: 1.6; }
+
+/* Article trace */
+.grc-err { padding: 14px 16px; background: #FEF2F2; border: 1px solid #FECACA; border-radius: 8px; font-size: 12px; color: #7F1D1D; }
+.grc-tsum { display: flex; gap: 20px; flex-wrap: wrap; padding: 12px 14px; background: #F9FAFB; border-radius: 8px; margin-bottom: 16px; font-size: 12px; }
+.grc-tsum span { color: var(--ink3); }
+.grc-bpill { display: inline-block; padding: 3px 10px; border-radius: 12px; font-weight: 700; font-size: 11px; white-space: nowrap; }
+
+@media (max-width: 760px) { .grc-cards { grid-template-columns: 1fr; } }

@@ -1,0 +1,58 @@
+@page "/dev/recommendation"
+@* Temporary test page for the Recommendation modal (staff only) — until the Tool 1 card / Tool 2 table open it. *@
+@attribute [Authorize(Roles = Roles.Staff)]
+@using Application.DTOs.Recommendation
+@inject IDialogService DialogService
+
+<PageTitle>Recommendation (dev) · VMM PO Governance</PageTitle>
+
+<div class="section-title">📊 Recommendation — test page</div>
+<div class="section-sub">Opens the "View Recommendation" modal for a Generic Material, or for a Brand × MC × MRP × Flag bucket.</div>
+
+<div class="card" style="display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end;max-width:900px">
+    <div class="dev-f">
+        <label>Generic Material (GM)</label>
+        <input id="dev-gm" @bind="_gm" @bind:event="oninput" @onkeydown="OnKey" placeholder="e.g. 2203000201" style="font-family:var(--mono)" />
+    </div>
+    <button id="dev-open" class="dev-btn" @onclick="OpenGm">📊 Recommendation</button>
+    <div style="width:100%;height:0"></div>
+    <div class="dev-f"><label>Brand</label><input @bind="_req.Brand" /></div>
+    <div class="dev-f"><label>MC CD</label><input @bind="_req.McCd" /></div>
+    <div class="dev-f"><label>MRP</label><input @bind="_req.Mrp" /></div>
+    <div class="dev-f"><label>Flag</label><input @bind="_req.Flag" /></div>
+    <div class="dev-f">
+        <label>Engine</label>
+        <select @bind="_req.Engine"><option value="">(auto)</option><option>A</option><option>B</option><option>NEW</option></select>
+    </div>
+    <button class="dev-btn" @onclick="OpenBucket">📊 Bucket</button>
+</div>
+
+<style>
+    .dev-f { display: flex; flex-direction: column; gap: 2px; }
+    .dev-f label { font-size: 9px; font-weight: 700; color: var(--ink3); text-transform: uppercase; }
+    .dev-f input, .dev-f select { font-size: 12px; padding: 7px 10px; border-radius: 6px; border: 1.5px solid var(--brd2); min-width: 140px; }
+    .dev-btn { font-size: 11px; padding: 8px 18px; background: var(--vmm-pink); color: #fff; border: none; border-radius: 6px; font-weight: 700; cursor: pointer; }
+</style>
+
+@code {
+    private string _gm = "";
+    private readonly RecommendationRequestDto _req = new();
+
+    private async Task OpenGm()
+    {
+        if (string.IsNullOrWhiteSpace(_gm)) return;
+        await RecommendationDialog.ShowAsync(DialogService, _gm.Trim());
+    }
+
+    private async Task OpenBucket() =>
+        await RecommendationDialog.ShowAsync(DialogService, new RecommendationRequestDto
+        {
+            Brand = _req.Brand, McCd = _req.McCd, Mrp = _req.Mrp, Flag = _req.Flag,
+            Engine = string.IsNullOrEmpty(_req.Engine) ? null : _req.Engine,
+        });
+
+    private async Task OnKey(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter") await OpenGm();
+    }
+}

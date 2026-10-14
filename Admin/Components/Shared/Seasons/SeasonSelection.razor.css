@@ -1,0 +1,18 @@
+/* index.html .uslot (Season Selection) + renderSeasonPills pill styles */
+.ss-slot { border: 1.5px solid var(--brd2); border-radius: 9px; padding: 10px 12px; background: var(--sur); }
+.ss-name { font-size: 11px; font-weight: 600; color: var(--ink); }
+.ss-desc { font-size: 9px; color: var(--ink3); margin-top: 2px; line-height: 1.45; margin-bottom: 10px; }
+.ss-lbl { font-size: 9px; font-weight: 700; color: var(--ink3); text-transform: uppercase; margin-bottom: 4px; }
+.ss-pills { display: flex; flex-wrap: wrap; gap: 6px; }
+.ss-pill {
+    cursor: pointer; padding: 5px 12px; border-radius: 14px; font-size: 11px; font-weight: 700; font-family: monospace;
+    border: 1.5px solid var(--brd2); background: #fff; color: var(--ink2); user-select: none;
+}
+.ss-pill.on { border-color: var(--vmm-pink); background: var(--vmm-pink); color: #fff; }
+.ss-msg { font-size: 11px; color: var(--ink3); }
+
+/* Dark Data Setup sidebar (v1.1.4 .sb / .uslot colours) */
+.ss-slot.dark { border: 1.5px dashed rgba(255,255,255,0.14); background: rgba(255,255,255,0.03); }
+.ss-slot.dark .ss-name { color: rgba(255,255,255,0.88); }
+.ss-slot.dark .ss-desc { color: rgba(255,255,255,0.36); }
+.ss-slot.dark .ss-lbl, .ss-slot.dark .ss-msg { color: rgba(255,255,255,0.45); }

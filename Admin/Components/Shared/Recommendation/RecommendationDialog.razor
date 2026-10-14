@@ -1,0 +1,636 @@
+@* "📊 View Recommendation" modal — port of index.html #rec-overlay (_openRec / _buildMonthBar / _render /
+   _paintRec / _traceRow / _toggleRecGrp / _exportEngineARecs). Every figure comes from
+   POST api/v1/recommendation (RecommendationViewDto); this component only lays it out.
+   Open it with RecommendationDialog.ShowAsync(DialogService, gm) or (…, new RecommendationRequestDto{…}). *@
+@using Application.DTOs.Recommendation
+@inject IAPICallService Api
+@inject FileDownloadService Files
+@inject ISnackbar Snackbar
+@inject IDialogService Dialogs
+
+<MudDialog Style="width:100%;max-width:1180px;border-radius:16px;box-shadow:0 24px 80px rgba(0,0,0,0.28);overflow:hidden"
+           ContentStyle="padding:0;margin:0" Class="rec-dialog">
+    <DialogContent>
+        @* Backdrop of #rec-overlay (rendered by the dialog provider, outside this component's CSS scope). *@
+        <style>
+            .rec-backdrop { background: rgba(10,20,60,0.74) !important; backdrop-filter: blur(6px); }
+            .mud-dialog.rec-dialog .mud-dialog-content { padding: 0 !important; margin: 0 !important; }
+        </style>
+        <div class="rec-box">
+            <div class="rec-hdr">
+                <div>
+                    <div class="rec-title">@(_view?.Title ?? "📊 Recommendation")</div>
+                    <div class="rec-sub">@(_view?.Subtitle ?? "")</div>
+                </div>
+                <button class="rec-close" title="Close" @onclick="Close">✕</button>
+            </div>
+            <div class="rec-body">
+                <div class="rec-mbar">
+                    <div class="rec-mlbl">Select months to show (tap to toggle):</div>
+                    @foreach (var m in _allMonths)
+                    {
+                        var mm = m;
+                        <button class="rec-mbtn @(_months.Contains(mm) ? "on" : "")" @onclick="() => ToggleMonthAsync(mm)">@mm</button>
+                    }
+                </div>
+                <div class="rec-out">
+                    @if (_loading)
+                    {
+                        <div class="rec-empty">⏳ Computing…</div>
+                    }
+                    else if (_failure != null)
+                    {
+                        <div class="rec-empty" style="color:#DC2626;max-width:500px;margin:auto">⚠ @_failure</div>
+                    }
+                    else if (_view != null)
+                    {
+                        @Body()
+                    }
+                </div>
+            </div>
+        </div>
+    </DialogContent>
+</MudDialog>
+
+@code {
+    [CascadingParameter] private MudDialogInstance MudDialog { get; set; } = default!;
+
+    /// <summary>What to show: a GM (resolved like the Tool 1 card) or the bucket fields + engine.</summary>
+    [Parameter] public RecommendationRequestDto Request { get; set; } = new();
+
+    public static readonly DialogOptions Options = new()
+    {
+        MaxWidth = MaxWidth.False,
+        FullWidth = true,
+        NoHeader = true,
+        CloseButton = false,
+        BackdropClick = true,
+        CloseOnEscapeKey = true,
+        Position = DialogPosition.TopCenter,
+        BackgroundClass = "rec-backdrop",
+    };
+
+    /// <summary>Opens the modal for a Generic Material (Tool 1 result card / Tool 2 table row).</summary>
+    public static Task<IDialogReference> ShowAsync(IDialogService dialogs, string gm) =>
+        ShowAsync(dialogs, new RecommendationRequestDto { Gm = gm });
+
+    /// <summary>Opens the modal for a GM or a bucket (Brand / MC / MRP / Flag, optional Div / MC desc / engine "A" | "B" | "NEW").</summary>
+    public static Task<IDialogReference> ShowAsync(IDialogService dialogs, RecommendationRequestDto request)
+    {
+        var p = new DialogParameters<RecommendationDialog> { { x => x.Request, request } };
+        return dialogs.ShowAsync<RecommendationDialog>("Recommendation", p, Options);
+    }
+
+    private RecommendationViewDto? _view;
+    private List<string> _allMonths = new();
+    private List<string> _months = new();
+    private string? _dimOverride;
+    private bool _loading = true;
+    private string? _failure;
+    private int _seq;
+    private bool _first = true;
+
+    // Client-only state (v1.1.4 repainted from its cache): column groups + open trace rows.
+    private bool _showStockGrp, _showOptionPO, _showGMDetail;
+    private readonly HashSet<string> _open = new();
+
+    protected override async Task OnInitializedAsync() => await LoadAsync();
+
+    private RecommendationRequestDto CurrentRequest() => new()
+    {
+        Gm = Request.Gm, Brand = Request.Brand, McCd = Request.McCd, Mrp = Request.Mrp, Flag = Request.Flag,
+        Div = Request.Div, McDesc = Request.McDesc, Engine = Request.Engine,
+        Months = _first ? Request.Months : _months.ToList(),
+        DimOverride = _first ? Request.DimOverride : _dimOverride,
+    };
+
+    private async Task LoadAsync()
+    {
+        var seq = ++_seq;
+        _loading = true;
+        _failure = null;
+        _open.Clear();
+        StateHasChanged();
+        var res = await Api.PostAsync<RecommendationViewDto>("api/v1/recommendation", CurrentRequest());
+        if (seq != _seq) return; // a newer request superseded this one
+        _loading = false;
+        if (!res.IsSuccess || res.Data == null)
+        {
+            _failure = res.ResponseMessage;
+            StateHasChanged();
+            return;
+        }
+        var v = res.Data;
+        if (v.Error != null)
+        {
+            // v1.1.4: alert('Cannot generate recommendation…') and the modal never opened.
+            MudDialog.Close();
+            await Dialogs.ShowMessageBox("", RecText.Bold(v.Error), yesText: "OK");
+            return;
+        }
+        _first = false;
+        _view = v;
+        _allMonths = v.AllMonths.ToList();
+        _months = v.Months.ToList();
+        _dimOverride = v.DimOverride;
+        StateHasChanged();
+    }
+
+    private static int MonthKey(string m)
+    {
+        var p = m.Split('.');
+        return (p.Length > 1 && int.TryParse(p[1], out var y) ? y : 0) * 12 + (int.TryParse(p[0], out var mm) ? mm : 0);
+    }
+
+    private async Task ToggleMonthAsync(string m)
+    {
+        if (_months.Contains(m))
+        {
+            if (_months.Count == 1) return;
+            _months.Remove(m);
+        }
+        else
+        {
+            _months.Add(m);
+            _months = _months.OrderBy(MonthKey).ToList();
+        }
+        await LoadAsync();
+    }
+
+    private async Task OnDimChanged(ChangeEventArgs e)
+    {
+        _dimOverride = e.Value?.ToString();
+        await LoadAsync();
+    }
+
+    private void ToggleGroup(string which)
+    {
+        if (which == "stock") _showStockGrp = !_showStockGrp;
+        else if (which == "optpo") _showOptionPO = !_showOptionPO;
+        else if (which == "gmdetail") _showGMDetail = !_showGMDetail;
+        _open.Clear(); // the browser rebuilt the table, closing every trace row
+    }
+
+    private void ToggleOpen(string id)
+    {
+        if (!_open.Remove(id)) _open.Add(id);
+    }
+
+    private bool IsOpen(string id) => _open.Contains(id);
+
+    private async Task ExportAsync()
+    {
+        var file = await Api.DownloadAsync("api/v1/recommendation/export", CurrentRequest());
+        if (!file.IsSuccess || file.Data == null) { Snackbar.Add(file.ResponseMessage); return; }
+        await Files.SaveAsync(file.Data);
+        Snackbar.Add("Excel exported ✓");
+    }
+
+    private void Close() => MudDialog.Close();
+
+    // ─────────────────────────── painting (_paintRec) ───────────────────────────
+
+    private double Eff => _view?.Paint.Eff ?? 0;
+    private string StrColor(double? str) => RecommendationColors.StrColor(str, Eff);
+    private static string F(double v) => RecText.Fmt(v);
+    private static string F(double? v) => RecText.Fmt(v);
+    private static string N(double v) => RecText.Num(v);
+    private static string N(double? v) => v.HasValue ? RecText.Num(v.Value) : "undefined";
+    private static string Signed(double v) => (v >= 0 ? "+" : "") + RecText.Num(v) + "%";
+
+    private RenderFragment Body() => __builder =>
+    {
+        var v = _view!;
+        var paint = v.Paint;
+        if (v.RenderEngine == "B")
+        {
+            var b = v.B ?? v.A?.Data;
+            if (paint.EmptyMessage != null || b == null || b.Rows.Count == 0)
+            {
+                <div class="rec-empty">@(paint.EmptyMessage ?? "No colour data found for this MC×MRP in F1/F3.")</div>
+                return;
+            }
+            @SingleConcept(b)
+        }
+        else
+        {
+            var a = v.A;
+            if (a == null || a.Err != null || paint.EmptyIsError)
+            {
+                <div class="rec-empty" style="color:#DC2626;max-width:500px;margin:auto">⚠ @(a?.Err ?? paint.EmptyMessage)</div>
+                return;
+            }
+            @MultiConcept(a)
+        }
+    };
+
+    // ── Single Concept (engine B) ──
+    private RenderFragment SingleConcept(RecBResultDto b) => __builder =>
+    {
+        var months = _view!.Months;
+        <div class="rec-sec">@_view.Paint.Heading</div>
+        <div class="rec-scroll">
+            <table class="rec-tbl">
+                <thead>
+                    <tr>
+                        <th>Rank</th><th>Colour</th><th>Stock</th><th>Sale (Last 45 days)</th><th>Stock Mix%</th><th>Sale Mix%</th><th>STR ROS</th>
+                        <th colspan="@(months.Count * 3)" style="text-align:center;border-left:2px solid rgba(255,255,255,0.2)">Recommendation Qty Month wise</th>
+                    </tr>
+                    <tr style="background:#0F3B7A">
+                        <th></th><th></th><th></th><th></th><th></th><th></th><th></th>
+                        @foreach (var m in months)
+                        {
+                            <th colspan="3" style="text-align:center;color:#CADCFC;font-size:9px;border-left:2px solid rgba(255,255,255,0.15)">@m</th>
+                        }
+                    </tr>
+                    <tr style="background:#0F3B7A">
+                        <th></th><th></th><th></th><th></th><th></th><th></th><th></th>
+                        @foreach (var _ in months)
+                        {
+                            <th style="color:#CADCFC;font-size:9px;border-left:2px solid rgba(255,255,255,0.15)">Pending PO</th>
+                            <th style="color:#CADCFC;font-size:9px" title="Quantities approved today in Tool 1 (all users), landing in this month">Today's approved</th>
+                            <th style="color:#CADCFC;font-size:9px">Max Permissible Qty</th>
+                        }
+                    </tr>
+                </thead>
+                <tbody>
+                    @for (var i = 0; i < b.Rows.Count; i++)
+                    {
+                        var r = b.Rows[i];
+                        <tr style="@(i % 2 == 1 ? "background:#F8FAFF" : "")">
+                            <td style="font-weight:700;color:#1A4FAF;text-align:center">@(i + 1)</td>
+                            <td><span style="font-family:var(--mono);font-weight:700;font-size:12px">@r.Col.ToUpperInvariant()</span></td>
+                            <td class="r mono">@F(r.Stk)</td>
+                            <td class="r mono">@F(r.S45)</td>
+                            <td class="r">@(N(r.StkMix))%</td>
+                            <td class="r">@(N(r.Mix))%</td>
+                            <td class="r mono" style="font-weight:700;color:@StrColor(r.StrRos)">@(r.StrRos != null ? N(r.StrRos.Value) + "d" : "—")</td>
+                            @foreach (var md in r.MData)
+                            {
+                                <td class="r mono" style="color:#9CA3AF;border-left:2px solid #F1F5F9">@F(md.Pend)</td>
+                                <td class="r mono" style="@(md.Appr > 0 ? "color:#7C3AED;font-weight:700" : "color:#CBD5E1")" title="Approved today in Tool 1, not yet in F2">@(md.Appr > 0 ? F(md.Appr) : "—")</td>
+                                @if (md.Action == "Watch List")
+                                {
+                                    <td><span class="rec-maxb" title="@r.WatchReason" style="background:#FFF7ED;color:#92400E;border-bottom:1px dotted #92400E">👁 Watch List</span></td>
+                                }
+                                else
+                                {
+                                    var raise = md.Action == "Raise";
+                                    var ab = raise ? "#DCFCE7" : "#FEF2F2";
+                                    var ac = raise ? "#00873E" : "#DC2626";
+                                    <td><span class="rec-maxb" title="@md.Tip" style="background:@ab;color:@ac;border-bottom:1px dotted @ac">@(md.Rec > 0 ? F(md.Rec) : md.Action)</span></td>
+                                }
+                            }
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+        <div class="rec-foot">💡 @RecText.Summary(_view.Paint.Summary)</div>
+    };
+
+    // ── Multi Concept (engine A) ──
+    private RenderFragment MultiConcept(RecAResultDto a) => __builder =>
+    {
+        var v = _view!;
+        var months = v.Months;
+        var attrs = a.Attrs ?? new List<RecAttrDto>();
+        var step1Cols = 4 + months.Select((_, i) => i == 0 ? 1 : 2).Sum();
+
+        <div class="rec-sec" style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;border-bottom:none">
+            <span>Step 1 — Attribute STR Ranking · Dimension: <strong>@a.Dim</strong></span>
+            <select class="rec-dimsel" title="Switch dimension — exploration only, does not change this row's actual decision" @onchange="OnDimChanged">
+                @foreach (var o in v.DimOptions)
+                {
+                    <option value="@o.Value" selected="@o.Selected">@o.Label</option>
+                }
+            </select>
+        </div>
+        <div style="border-bottom:2px solid #EAF0FB;margin:-4px 0 8px"></div>
+        <div class="rec-scroll">
+            <table class="rec-tbl">
+                <thead>
+                    <tr>
+                        <th>@a.Dim</th><th>Stock Mix%</th><th>Sale Mix% <span style="font-weight:400;font-size:8px">(Last 45D)</span></th><th>Deviation%</th>
+                        @for (var i = 0; i < months.Count; i++)
+                        {
+                            <th colspan="@(i == 0 ? 1 : 2)" style="text-align:center;border-left:2px solid rgba(255,255,255,0.2)">@months[i]</th>
+                        }
+                    </tr>
+                    <tr style="background:#0F3B7A">
+                        <th></th><th></th><th></th><th></th>
+                        @for (var i = 0; i < months.Count; i++)
+                        {
+                            if (i == 0)
+                            {
+                                <th class="sub" style="border-left:2px solid rgba(255,255,255,0.15)">Pending PO</th>
+                            }
+                            else
+                            {
+                                <th class="sub" style="border-left:2px solid rgba(255,255,255,0.15)">Attr Op STR</th>
+                                <th class="sub">Pending PO</th>
+                            }
+                        }
+                    </tr>
+                </thead>
+                <tbody>
+                    @for (var i = 0; i < attrs.Count; i++)
+                    {
+                        var at = attrs[i];
+                        var id = "attr-" + i;
+                        <tr style="@(i % 2 == 1 ? "background:#F8FAFF" : "")">
+                            <td style="font-weight:700">@at.Av <button class="rec-tbtn" title="Show month-by-month breakdown" @onclick="() => ToggleOpen(id)">@(IsOpen(id) ? "▲" : "▾")</button></td>
+                            <td class="r">@(N(at.StkMix))%</td>
+                            <td class="r">@(N(at.SMix))%</td>
+                            <td class="r" style="font-weight:700;color:@RecommendationColors.DevColor(at.Dev)">@Signed(at.Dev)</td>
+                            @StepOneMonths(at.AmData, false)
+                        </tr>
+                        @if (IsOpen(id))
+                        {
+                            @TraceRow(Ledger(at.AmData), step1Cols, null)
+                        }
+                    }
+                    @if (a.BucketStr?.AmData != null)
+                    {
+                        <tr style="background:#EEF2FF;font-weight:700;border-top:2px solid #C7D2FE">
+                            <td>Total <button class="rec-tbtn" style="border-color:#A5B4E8" title="Show month-by-month breakdown" @onclick='() => ToggleOpen("total")'>@(IsOpen("total") ? "▲" : "▾")</button></td>
+                            <td class="r">100.00%</td><td class="r">100.00%</td><td class="r">0.00%</td>
+                            @StepOneMonths(a.BucketStr.AmData, true)
+                        </tr>
+                        @if (IsOpen("total"))
+                        {
+                            @TraceRow(Ledger(a.BucketStr.AmData), step1Cols, null)
+                        }
+                    }
+                </tbody>
+            </table>
+        </div>
+
+        <div class="rec-sec" style="margin-top:18px">@(v.Paint.Step2Heading ?? "Step 2+3 — Colour × GM Recommendations (Q1 → Q2, BSR-validated only)")</div>
+        var recs = a.Recs ?? new List<RecARecDto>();
+        if (recs.Count == 0)
+        {
+            <div class="rec-empty">@RecText.Bold(v.Paint.NoRecsMessage)</div>
+            return;
+        }
+        @StepTwo(a, recs)
+        <div class="rec-foot">💡 @RecText.Summary(v.Paint.Summary)</div>
+    };
+
+    /// <summary>Step 1 per-month cells: month 0 = Pending PO; later months = Attr Op STR of the PREVIOUS anchor ("-1 shift") + Pending PO.</summary>
+    private RenderFragment StepOneMonths(List<AnchorMonthDto> amdata, bool total) => __builder =>
+    {
+        var sep = total ? "#C7D2FE" : "#F1F5F9";
+        var pendColor = total ? "#6B7280" : "#9CA3AF";
+        for (var mi = 0; mi < amdata.Count; mi++)
+        {
+            var md = amdata[mi];
+            if (mi == 0)
+            {
+                <td class="r mono" style="color:@pendColor;border-left:2px solid @sep">@F(md.Pend)</td>
+            }
+            else
+            {
+                var prev = amdata[mi - 1];
+                var noData = prev.Str == null;
+                var sc = noData ? RecommendationColors.Grey : StrColor(prev.Str);
+                <td class="r mono" style="@(total ? "" : "font-weight:700;")color:@sc;border-left:2px solid @sep">@(noData ? "No data" : N(prev.Str!.Value) + "d")</td>
+                <td class="r mono" style="color:@pendColor">@F(md.Pend)</td>
+            }
+        }
+    };
+
+    private RenderFragment StepTwo(RecAResultDto a, List<RecARecDto> recs) => __builder =>
+    {
+        var v = _view!;
+        var months = v.Months;
+        var layout = v.Paint.RecLayout;
+        var totalCols = 6 + (_showGMDetail ? 3 : 0) + 4 + (_showStockGrp ? 2 : 0)
+                        + months.Select((_, i) => (i == 0 ? 1 : 3) + (_showOptionPO ? 1 : 0)).Sum();
+        var buffer = new List<int>();
+
+        <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:8px">
+            <button class="rec-grp" style="background:@(_showStockGrp ? "#EAF0FB" : "#F8FAFF")" @onclick='() => ToggleGroup("stock")'>@(_showStockGrp ? "▾" : "▸") Colour / Attribute Stock Qty</button>
+            <button class="rec-grp" style="background:@(_showOptionPO ? "#EAF0FB" : "#F8FAFF")" @onclick='() => ToggleGroup("optpo")'>@(_showOptionPO ? "▾" : "▸") Option PO Qty</button>
+            <button class="rec-grp" style="background:@(_showGMDetail ? "#EAF0FB" : "#F8FAFF")" @onclick='() => ToggleGroup("gmdetail")'>@(_showGMDetail ? "▾" : "▸") GM Description / Vendor</button>
+            <button class="rec-xls" @onclick="ExportAsync">⬇ Download Excel (all columns)</button>
+        </div>
+        <div class="rec-scroll">
+            <table class="rec-tbl">
+                <thead>
+                    <tr>
+                        <th>Attribute</th><th>Colour</th>
+                        <th style="border-left:2px solid rgba(255,255,255,0.2)">Stock Mix% <span style="font-weight:400;font-size:8px">(within attr)</span></th>
+                        <th>Sale Mix% <span style="font-weight:400;font-size:8px">(Last 45D, within attr)</span></th>
+                        <th>Deviation%</th>
+                        <th style="border-left:2px solid rgba(255,255,255,0.2)">Gen Mat Recom</th>
+                        @if (_showGMDetail)
+                        {
+                            <th>GM Description</th><th>Vendor Cd</th><th>Vendor Name</th>
+                        }
+                        <th style="border-left:2px solid rgba(255,255,255,0.2)">BSR Q</th><th>PDSTR%/d</th><th>Priority</th>
+                        <th style="border-left:2px solid rgba(255,255,255,0.2)">Option Stock Qty</th>
+                        @if (_showStockGrp)
+                        {
+                            <th>Colour Stock Qty</th><th>Attribute Stock Qty</th>
+                        }
+                        @for (var i = 0; i < months.Count; i++)
+                        {
+                            <th colspan="@((i == 0 ? 1 : 3) + (_showOptionPO ? 1 : 0))" style="text-align:center;border-left:2px solid rgba(255,255,255,0.2)">@months[i]</th>
+                        }
+                    </tr>
+                    <tr style="background:#0F3B7A">
+                        <th></th><th></th><th style="border-left:2px solid rgba(255,255,255,0.15)"></th><th></th><th></th><th style="border-left:2px solid rgba(255,255,255,0.15)"></th>
+                        @if (_showGMDetail)
+                        {
+                            <th></th><th></th><th></th>
+                        }
+                        <th style="border-left:2px solid rgba(255,255,255,0.15)"></th><th></th><th></th><th style="border-left:2px solid rgba(255,255,255,0.15)"></th>
+                        @if (_showStockGrp)
+                        {
+                            <th></th><th></th>
+                        }
+                        @for (var i = 0; i < months.Count; i++)
+                        {
+                            if (i == 0)
+                            {
+                                <th class="sub" style="border-left:2px solid rgba(255,255,255,0.15)">Colour PO Qty</th>
+                            }
+                            else
+                            {
+                                <th class="sub" style="border-left:2px solid rgba(255,255,255,0.15)">Attr Op STR</th>
+                                <th class="sub">Col Op STR</th>
+                                <th class="sub">Colour PO Qty</th>
+                            }
+                            if (_showOptionPO)
+                            {
+                                <th class="sub">Option PO Qty</th>
+                            }
+                        }
+                    </tr>
+                </thead>
+                <tbody>
+                    @for (var i = 0; i < recs.Count; i++)
+                    {
+                        var r = recs[i];
+                        var lay = i < layout.Count ? layout[i] : new RecRowLayoutDto { IsFirstInRun = true, Span = 1, IsLastInRun = true };
+                        var pi = lay.AttrIndex % RecommendationColors.AttrAccent.Length;
+                        var accent = RecommendationColors.AttrAccent[pi];
+                        var tint = RecommendationColors.AttrTint[pi];
+                        var colId = "col-" + i;
+                        var qtyId = "qty-" + i;
+                        var colUp = r.Col.ToUpperInvariant();
+                        if (lay.SectionHeader != null)
+                        {
+                            <tr><td colspan="@totalCols" class="rec-qsec">@lay.SectionHeader</td></tr>
+                        }
+                        <tr style="background:@tint;border-left:4px solid @accent;border-bottom:@(lay.IsLastInRun ? "2px solid " + accent : "1px solid #fff")">
+                            @if (lay.IsFirstInRun)
+                            {
+                                <td rowspan="@lay.Span" style="vertical-align:middle;border-bottom:2px solid @accent"><span class="rec-attrchip" style="background:@accent">@r.Attr</span></td>
+                            }
+                            <td style="white-space:nowrap;border-left:2px solid #E2E8F0"><span style="font-family:var(--mono);font-weight:700;font-size:12px">@colUp</span><button class="rec-tbtn" style="margin-left:3px" title="Show how this colour's STR is derived" @onclick="() => ToggleOpen(colId)">@(IsOpen(colId) ? "▲" : "▾")</button></td>
+                            <td class="r mono" style="border-left:2px solid #E2E8F0">@(N(r.ColStockMixInAttr))%</td>
+                            <td class="r mono">@(N(r.ColMixInAttr))%</td>
+                            <td class="r mono" style="font-weight:700;color:@RecommendationColors.DevColor(r.ColDev)">@Signed(r.ColDev)</td>
+                            <td class="gm-qty-cell" style="font-family:var(--mono);font-size:10px;border-left:2px solid #E2E8F0">@r.Gm<span class="gm-qty-trigger @(IsOpen(qtyId) ? "gm-qty-open" : "")" title="Show recommended qty for this option, by month" @onclick="() => ToggleOpen(qtyId)">@(IsOpen(qtyId) ? "Qty ▲" : "Qty ▾")</span></td>
+                            @if (_showGMDetail)
+                            {
+                                <td style="font-size:10px">@(string.IsNullOrEmpty(r.GmDesc) ? "—" : r.GmDesc)</td>
+                                <td style="font-family:var(--mono);font-size:10px">@(string.IsNullOrEmpty(r.VendorCd) ? "—" : r.VendorCd)</td>
+                                <td style="font-size:10px">@(string.IsNullOrEmpty(r.VendorName) ? "—" : r.VendorName)</td>
+                            }
+                            <td style="border-left:2px solid #E2E8F0"><span class="rbadge" style="@QBadge(r.Q == "Q1")">@r.Q</span></td>
+                            <td class="r mono">@(N(r.Pdstr))%</td>
+                            <td><span class="rbadge" style="@QBadge(r.Priority == "P1");padding:2px 7px;font-size:9px">@r.Priority</span></td>
+                            <td class="r mono" style="border-left:2px solid #E2E8F0">@F(r.OptionStockQty)</td>
+                            @if (_showStockGrp)
+                            {
+                                <td class="r mono" style="color:#6B7280">@F(r.ColStockQty)</td>
+                                <td class="r mono" style="color:#6B7280">@F(r.AttrStockQty)</td>
+                            }
+                            @for (var mi = 0; mi < r.MData.Count; mi++)
+                            {
+                                var md = r.MData[mi];
+                                if (mi == 0)
+                                {
+                                    <td class="r mono" style="color:#9CA3AF;border-left:2px solid #F1F5F9">@F(md.Pend)</td>
+                                }
+                                else
+                                {
+                                    var attrMd = mi - 1 < r.AttrAmdata.Count ? r.AttrAmdata[mi - 1] : null;
+                                    var colMd = r.MData[mi - 1];
+                                    var attrNo = attrMd?.Str == null;
+                                    var colNo = colMd.Str == null;
+                                    <td class="r mono" style="font-weight:700;color:@(attrNo ? RecommendationColors.Grey : StrColor(attrMd!.Str));border-left:2px solid #F1F5F9">@(attrNo ? "No data" : N(attrMd!.Str!.Value) + "d")</td>
+                                    <td class="r mono" style="font-weight:700;color:@(colNo ? RecommendationColors.Grey : StrColor(colMd.Str))">@(colNo ? "No data" : N(colMd.Str!.Value) + "d")</td>
+                                    <td class="r mono" style="color:#9CA3AF">@F(md.Pend)</td>
+                                }
+                                if (_showOptionPO)
+                                {
+                                    <td class="r mono" style="color:#9CA3AF">@F(md.OptPend)</td>
+                                }
+                            }
+                        </tr>
+                        buffer.Add(i);
+                        if (lay.IsLastInRun)
+                        {
+                            // Hidden rows of the whole run go after its LAST row (never inside the rowspan).
+                            foreach (var bi in buffer)
+                            {
+                                var br = recs[bi];
+                                var bl = bi < layout.Count ? layout[bi] : lay;
+                                if (IsOpen("col-" + bi))
+                                {
+                                    @TraceRow(Ledger(br.MData), totalCols, RecText.TraceHeader(bl.TraceHeader))
+                                }
+                                if (IsOpen("qty-" + bi))
+                                {
+                                    @QtyRow(br, bl, totalCols)
+                                }
+                            }
+                            buffer.Clear();
+                        }
+                    }
+                </tbody>
+            </table>
+        </div>
+    };
+
+    private static string QBadge(bool first) => first ? "background:#DCFCE7;color:#00873E" : "background:#EAF0FB;color:#1A4FAF";
+
+    private RenderFragment QtyRow(RecARecDto r, RecRowLayoutDto lay, int colspan) => __builder =>
+    {
+        <tr style="background:#EAF0FB">
+            <td colspan="@colspan" style="padding:10px 16px">
+                <div style="font-size:10.5px;color:#1E2A55;margin-bottom:8px">@RecText.QtyHeader(lay.QtyHeader)</div>
+                <table class="rec-tbl" style="font-size:10.5px;max-width:720px">
+                    <thead><tr><th>Month</th><th>Recommended Qty</th><th>Eff. Threshold</th><th>Daily Rate</th><th>Window Start</th><th>Formula</th></tr></thead>
+                    <tbody>
+                        @foreach (var md in r.MData)
+                        {
+                            var noData = md.Str == null || md.EffExact == null;
+                            var qtyColor = noData ? "#9CA3AF" : md.Rec > 0 ? "#00873E" : "#6B7280";
+                            <tr>
+                                <td style="font-weight:700">@md.Mon</td>
+                                <td class="r mono" style="font-weight:700;color:@qtyColor">@(noData ? "No data" : F(md.Rec))</td>
+                                <td class="r mono" style="color:#6B7280">@(noData ? "—" : N(Domain.Entities.Common.Js.Round(md.EffExact!.Value * 100) / 100) + "d")</td>
+                                <td class="r mono" style="color:#6B7280">@(noData ? "—" : N(md.Dr) + "/d")</td>
+                                <td class="r mono" style="color:#6B7280">@(noData ? "—" : F(md.WinStockStart))</td>
+                                <td class="mono" style="font-size:9.5px;color:#9CA3AF">@(md.Formula ?? "—")</td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+                <div style="font-size:9px;color:#9CA3AF;margin-top:6px">Each month's Recommended Qty is computed independently against today's actual stock/PO/forecast — it does not assume an earlier month's recommended qty here was actually raised.</div>
+            </td>
+        </tr>
+    };
+
+    // ── Mini-ledger (_traceRow and the colour trace) ──
+    private sealed record LedgerItem(string Mon, List<ChainStepDto>? Chain, int? D1Idx, double? WinStockStart, double? Dr, double? Str);
+
+    private static List<LedgerItem> Ledger(IEnumerable<AnchorMonthDto> amdata) =>
+        amdata.Select(m => new LedgerItem(m.Mon, m.Chain, m.D1Idx, m.WinStockStart, m.Dr, m.Str)).ToList();
+
+    private static List<LedgerItem> Ledger(IEnumerable<RecAMonthDto> mdata) =>
+        mdata.Select(m => new LedgerItem(m.Mon, m.Chain, m.D1Idx, m.WinStockStart, m.Dr, m.Str)).ToList();
+
+    private RenderFragment TraceRow(List<LedgerItem> items, int colspan, MarkupString? header) => __builder =>
+    {
+        <tr style="background:#FFFDF5">
+            <td colspan="@colspan" style="padding:10px 16px">
+                @if (header != null)
+                {
+                    <div style="font-size:10.5px;color:#6B7280;margin-bottom:8px">@header</div>
+                }
+                <div style="display:flex;gap:16px;flex-wrap:wrap">
+                    @foreach (var md in items)
+                    {
+                        if (md.Chain == null || md.Chain.Count == 0) continue;
+                        <div style="min-width:260px">
+                            <div style="font-size:10px;font-weight:700;color:#1A4FAF;margin-bottom:4px">Anchor @md.Mon</div>
+                            <table class="rec-tbl" style="font-size:10px">
+                                <thead><tr><th>Month</th><th>Open</th><th>+PO</th><th>−Fcst</th><th>=Close</th></tr></thead>
+                                <tbody>
+                                    @for (var ci = 0; ci < Math.Min(4, md.Chain.Count); ci++)
+                                    {
+                                        var c = md.Chain[ci];
+                                        <tr style="@(ci == md.D1Idx ? "background:#FFFBEB" : "")">
+                                            <td style="font-weight:700">@c.MKey@(ci == 0 ? " (a)" : "")</td>
+                                            <td class="r mono">@F(c.OpenStock)</td>
+                                            <td class="r mono" style="color:#00873E">@F(c.PoIn)</td>
+                                            <td class="r mono" style="color:#D97706">@F(c.ColPlan)</td>
+                                            <td class="r mono" style="font-weight:700">@F(c.CloseStock)</td>
+                                        </tr>
+                                    }
+                                </tbody>
+                            </table>
+                            <div style="font-size:9.5px;color:#6B7280;margin-top:4px">Window Start @F(md.WinStockStart) ÷ Daily Rate @N(md.Dr) = <strong>@(md.Str != null ? N(md.Str.Value) + "d" : "—")</strong></div>
+                        </div>
+                    }
+                </div>
+            </td>
+        </tr>
+    };
+}

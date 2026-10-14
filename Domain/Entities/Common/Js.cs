@@ -91,36 +91,74 @@ namespace Domain.Entities.Common
             return Math.Floor(x + 0.5);
         }
 
-        /// <summary>JS Number.prototype.toFixed(digits).</summary>
+        /// <summary>JS Number.prototype.toFixed(digits) — exact decimal expansion, ties away from zero (as V8).</summary>
         public static string ToFixed(double x, int digits)
         {
             if (double.IsNaN(x)) return "NaN";
-            if (double.IsInfinity(x)) return x > 0 ? "Infinity" : "-Infinity";
-            if (Math.Abs(x) >= 1e21) return NumberToString(x);
-            decimal dm;
-            try { dm = (decimal)x; } catch (OverflowException) { return NumberToString(x); }
-            var r = Math.Round(dm, digits, MidpointRounding.AwayFromZero);
-            var s = r.ToString("F" + digits, Inv);
-            if (r == 0 && x < 0 && s.StartsWith("-")) s = s[1..];
-            return s;
+            if (Math.Abs(x) >= 1e21 || double.IsInfinity(x)) return NumberToString(x);
+            var neg = x < 0;
+            if (neg) x = -x;
+            var (d, sc) = Exact(x);
+            var n = RoundToScale(d, sc, digits);
+            var m = n.IsZero ? "0" : n.ToString(Inv);
+            if (digits != 0)
+            {
+                var k = m.Length;
+                if (k <= digits) { m = new string('0', digits + 1 - k) + m; k = digits + 1; }
+                m = m[..(k - digits)] + "." + m[(k - digits)..];
+            }
+            return (neg ? "-" : "") + m;
         }
 
-        /// <summary>JS String(number).</summary>
+        private static (System.Numerics.BigInteger Digits, int Scale) Exact(double x)
+        {
+            if (x == 0) return (System.Numerics.BigInteger.Zero, 0);
+            long bits = BitConverter.DoubleToInt64Bits(x);
+            int exponent = (int)((bits >> 52) & 0x7FF);
+            long mantissa = bits & 0xFFFFFFFFFFFFFL;
+            if (exponent == 0) exponent++; else mantissa |= 1L << 52;
+            exponent -= 1075;
+            if (exponent >= 0) return (new System.Numerics.BigInteger(mantissa) << exponent, 0);
+            var k = -exponent;
+            return (new System.Numerics.BigInteger(mantissa) * System.Numerics.BigInteger.Pow(5, k), k);
+        }
+
+        private static System.Numerics.BigInteger RoundToScale(System.Numerics.BigInteger digits, int scale, int f)
+        {
+            if (scale <= f) return digits * System.Numerics.BigInteger.Pow(10, f - scale);
+            var div = System.Numerics.BigInteger.Pow(10, scale - f);
+            var q = System.Numerics.BigInteger.DivRem(digits, div, out var rem);
+            if (rem * 2 >= div) q += 1;
+            return q;
+        }
+
+        /// <summary>JS String(number) (ECMAScript Number::toString with shortest round-trip digits).</summary>
         public static string NumberToString(double d)
         {
             if (double.IsNaN(d)) return "NaN";
             if (double.IsPositiveInfinity(d)) return "Infinity";
             if (double.IsNegativeInfinity(d)) return "-Infinity";
             if (d == 0) return "0";
-            if (Math.Abs(d) < 1e21 && Math.Abs(d) >= 1e-6)
-            {
-                if (d == Math.Floor(d)) return d.ToString("0", Inv);
-                var r = d.ToString("R", Inv);
-                if (!r.Contains('E')) return r;
-                return ((decimal)d).ToString(Inv);
-            }
-            var e = d.ToString("R", Inv).Replace("E+", "e+").Replace("E-", "e-");
-            return e;
+            if (d < 0) return "-" + NumberToString(-d);
+            var r = d.ToString("R", Inv);
+            var ei = r.IndexOfAny(new[] { 'E', 'e' });
+            var mant = ei >= 0 ? r[..ei] : r;
+            var e10 = ei >= 0 ? int.Parse(r[(ei + 1)..], Inv) : 0;
+            var dot = mant.IndexOf('.');
+            var intPart = dot >= 0 ? mant[..dot] : mant;
+            var fracPart = dot >= 0 ? mant[(dot + 1)..] : "";
+            var digits = (intPart + fracPart).TrimStart('0');
+            var lead = (intPart + fracPart).Length - digits.Length;
+            var exp = intPart.Length - lead + e10;
+            digits = digits.TrimEnd('0');
+            if (digits.Length == 0) return "0";
+            int k = digits.Length, n = exp;
+            if (k <= n && n <= 21) return digits + new string('0', n - k);
+            if (0 < n && n <= 21) return digits[..n] + "." + digits[n..];
+            if (-6 < n && n <= 0) return "0." + new string('0', -n) + digits;
+            var e = n - 1;
+            var es = (e >= 0 ? "+" : "-") + Math.Abs(e).ToString(Inv);
+            return k == 1 ? digits + "e" + es : digits[..1] + "." + digits[1..] + "e" + es;
         }
 
         /// <summary>JS String(v) for the value types a parsed sheet row can hold.</summary>

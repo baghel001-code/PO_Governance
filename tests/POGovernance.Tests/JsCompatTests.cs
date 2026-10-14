@@ -26,6 +26,21 @@ namespace POGovernance.Tests
         [InlineData(-1234.4, "-1,234")]
         public void Fmt_en_IN(double v, string expected) => Assert.Equal(expected, Js.Fmt(v));
 
+        [Theory]
+        [InlineData(1.5e-7, "1.5e-7")]
+        [InlineData(0.000012345, "0.000012345")]
+        [InlineData(1e21, "1e+21")]
+        [InlineData(123.0, "123")]
+        [InlineData(0.1 + 0.2, "0.30000000000000004")]
+        public void NumberToString_matches_js(double v, string expected) => Assert.Equal(expected, Js.NumberToString(v));
+
+        [Theory]
+        [InlineData(1.005, 2, "1.00")]
+        [InlineData(2.5, 0, "3")]
+        [InlineData(-0.001, 2, "-0.00")]
+        [InlineData(1.45, 1, "1.4")]
+        public void ToFixed_matches_js(double v, int f, string expected) => Assert.Equal(expected, Js.ToFixed(v, f));
+
         [Fact]
         public void Col_is_header_tolerant()
         {

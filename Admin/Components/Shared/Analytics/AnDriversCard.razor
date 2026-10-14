@@ -1,0 +1,29 @@
+@* "🔎 What's Driving …" card: label + "{Count} · {Pct}%" and an 8px pink bar per driver. *@
+@if (Drivers != null)
+{
+    <div class="card" style="margin-bottom:16px">
+        <div class="rc-hdr">@Drivers.Title</div>
+        @if (Drivers.Rows.Count == 0)
+        {
+            <div style="font-size:12px;color:var(--ink3);padding:8px 2px">@Drivers.EmptyMessage</div>
+        }
+        else
+        {
+            <div class="an-drivers">
+                @foreach (var r in Drivers.Rows)
+                {
+                    <div>
+                        <div class="an-drv-top"><span>@r.Label</span><span class="n">@r.Count · @(Fmt(r.Pct))%</span></div>
+                        <div class="an-drv-track"><div class="an-drv-fill" style="width:@(Fmt(r.Pct))%"></div></div>
+                    </div>
+                }
+            </div>
+        }
+    </div>
+}
+
+@code {
+    [Parameter] public DriverBreakdownDto? Drivers { get; set; }
+
+    private static string Fmt(double v) => v.ToString(System.Globalization.CultureInfo.InvariantCulture);
+}

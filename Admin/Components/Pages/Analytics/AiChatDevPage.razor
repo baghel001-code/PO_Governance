@@ -1,0 +1,12 @@
+@page "/dev/ai-chat"
+@* Development check of the VMM Assistant panel: shows the floating button even when the server has AI chat
+   switched off, so the disabled state can be seen. The real panel is mounted once in MainLayout. *@
+@attribute [Authorize(Roles = Roles.Staff)]
+@inject UserSessionState Session
+
+<PageTitle>VMM Assistant (dev) · VMM PO Governance</PageTitle>
+
+<div style="padding:20px;font-size:12px;color:var(--ink3)">
+    VMM Assistant panel check — scope follows the current view (<strong>@Session.View</strong>). Click the round button at the bottom right.
+</div>
+<AiChatPanel ShowWhenDisabled="true" />

@@ -1,0 +1,121 @@
+@page "/category/how-it-works"
+@* Category "❓ How it works" — port of index.html view-cat-howitworks (hw-banner, hw-tabs, hwTab, renderEngineBHelp).
+   The static text lives in wwwroot/help/hw-*.html (+ how-it-works.css); {{NAME}} placeholders are filled from
+   GET api/v1/help/params, re-fetched when the planner parameters change. *@
+@using System.Text.RegularExpressions
+@inject IAPICallService Api
+@inject IWebHostEnvironment Env
+@inject ServerStatusService Status
+@inject ILogger<HowItWorks> Log
+@implements IDisposable
+
+<PageTitle>How it works · VMM PO Governance</PageTitle>
+<HeadContent><link rel="stylesheet" href="help/how-it-works.css" /><link rel="stylesheet" href="css/analytics.css" /></HeadContent>
+
+<div class="an-hw" id="view-cat-howitworks">
+    <div class="hw-wrap">
+        @Fragment("hw-banner.html")
+
+        <div class="hw-tabs">
+            @foreach (var t in Tabs)
+            {
+                <button class="hw-tab @(t.Id == _active ? "active" : "")" @onclick="() => _active = t.Id">@t.Title</button>
+            }
+        </div>
+
+        @if (_paramsError != null)
+        {
+            <div class="an-hw-note">Live values could not be loaded (@_paramsError) — the examples below show placeholders.</div>
+        }
+        <div id="hw-@_active">
+            @Fragment(ActiveTab?.Fragment ?? $"hw-{_active}.html")
+        </div>
+    </div>
+</div>
+
+@code {
+    /// <summary>Tab order and titles of v1.1.4 (used until / unless help/params answers).</summary>
+    private static readonly List<HelpTabDto> DefaultTabs = new()
+    {
+        new("vision", "🗺 Vision Overview", "help/hw-vision.html"),
+        new("t1-engA", "Tool 1 · Multi Concept MRP", "help/hw-t1-engA.html"),
+        new("t1-engB", "Tool 1 · Single Concept MRP · Colour STR", "help/hw-t1-engB.html"),
+        new("t2-engA", "Tool 2 · Multi Concept MRP · PO Assessment", "help/hw-t2-engA.html"),
+        new("t2-engB", "Tool 2 · Single Concept MRP · STR Assessment", "help/hw-t2-engB.html"),
+        new("t2-export", "Tool 2 · Recommendations & Excel Export", "help/hw-t2-export.html"),
+        new("access", "Sign-in, Approvals & Today's Requests", "help/hw-access.html"),
+    };
+    private static readonly Regex Placeholder = new(@"\{\{([A-Z0-9_]+)\}\}", RegexOptions.Compiled);
+    private static readonly Regex HtmlComment = new(@"<!--.*?-->", RegexOptions.Compiled | RegexOptions.Singleline);
+
+    private string _active = "vision";
+    private HelpParamsDto? _params;
+    private string? _paramsError;
+    private long _paramsVersion;
+    private readonly Dictionary<string, string> _files = new();
+
+    private List<HelpTabDto> Tabs => _params?.Tabs is { Count: > 0 } t ? t : DefaultTabs;
+    private HelpTabDto? ActiveTab => Tabs.FirstOrDefault(t => t.Id == _active);
+
+    protected override async Task OnInitializedAsync()
+    {
+        _paramsVersion = Status.ParamsVersion;
+        Status.Changed += OnStatus;
+        await LoadParamsAsync();
+    }
+
+    private async Task LoadParamsAsync()
+    {
+        var res = await Api.GetAsync<HelpParamsDto>("api/v1/help/params");
+        if (res.IsSuccess && res.Data != null) { _params = res.Data; _paramsError = null; }
+        else _paramsError = res.ResponseMessage;
+        if (Tabs.All(t => t.Id != _active)) _active = Tabs[0].Id;
+    }
+
+    /// <summary>renderEngineBHelp ran on every tab switch; here the values are re-fetched when the parameters change.</summary>
+    private void OnStatus()
+    {
+        if (Status.ParamsVersion == _paramsVersion) return;
+        _paramsVersion = Status.ParamsVersion;
+        _ = InvokeAsync(async () => { await LoadParamsAsync(); StateHasChanged(); });
+    }
+
+    private RenderFragment Fragment(string path) => __builder =>
+    {
+        @((MarkupString)Fill(Read(path)))
+    };
+
+    /// <summary>Reads a help fragment from wwwroot (cached per page); "help/x.html" or "x.html".</summary>
+    private string Read(string path)
+    {
+        var rel = path.Replace('\\', '/').TrimStart('/');
+        if (!rel.StartsWith("help/", StringComparison.Ordinal)) rel = "help/" + rel;
+        if (_files.TryGetValue(rel, out var cached)) return cached;
+        var html = "";
+        try
+        {
+            var root = Path.GetFullPath(Path.Combine(Env.WebRootPath, "help"));
+            var full = Path.GetFullPath(Path.Combine(Env.WebRootPath, rel));
+            if (full.StartsWith(root + Path.DirectorySeparatorChar, StringComparison.Ordinal) && File.Exists(full))
+                html = HtmlComment.Replace(File.ReadAllText(full), "");
+            else
+                html = "<div class=\"an-hw-note\">This help page is not installed on the server.</div>";
+        }
+        catch (Exception ex)
+        {
+            Log.LogWarning(ex, "Help fragment {Path} could not be read", rel);
+            html = "<div class=\"an-hw-note\">This help page could not be read.</div>";
+        }
+        _files[rel] = html;
+        return html;
+    }
+
+    private string Fill(string html)
+    {
+        var map = _params?.Placeholders;
+        if (map == null || map.Count == 0) return html;
+        return Placeholder.Replace(html, m => map.TryGetValue(m.Groups[1].Value, out var v) ? System.Net.WebUtility.HtmlEncode(v) : m.Value);
+    }
+
+    public void Dispose() => Status.Changed -= OnStatus;
+}

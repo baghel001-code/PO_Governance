@@ -1,0 +1,15 @@
+@* KPI strip of renderCatInsights / renderPlannerDashboard: tile bg Background, border {Color}33, mono value in Color. *@
+<div class="an-kpis">
+    @foreach (var k in Kpis)
+    {
+        <div class="an-kpi" style="background:@k.Background;border:1px solid @(k.Color)33">
+            <div class="an-kpi-v" style="font-size:@(ValueSize)px;color:@k.Color">@k.Value</div>
+            <div class="an-kpi-l" style="color:@k.Color">@k.Label</div>
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter] public IReadOnlyList<KpiTileDto> Kpis { get; set; } = Array.Empty<KpiTileDto>();
+    [Parameter] public int ValueSize { get; set; } = 19;
+}

@@ -1,0 +1,192 @@
+@page "/planner/ai-insights"
+@page "/planner/dashboard"
+@* Planner "🤖 AI Insights" — port of index.html view-aiinsights + sb-aiinsights (focus select, ✨ Generate Insights) and
+   renderAIInsights / _aiRenderKPIs / _aiRenderFindingCards / _aiRenderCallout. The server builds the prompt, calls the
+   AI provider and returns AiInsightsDto. Second tab: the Tool 2 Planner dashboard (renderPlannerDashboard had no markup
+   in v1.1.4) — also reachable as /planner/dashboard. *@
+@attribute [Authorize(Roles = Roles.Staff)]
+@inject IAPICallService Api
+@inject ISnackbar Snackbar
+@inject ServerStatusService Status
+@inject NavigationManager Nav
+@implements IDisposable
+
+<PageTitle>AI Insights · VMM PO Governance</PageTitle>
+<HeadContent><link rel="stylesheet" href="css/analytics.css" /></HeadContent>
+
+<div class="an-page">
+    <div class="ai-tabs">
+        <button class="ai-tab @(_tab == "ai" ? "on" : "")" @onclick='() => SetTab("ai")'>🤖 AI Insights</button>
+        <button class="ai-tab @(_tab == "dash" ? "on" : "")" @onclick='() => SetTab("dash")'>📊 Planner Dashboard</button>
+    </div>
+
+    @if (_tab == "dash")
+    {
+        <PlannerDashboardView />
+    }
+    else
+    {
+        <div style="margin-bottom:20px">
+            <div class="pg-title">🤖 AI Insights</div>
+            <div class="an-accent"></div>
+            <div class="pg-sub">Reads the current batch assessment (Cancel / Reduce Qty / Watch List lines) and reasons across BSR quartile, STR and pending PO in plain language. Requires a Run Assessment first.</div>
+        </div>
+
+        <div class="card" style="padding:14px 18px">
+            <div class="ai-controls">
+                <div class="desc">
+                    Runs the current batch assessment results through the AI service configured on the portal server to surface risk patterns in plain language — on top of, not instead of, the rule-based decisions.
+                </div>
+                <div class="an-f">
+                    <label>Focus</label>
+                    <select id="ai-focus" style="min-width:190px" @bind="_focus">
+                        <option value="risk">Highest-risk lines</option>
+                        <option value="brand">Patterns by Brand/MC</option>
+                        <option value="action">What to action first</option>
+                    </select>
+                </div>
+                <button id="btn-ai-insights" class="ai-gen" disabled="@_busy" @onclick="GenerateAsync">@(_busy ? "⏳ Thinking..." : "✨ Generate Insights")</button>
+            </div>
+            @if (!Status.AiInsights && Status.Online)
+            {
+                <div class="ai-off">AI Insights is not enabled on this server — ask your administrator. Runs through the portal server using the company key in the server configuration.</div>
+            }
+        </div>
+
+        @if (!_shown)
+        {
+            <div id="ai-insights-empty" style="text-align:center;padding:60px 24px;color:var(--ink3)">
+                <div style="font-size:13px">Run an assessment in <strong>PO Assessment</strong>, then click <strong>Generate Insights</strong> in the sidebar.</div>
+            </div>
+        }
+        else
+        {
+            <div id="ai-insights-content">
+                @if (_busy)
+                {
+                    @if (_dto != null && _dto.Kpis.Count > 0)
+                    {
+                        @Kpis(_dto.Kpis)
+                    }
+                    <div class="ai-sec-h">🤖 Cross-Cutting Findings — not visible per-line elsewhere</div>
+                    <div class="ai-cards">
+                        <div class="card ai-loading">@(_dto?.LoadingText ?? "⏳ Looking for cross-cutting patterns across the flagged lines…")</div>
+                    </div>
+                }
+                else if (_dto != null)
+                {
+                    @Kpis(_dto.Kpis)
+                    <div class="ai-sec-h">🤖 Cross-Cutting Findings — not visible per-line elsewhere</div>
+                    @if (_dto.State is "fallback" or "error")
+                    {
+                        <div id="ai-insights-fallback" class="card">
+                            <div class="ai-fallback" id="ai-insights-text">@_dto.FallbackText</div>
+                        </div>
+                    }
+                    else
+                    {
+                        <div id="ai-risk-cards" class="ai-cards">
+                            @foreach (var f in _dto.Findings)
+                            {
+                                <div class="card ai-card">
+                                    <div class="t">@f.Icon @f.Title</div>
+                                    @if (!string.IsNullOrEmpty(f.ImpactQtyText))
+                                    {
+                                        <div class="q">@QtyNumber(f.ImpactQtyText)<span> units impacted</span></div>
+                                    }
+                                    <div class="i">@f.Insight</div>
+                                </div>
+                            }
+                        </div>
+                        @if (_dto.Action is { } a)
+                        {
+                            <div id="ai-action-card" style="margin-bottom:12px">
+                                <div class="card ai-callout" style="border-left:4px solid @a.BorderColor;background:@a.Background">
+                                    <div class="lbl" style="color:@a.BorderColor">@a.Icon @a.Label</div>
+                                    <div class="t">@a.Title</div>
+                                    <div class="d">@a.Detail</div>
+                                </div>
+                            </div>
+                        }
+                    }
+                    <div id="ai-insights-meta" class="ai-meta">@_dto.Meta</div>
+                }
+            </div>
+        }
+    }
+</div>
+
+@code {
+    private string _tab = "ai";
+    private string _focus = "risk";
+    private bool _busy, _shown;
+    private AiInsightsDto? _dto;
+
+    protected override void OnInitialized()
+    {
+        _tab = Nav.ToBaseRelativePath(Nav.Uri).StartsWith("planner/dashboard", StringComparison.OrdinalIgnoreCase) ? "dash" : "ai";
+        Status.Changed += OnStatus;
+    }
+
+    private void SetTab(string t) => _tab = t;
+
+    private void OnStatus() => InvokeAsync(StateHasChanged);
+
+    /// <summary>"12,345 units impacted" → "12,345" (the unit text is rendered smaller, as in v1.1.4).</summary>
+    private static string QtyNumber(string text)
+    {
+        var k = text.IndexOf(" units impacted", StringComparison.Ordinal);
+        return k >= 0 ? text[..k] : text;
+    }
+
+    private static RenderFragment Kpis(IEnumerable<AiKpiDto> kpis) => __builder =>
+    {
+        <div id="ai-kpi-strip" class="ai-kpis">
+            @foreach (var k in kpis)
+            {
+                <div class="card ai-kpi" style="border-top:3px solid @k.Color">
+                    <div class="v" style="color:@k.Color">@k.Value</div>
+                    <div class="l">@k.Label</div>
+                </div>
+            }
+        </div>
+    };
+
+    private async Task GenerateAsync()
+    {
+        if (_busy) return;
+        var previous = _dto;
+        var wasShown = _shown;
+        _busy = true;
+        _shown = true;
+        StateHasChanged();
+        try
+        {
+            var res = await Api.PostAsync<AiInsightsDto>("api/v1/assistant/insights", new AiInsightsRequest { Focus = _focus });
+            if (!res.IsSuccess || res.Data == null)
+            {
+                _shown = true;
+                _dto = new AiInsightsDto { State = "error", Kpis = previous?.Kpis ?? new(), FallbackText = "Request failed: " + res.ResponseMessage };
+                Snackbar.Add("Could not reach the portal server", Severity.Error);
+                return;
+            }
+            var d = res.Data;
+            if (!string.IsNullOrEmpty(d.Toast)) Snackbar.Add(d.Toast, d.State is "disabled" or "noRun" or "error" ? Severity.Warning : Severity.Info);
+            if (d.State is "disabled" or "noRun")
+            {
+                // v1.1.4 only toasted — nothing else on the page changes
+                _dto = previous;
+                _shown = wasShown;
+                return;
+            }
+            _dto = d;
+            _shown = true;
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    public void Dispose() => Status.Changed -= OnStatus;
+}

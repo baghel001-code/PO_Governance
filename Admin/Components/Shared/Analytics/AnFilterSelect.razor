@@ -1,0 +1,28 @@
+@* A labelled filter select of the v1.1.4 filter bars (cd-f-*, pd-f-*, aa-filter-brand). *@
+<div class="an-f">
+    <label>@Label</label>
+    <select id="@Id" style="min-width:@(MinWidth)px" value="@Value" @onchange="OnChange">
+        @foreach (var o in AllOptions)
+        {
+            <option value="@o.Value" selected="@(o.Value == (Value ?? ""))">@o.Label</option>
+        }
+    </select>
+</div>
+
+@code {
+    [Parameter] public string Label { get; set; } = "";
+    [Parameter] public string? Id { get; set; }
+    [Parameter] public string? Value { get; set; }
+    [Parameter] public EventCallback<string> ValueChanged { get; set; }
+    /// <summary>Plain values (an "All …" entry is added from <see cref="AllLabel"/>).</summary>
+    [Parameter] public IEnumerable<string>? Values { get; set; }
+    [Parameter] public string AllLabel { get; set; } = "All";
+    /// <summary>Value/label options as sent by the server (already include the "All …" entry).</summary>
+    [Parameter] public IEnumerable<OptionDto>? Options { get; set; }
+    [Parameter] public int MinWidth { get; set; } = 110;
+
+    private IEnumerable<OptionDto> AllOptions =>
+        Options ?? new[] { new OptionDto("", AllLabel) }.Concat((Values ?? Array.Empty<string>()).Select(v => new OptionDto(v, v)));
+
+    private Task OnChange(ChangeEventArgs e) => ValueChanged.InvokeAsync(e.Value?.ToString() ?? "");
+}

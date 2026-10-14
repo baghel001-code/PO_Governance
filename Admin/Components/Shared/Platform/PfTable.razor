@@ -1,0 +1,31 @@
+@* users.js / history.js table(head, rows, empty): a card with a sticky-header table, or the empty message. *@
+@if (Count == 0)
+{
+    <div class="card pf-empty">@Empty</div>
+}
+else
+{
+    <div class="card pf-tbl-card">
+        <div class="pf-tbl-wrap" style="@(MaxHeight != null ? "max-height:" + MaxHeight : "")">
+            <table class="sum-tbl">
+                <thead>
+                    <tr>
+                        @foreach (var h in Headers)
+                        {
+                            <th>@h</th>
+                        }
+                    </tr>
+                </thead>
+                <tbody>@ChildContent</tbody>
+            </table>
+        </div>
+    </div>
+}
+
+@code {
+    [Parameter] public IReadOnlyList<string> Headers { get; set; } = Array.Empty<string>();
+    [Parameter] public int Count { get; set; }
+    [Parameter] public string Empty { get; set; } = "";
+    [Parameter] public string? MaxHeight { get; set; }
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+}

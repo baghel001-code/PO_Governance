@@ -1,0 +1,13 @@
+@page "/feedback"
+@* feedback.js: every signed-in user can send feedback and see their earlier feedback with the admin's reply. *@
+
+<PageTitle>Feedback · VMM PO Governance</PageTitle>
+<PlatformStyles />
+
+<PfHeader Icon="💬" Title="Send feedback">
+    <Sub>Report a problem or suggest an improvement.</Sub>
+</PfHeader>
+
+<div class="card" style="max-width:620px;padding:22px 24px">
+    <FeedbackForm MineLimit="50" />
+</div>

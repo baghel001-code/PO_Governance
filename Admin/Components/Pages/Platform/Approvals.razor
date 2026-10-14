@@ -1,0 +1,152 @@
+@page "/approvals"
+@* users.js Approvals: Watch List requests waiting for the category head (pending cards) and decided ones. *@
+@inject IAPICallService Api
+@inject UserSessionState Session
+@inject ServerStatusService Status
+@inject ISnackbar Snackbar
+
+<PageTitle>Approvals · VMM PO Governance</PageTitle>
+<PlatformStyles />
+
+<PfHeader Icon="✅" Title="Approvals">
+    <Sub>Tool 1 requests that came out as <strong>Watch List</strong> wait here for the category head of that MC. Approve (optionally a smaller quantity) or reject with a reason. The buyer sees your decision in their Requests list.</Sub>
+</PfHeader>
+
+@if (_data != null)
+{
+    <div class="pf-pills">
+        <button class="pf-pill @(_tab == "pending" ? "on" : "")" @onclick='() => _tab = "pending"'>⏳ Waiting for me (@_data.Pending.Count)</button>
+        <button class="pf-pill @(_tab == "decided" ? "on" : "")" @onclick='() => _tab = "decided"'>📜 Decided (@_data.Decided.Count)</button>
+    </div>
+}
+
+@if (_error != null)
+{
+    <div class="card pf-err">@_error</div>
+}
+else if (_data == null)
+{
+    <div class="pf-empty">Loading…</div>
+}
+else if (_tab == "pending")
+{
+    @if (_data.Pending.Count == 0)
+    {
+        <div class="card" style="padding:48px;text-align:center;color:var(--ink3)"><div style="font-size:36px">🎉</div>Nothing waiting for your approval.</div>
+    }
+    @foreach (var r in _data.Pending)
+    {
+        var rid = r.Str("reqId");
+        var i = r.Obj("info");
+        var f = Form(r);
+        <div class="card" style="padding:16px 18px;margin-bottom:12px;border-left:4px solid #D97706" id="ap-@rid" data-testid="ap-card">
+            <div style="display:flex;flex-wrap:wrap;gap:18px;align-items:flex-start">
+                <div style="min-width:170px">
+                    <div style="font-family:var(--mono);font-weight:800;color:var(--vmm-pink)">@rid</div>
+                    <div style="font-size:11px;color:var(--ink3)">@Fmt.When(r.Str("savedAt"))</div>
+                    <div style="font-size:12px;margin-top:4px">by <strong>@r.Str("requestedBy")</strong></div>
+                </div>
+                <div style="flex:1;min-width:260px;font-size:12.5px;line-height:1.7">
+                    <strong style="font-family:var(--mono)">@r.Str("gm")</strong> · @r.Str("colour") · @i.Str("mcDesc") · ₹@(i.Truthy("mrp") ? i.Str("mrp") : "—") · @i.Str("brand") · @i.Str("div")
+                    <br />Delivery <strong>@r.Str("month")</strong> · Requested <strong>@Fmt.N(r, "qty")</strong> units · @(r.Str("engine") == "B" ? "Single Concept MRP" : "Multi Concept · " + r.Str("optionType"))
+                    @if (r.Truthy("quartile_"))
+                    {
+                        <span> · @r.Str("quartile_")@(r.Get("percentile") is JsonValue ? " (" + r.Str("percentile") + "th pct)" : "")</span>
+                    }
+                    <div style="margin-top:6px;padding:8px 10px;background:#FFFBEB;border-radius:7px;color:#92400E;font-size:12px"><strong>Why Watch List:</strong> @(r.Truthy("decisionReason") ? r.Str("decisionReason") : "—")</div>
+                </div>
+                <div style="min-width:250px">
+                    <div class="pf-lbl">Approve quantity</div>
+                    <MudNumericField T="int?" @bind-Value="f.Qty" Min="0" Max="@((int)(r.Num("qty") ?? 0))" Variant="Variant.Outlined" Margin="Margin.Dense"
+                                     Class="mb-2" UserAttributes='@(new Dictionary<string, object> { ["data-testid"] = "ap-qty" })' />
+                    <MudTextField T="string" @bind-Value="f.Comment" Lines="2" Placeholder="Comment (required to reject)" Variant="Variant.Outlined" Margin="Margin.Dense"
+                                  Immediate="true" UserAttributes='@(new Dictionary<string, object> { ["data-testid"] = "ap-comment" })' />
+                    <div style="display:flex;gap:8px;margin-top:8px">
+                        <button class="btn-pri" style="flex:1;justify-content:center" disabled="@_busy" @onclick='() => DecideAsync(r, "approved")'>✓ Approve</button>
+                        <button class="btn-sec btn-danger" style="flex:1;justify-content:center" disabled="@_busy" @onclick='() => DecideAsync(r, "rejected")'>✕ Reject</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    }
+}
+else
+{
+    <PfTable Headers="DecidedHeaders" Count="_data.Decided.Count" Empty="No decisions yet.">
+        @foreach (var r in _data.Decided)
+        {
+            var a = r.Obj("approval");
+            var i = r.Obj("info");
+            <tr>
+                <td class="pf-mono pf-nowrap" style="font-weight:700">@r.Str("reqId")</td>
+                <td>@r.Str("requestedBy")</td>
+                <td class="pf-mono">@r.Str("gm")</td>
+                <td>@r.Str("colour")</td>
+                <td class="pf-small">@i.Str("mcDesc")</td>
+                <td class="pf-mono">@Fmt.N(r, "qty")</td>
+                <td><ApprovalBadge Request="r" /></td>
+                <td class="pf-mono" style="font-weight:700">@(a.Str("status") == "approved" ? Fmt.N(a, "qty") : "0")</td>
+                <td style="font-size:11px;color:var(--ink2);max-width:260px">@a.Str("comment")</td>
+                <td class="pf-nowrap">@Fmt.When(a.Str("at"))</td>
+            </tr>
+        }
+    </PfTable>
+}
+
+@code {
+    private static readonly string[] DecidedHeaders = { "Request ID", "Requested by", "GM", "Colour", "MC", "Requested", "Decision", "Approved qty", "Comment", "Decided at" };
+
+    private sealed class DecideForm
+    {
+        public int? Qty { get; set; }
+        public string Comment { get; set; } = "";
+    }
+
+    private ApprovalsResponse? _data;
+    private string? _error;
+    private string _tab = "pending";
+    private bool _busy;
+    private readonly Dictionary<string, DecideForm> _forms = new();
+
+    private DecideForm Form(JsonObject r)
+    {
+        var rid = r.Str("reqId");
+        if (!_forms.TryGetValue(rid, out var f))
+            _forms[rid] = f = new DecideForm { Qty = (int)(r.Num("qty") ?? 0) };
+        return f;
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        await Session.InitAsync();
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        var res = await Api.GetApprovalsAsync(120);
+        if (!res.IsSuccess || res.Data == null) { _error = res.ResponseMessage; return; }
+        _error = null;
+        _data = res.Data;
+        _forms.Clear();
+    }
+
+    private async Task DecideAsync(JsonObject r, string decision)
+    {
+        var rid = r.Str("reqId");
+        var f = Form(r);
+        var comment = (f.Comment ?? "").Trim();
+        if (decision == "approved" && (f.Qty == null || f.Qty <= 0)) { Snackbar.Toast("Enter the quantity to approve (more than 0)"); return; }
+        if (decision == "rejected" && comment.Length == 0) { Snackbar.Toast("Please add a reason for rejecting"); return; }
+        _busy = true;
+        try
+        {
+            var res = await Api.DecideApprovalAsync(rid, decision, f.Qty, comment);
+            if (!res.IsSuccess) { Snackbar.Warn(res.ResponseMessage); return; }
+            Snackbar.Toast(decision == "approved" ? "Approved " + rid : "Rejected " + rid);
+            await LoadAsync();
+            await Status.RefreshAsync();
+        }
+        finally { _busy = false; }
+    }
+}

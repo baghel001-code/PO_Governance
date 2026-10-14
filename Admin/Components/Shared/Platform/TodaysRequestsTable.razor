@@ -1,0 +1,143 @@
+@* Today's Tool 1 requests (index.html renderCatHistory + shared.js visibleRequests / toggleMine / clearRequests).
+   Embeddable: other screens call RefreshAsync() after saving a request. *@
+@implements IDisposable
+@inject IAPICallService Api
+@inject UserSessionState Session
+@inject ServerStatusService Status
+@inject ISnackbar Snackbar
+@inject IDialogService Dialogs
+@inject NavigationManager Nav
+
+@if (_error != null)
+{
+    <div class="card pf-err">@_error</div>
+}
+else if (_all == null)
+{
+    <div class="pf-empty">Loading…</div>
+}
+else if (_all.Count == 0)
+{
+    <div style="text-align:center;padding:60px 24px;color:var(--ink3)" data-testid="req-empty">
+        <div style="font-size:44px;margin-bottom:14px">🕒</div>
+        <div style="font-size:14px;font-weight:500;color:var(--ink2);margin-bottom:6px">No requests yet</div>
+        @if (ShowNewRequestButton)
+        {
+            <button class="btn-pri" style="margin-top:16px" @onclick='() => Nav.NavigateTo("/category/request")'>New Request →</button>
+        }
+    </div>
+}
+else
+{
+    <div class="sum-sec">
+        <div class="sum-hdr">
+            <div class="sum-hdr-t">Today's Requests — all users</div>
+            <label class="mine"><input type="checkbox" checked="@_mineOnly" @onchange="ToggleMine" data-testid="only-mine" /> Only mine</label>
+            @if (Session.IsStaff)
+            {
+                <button class="btn-sec btn-sm" @onclick="ClearAllAsync" disabled="@_busy">Clear All</button>
+            }
+        </div>
+        <div style="overflow-x:auto">
+            <table class="sum-tbl">
+                <thead>
+                    <tr><th>Request ID</th><th>Generic Material</th><th>Colour</th><th>MC Desc</th><th>MRP</th><th>Del. Month</th><th>Proposed Qty</th><th>Engine</th><th>Option Type</th><th>Decision</th><th>Approved Qty</th><th>By</th></tr>
+                </thead>
+                <tbody>
+                    @if (Visible.Count == 0)
+                    {
+                        <tr><td colspan="12" class="pf-empty">No requests of yours today.</td></tr>
+                    }
+                    @foreach (var r in Visible)
+                    {
+                        var i = r.Obj("info");
+                        var approved = J.ApprovedQtyFor(r);
+                        var eng = r.Str("engine");
+                        <tr>
+                            <td class="pf-mono pf-nowrap" style="font-size:10.5px">@(r.Truthy("reqId") ? r.Str("reqId") : r.Str("id"))</td>
+                            <td class="pf-mono" style="font-size:11px">@r.Str("gm")</td>
+                            <td>@r.Str("colour")</td>
+                            <td class="pf-small">@(i.Truthy("mcDesc") ? i.Str("mcDesc") : "—")</td>
+                            <td>₹@(i.Truthy("mrp") ? i.Str("mrp") : "—")</td>
+                            <td>@r.Str("month")</td>
+                            <td class="pf-mono">@Js.Fmt(r.Num("qty") ?? 0)</td>
+                            <td><span class="eng-tag @(eng == "B" ? "et-b" : eng == "A" ? "et-a" : "et-new")" style="font-size:9px">Eng @eng</span></td>
+                            <td style="font-size:9px">@r.Str("optionType")</td>
+                            <td><DecisionPill Request="r" /></td>
+                            <td class="pf-mono" style="font-weight:700">@(approved != null ? Js.Fmt(approved.Value) : "—")</td>
+                            <td class="pf-small">@(r.Truthy("requestedBy") ? r.Str("requestedBy") : "—")</td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    </div>
+}
+
+@code {
+    /// <summary>Show the "New Request →" button in the empty state.</summary>
+    [Parameter] public bool ShowNewRequestButton { get; set; } = true;
+    /// <summary>Raised after Clear All emptied the day's ledger.</summary>
+    [Parameter] public EventCallback OnCleared { get; set; }
+
+    private List<JsonObject>? _all;
+    private string? _error;
+    private string _date = "";
+    private int _seq = -1;
+    private bool _busy;
+    private bool _mineOnly;
+
+    private List<JsonObject> Visible =>
+        (_all ?? new()).Where(r => !_mineOnly || r.Str("requestedByEmail") == Session.Email).Reverse().ToList();
+
+    protected override async Task OnInitializedAsync()
+    {
+        await Session.InitAsync();
+        Status.Changed += OnStatus;
+        await RefreshAsync();
+    }
+
+    /// <summary>Reloads today's requests from the server.</summary>
+    public async Task RefreshAsync()
+    {
+        var res = await Api.GetRequestsDayAsync();
+        if (!res.IsSuccess || res.Data == null) { _error = res.ResponseMessage; _all ??= new(); }
+        else
+        {
+            _error = null;
+            _date = res.Data.Date;
+            _seq = res.Data.Seq;
+            _all = res.Data.Requests.Where(r => r.Str("reqDate") == "" || r.Str("reqDate") == res.Data.Date).ToList();
+        }
+        await InvokeAsync(StateHasChanged);
+    }
+
+    // Someone else saved / decided a request: the status poll carries the day's request seq.
+    private void OnStatus()
+    {
+        if (_all == null || _busy) return;
+        if (Status.Raw.ValueKind == System.Text.Json.JsonValueKind.Object && Status.Raw.TryGetProperty("reqSeq", out var s)
+            && s.ValueKind == System.Text.Json.JsonValueKind.Number && s.GetInt32() != _seq)
+            _ = RefreshAsync();
+    }
+
+    private void ToggleMine(ChangeEventArgs e) => _mineOnly = e.Value is bool b && b;
+
+    private async Task ClearAllAsync()
+    {
+        if (!await Dialogs.Confirm("Clear ALL of today's requests for EVERY user?\n\nThis resets today's Max Permissible ledger. Watch List requests still waiting for approval are cancelled (shown as 'Cleared'). The requests stay visible in History (marked as cleared).")) return;
+        _busy = true;
+        try
+        {
+            var res = await Api.ClearRequestsAsync(string.IsNullOrEmpty(_date) ? Fmt.Ymd(Fmt.NowIst) : _date);
+            if (!res.IsSuccess) { Snackbar.Warn("Could not clear (HTTP " + res.ResponseCode + ")"); return; }
+            _seq = res.Data?.Seq ?? _seq;
+        }
+        finally { _busy = false; }
+        await RefreshAsync();
+        await Status.RefreshAsync();
+        await OnCleared.InvokeAsync();
+    }
+
+    public void Dispose() => Status.Changed -= OnStatus;
+}

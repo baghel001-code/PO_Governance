@@ -1,0 +1,76 @@
+@* users.js renderAudit: the audit trail by date range (default last 7 days) and search. *@
+@inject IAPICallService Api
+
+<div class="card" style="padding:12px 14px;margin-bottom:12px;display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end">
+    <div><div class="pf-lbl">From</div><input type="date" class="pf-in" value="@_from" @onchange="e => _from = e.Value?.ToString() ?? string.Empty" data-testid="au-from" /></div>
+    <div><div class="pf-lbl">To</div><input type="date" class="pf-in" value="@_to" @onchange="e => _to = e.Value?.ToString() ?? string.Empty" data-testid="au-to" /></div>
+    <input class="pf-in" style="min-width:240px" placeholder="Search user, action, ID…" @bind="_q" @bind:event="oninput" @onkeydown="KeyAsync" data-testid="au-q" />
+    <button class="btn-pri" @onclick="LoadAsync">Show</button>
+    @if (_d != null)
+    {
+        <span class="pf-count" style="margin-left:auto">@_d.Total event(s)@(_d.Total > _d.Items.Count ? " (latest " + _d.Items.Count + " shown)" : "")</span>
+    }
+</div>
+
+@if (_error != null)
+{
+    <div class="card pf-err">@_error</div>
+}
+else if (_d == null)
+{
+    <div class="pf-empty">Loading…</div>
+}
+else
+{
+    <PfTable Headers="Headers" Count="_d.Items.Count" Empty="Nothing recorded in this range.">
+        @foreach (var e in _d.Items)
+        {
+            var action = e.Action ?? "";
+            var bad = action.Contains("fail") || action.Contains("locked");
+            <tr>
+                <td class="pf-nowrap">@Fmt.When(e.At)</td>
+                <td>@e.Who</td>
+                <td class="pf-nowrap" style="@(bad ? "color:#DC2626;font-weight:700" : "")">@(Labels.TryGetValue(action, out var l) ? l : action)</td>
+                <td style="font-size:11px;color:var(--ink2);max-width:520px;word-break:break-word">@e.Detail</td>
+            </tr>
+        }
+    </PfTable>
+}
+
+@code {
+    private static readonly string[] Headers = { "When", "Who", "What", "Details" };
+    private static readonly Dictionary<string, string> Labels = new()
+    {
+        ["login"] = "🔓 Signed in", ["login-fail"] = "⚠ Failed sign-in", ["locked"] = "🔒 Locked out", ["logout"] = "Signed out",
+        ["password-change"] = "🔑 Changed password", ["password-reset"] = "🔑 Password reset",
+        ["user-add"] = "👤 User added", ["user-update"] = "👤 User changed", ["upload"] = "📂 Upload", ["delete"] = "📂 File cleared",
+        ["restore"] = "↩ Made current", ["restore-upload"] = "↩ Upload made current",
+        ["request"] = "✏️ Tool 1 request", ["approval"] = "✅ Approval", ["params"] = "⚙ Parameters", ["run-saved"] = "📋 Tool 2 run",
+        ["clear-requests"] = "🧹 Requests cleared", ["scr-sync"] = "📥 SCR sync", ["scr-mapping"] = "📥 SCR columns", ["backup"] = "💾 Backup"
+    };
+
+    private string _from = "", _to = "", _q = "";
+    private AuditQueryResponse? _d;
+    private string? _error;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var t = Fmt.NowIst.Date;
+        _to = Fmt.Ymd(t);
+        _from = Fmt.Ymd(t.AddDays(-6));
+        await LoadAsync();
+    }
+
+    private async Task KeyAsync(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter") await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        var res = await Api.GetAuditAsync(_from, _to, _q);
+        if (!res.IsSuccess || res.Data == null) { _error = res.ResponseMessage; _d = null; return; }
+        _error = null;
+        _d = res.Data;
+    }
+}

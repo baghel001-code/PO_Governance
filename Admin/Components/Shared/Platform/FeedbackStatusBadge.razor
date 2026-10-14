@@ -1,0 +1,15 @@
+@* feedback.js badge(status): New / In progress / Closed. *@
+<span class="fb-badge" style="color:@S.Color;background:@S.Bg">@S.Label</span>
+
+@code {
+    public static readonly IReadOnlyDictionary<string, (string Label, string Color, string Bg)> Statuses = new Dictionary<string, (string, string, string)>
+    {
+        ["new"] = ("New", "#1A4FAF", "#EAF0FB"),
+        ["in progress"] = ("In progress", "#B45309", "#FEF3C7"),
+        ["closed"] = ("Closed", "#047857", "#D1FAE5")
+    };
+
+    [Parameter] public string? Status { get; set; }
+
+    private (string Label, string Color, string Bg) S => Statuses.TryGetValue(Status ?? "", out var s) ? s : Statuses["new"];
+}

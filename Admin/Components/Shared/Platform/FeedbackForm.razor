@@ -1,0 +1,126 @@
+@* feedback.js F.open(): send feedback (type, screen, article, message, rating) + "Your earlier feedback". *@
+@inject IAPICallService Api
+@inject UserSessionState Session
+@inject ISnackbar Snackbar
+
+<div style="font-size:12px;color:#6b7a99;margin-bottom:14px">Goes to the administrator. Include the article (GM) and colour if it is about a result.</div>
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+    <MudSelect T="string" @bind-Value="_kind" Label="Type" Variant="Variant.Outlined" Margin="Margin.Dense" Dense="true">
+        @foreach (var k in Kinds)
+        {
+            <MudSelectItem Value="@k">@k</MudSelectItem>
+        }
+    </MudSelect>
+    <MudSelect T="string" @bind-Value="_screen" Label="Screen" Variant="Variant.Outlined" Margin="Margin.Dense" Dense="true">
+        @foreach (var k in Screens)
+        {
+            <MudSelectItem Value="@k">@k</MudSelectItem>
+        }
+    </MudSelect>
+</div>
+<MudTextField T="string" @bind-Value="_article" Label="Article / colour (optional)" MaxLength="120" Placeholder="e.g. 1130153468 · NVY · Nov"
+              Variant="Variant.Outlined" Margin="Margin.Dense" Class="mt-2" />
+<MudTextField T="string" @bind-Value="_message" Label="What happened, or what would help?" Lines="5" MaxLength="2000" Placeholder="Describe it in your own words"
+              Variant="Variant.Outlined" Margin="Margin.Dense" Class="mt-2" Immediate="true" Error="_msgError" ErrorText="Please write your feedback"
+              UserAttributes='@(new Dictionary<string, object> { ["data-testid"] = "fb-msg" })' @ref="_msgField" />
+<div style="font-size:11px;font-weight:700;color:#46526f;margin-top:10px">How useful is the tool so far? (optional)</div>
+<div style="display:flex;gap:6px;margin-top:6px">
+    @for (var i = 1; i <= 5; i++)
+    {
+        var v = i;
+        var on = _rating == v;
+        <button type="button" @onclick="() => _rating = v"
+                style="width:40px;height:34px;border-radius:8px;border:1.5px solid @(on ? "#1A4FAF" : "#D5DCEA");background:@(on ? "#1A4FAF" : "#fff");font-weight:800;cursor:pointer;color:@(on ? "#fff" : "#46526f")">@v</button>
+    }
+    <span style="font-size:11px;color:#8a94ad;align-self:center;margin-left:6px">1 = not useful · 5 = very useful</span>
+</div>
+<div style="display:flex;gap:10px;margin-top:16px">
+    <button type="button" class="btn-pri" style="justify-content:center;flex:1" disabled="@_sending" @onclick="SendAsync">Send feedback</button>
+    @if (OnCancel.HasDelegate)
+    {
+        <button type="button" class="btn-sec" style="justify-content:center" @onclick="OnCancel">Cancel</button>
+    }
+</div>
+
+@if (ShowMine && _mine is { Count: > 0 })
+{
+    <div style="margin-top:18px">
+        <div style="font-size:11px;font-weight:800;color:#46526f;text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px">Your earlier feedback</div>
+        @foreach (var f in _mine.Take(MineLimit))
+        {
+            <div style="border:1px solid #EEF1F7;border-radius:8px;padding:8px 10px;margin-bottom:6px;font-size:12px;background:#fff" data-testid="fb-mine">
+                <div style="display:flex;gap:8px;align-items:center">
+                    <strong style="font-family:var(--mono);color:#E8006E">@f.Str("id")</strong>
+                    <FeedbackStatusBadge Status="@f.Str("status")" />
+                    <span style="color:#8a94ad;font-size:11px;margin-left:auto">@Fmt.When(f.Str("at"))</span>
+                </div>
+                <div style="color:#46526f;margin-top:4px">@Cut(f.Str("message"), 220)</div>
+                @if (f.Truthy("note"))
+                {
+                    <div style="margin-top:4px;color:#047857"><strong>Admin:</strong> @f.Str("note")</div>
+                }
+            </div>
+        }
+    </div>
+}
+
+@code {
+    public static readonly string[] Kinds = { "Problem", "Suggestion", "Question", "Data looks wrong" };
+    public static readonly string[] Screens = { "New Request", "View Recommendation", "Requests", "Approvals", "History", "How it works / Video", "Data Setup", "PO Assessment (Tool 2)", "Sign-in / password", "Other" };
+
+    /// <summary>List the user's earlier feedback under the form.</summary>
+    [Parameter] public bool ShowMine { get; set; } = true;
+    /// <summary>How many earlier items to list (the dialog of v1.1.4 showed 8).</summary>
+    [Parameter] public int MineLimit { get; set; } = 8;
+    /// <summary>Preselected screen (default: Data Setup in the Planner view, New Request otherwise).</summary>
+    [Parameter] public string? Screen { get; set; }
+    [Parameter] public EventCallback<string> OnSent { get; set; }
+    [Parameter] public EventCallback OnCancel { get; set; }
+
+    private string _kind = Kinds[0];
+    private string _screen = "New Request";
+    private string _article = "", _message = "";
+    private int? _rating;
+    private bool _sending, _msgError;
+    private List<JsonObject>? _mine;
+    private MudTextField<string>? _msgField;
+
+    private static string Cut(string s, int n) => s.Length > n ? s[..n] : s;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await Session.InitAsync();
+        _screen = Screen ?? (Session.View == "planner" ? "Data Setup" : "New Request");
+        await LoadMineAsync();
+    }
+
+    private async Task LoadMineAsync()
+    {
+        if (!ShowMine) return;
+        var res = await Api.GetFeedbackAsync(mine: true);
+        if (res.IsSuccess) _mine = res.Data?.Items;   // the list is optional
+    }
+
+    private async Task SendAsync()
+    {
+        var msg = (_message ?? "").Trim();
+        if (msg.Length == 0)
+        {
+            _msgError = true;
+            if (_msgField != null) await _msgField.FocusAsync();
+            return;
+        }
+        _msgError = false;
+        _sending = true;
+        try
+        {
+            var res = await Api.SendFeedbackAsync(_kind, _screen, (_article ?? "").Trim(), msg, _rating, Session.View);
+            if (!res.IsSuccess || res.Data == null) { Snackbar.Warn(res.ResponseMessage); return; }
+            Snackbar.Toast("Thank you — sent to the administrator (" + res.Data.Id + ")");
+            _message = ""; _article = ""; _rating = null;
+            await LoadMineAsync();
+            await OnSent.InvokeAsync(res.Data.Id);
+        }
+        finally { _sending = false; }
+    }
+}

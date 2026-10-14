@@ -1,0 +1,92 @@
+@page "/admin/users"
+@page "/admin/scr"
+@page "/admin/audit"
+@page "/admin/backups"
+@* users.js Users & Security (admin): Users, Import from SCR, Feedback, Audit log, Backups. *@
+@implements IDisposable
+@inject UserSessionState Session
+@inject NavigationManager Nav
+
+<PageTitle>Users &amp; Security · VMM PO Governance</PageTitle>
+<PlatformStyles />
+
+<PfHeader Icon="👥" Title="Users & Security">
+    <Sub>Sign-in accounts, roles and passwords. New buyers and category heads are created automatically from the SCR products file; everyone starts with the default password and must change it at first sign-in.</Sub>
+</PfHeader>
+
+@if (!_ready)
+{
+    <div class="pf-empty">Loading…</div>
+}
+else if (!Session.IsAdmin)
+{
+    <div class="card pf-err">Admin only</div>
+}
+else
+{
+    <div class="pf-pills">
+        @foreach (var t in Tabs)
+        {
+            <button class="pf-pill @(t.Key == _tab ? "on" : "")" @onclick="() => SetTab(t.Key)">@t.Label</button>
+        }
+    </div>
+    @switch (_tab)
+    {
+        case "scr":
+            <ScrImportTab />
+            break;
+        case "feedback":
+            <FeedbackAdminList />
+            break;
+        case "audit":
+            <AuditLogTab />
+            break;
+        case "backups":
+            <BackupsTab />
+            break;
+        default:
+            <UsersTab />
+            break;
+    }
+}
+
+@code {
+    private static readonly (string Key, string Label)[] Tabs =
+    {
+        ("users", "👥 Users"), ("scr", "📥 Import from SCR"), ("feedback", "💬 Feedback"), ("audit", "🧾 Audit log"), ("backups", "💾 Backups")
+    };
+
+    private string _tab = "users";
+    private bool _ready;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await Session.InitAsync();
+        Nav.LocationChanged += OnLocationChanged;
+        _tab = TabFromUrl();
+        _ready = true;
+    }
+
+    // /admin/audit and /admin/backups (user menu) open the matching tab.
+    private string TabFromUrl()
+    {
+        var path = new Uri(Nav.Uri).AbsolutePath.TrimEnd('/');
+        return path switch
+        {
+            "/admin/audit" => "audit",
+            "/admin/backups" => "backups",
+            "/admin/scr" => "scr",
+            _ => "users"
+        };
+    }
+
+    private void OnLocationChanged(object? sender, Microsoft.AspNetCore.Components.Routing.LocationChangedEventArgs e)
+    {
+        var t = TabFromUrl();
+        if (t != _tab && new Uri(e.Location).AbsolutePath.StartsWith("/admin/")) { _tab = t; InvokeAsync(StateHasChanged); }
+    }
+
+    private void SetTab(string t) => _tab = t;
+
+    public void Dispose() => Nav.LocationChanged -= OnLocationChanged;
+}

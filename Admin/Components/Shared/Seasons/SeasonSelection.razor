@@ -1,0 +1,86 @@
+@* Season Selection — port of index.html renderSeasonPills / _toggleSeasonPill (Data Setup sidebar slot).
+   Pills come from GET api/v1/seasons; a click goes through POST api/v1/seasons/toggle (toggle +
+   re-validation on the server), then seasonCurrent / seasonFallback are saved into the planner params. *@
+@using System.Text.Json.Nodes
+@using Application.DTOs.Analytics.Grc
+@inject IAPICallService Api
+@inject ISnackbar Snackbar
+
+<div class="ss-slot @(Dark ? "dark" : "")">
+    @if (ShowTitle)
+    {
+        <div class="ss-name">Season Selection</div>
+        <div class="ss-desc">Reads every distinct Season value found in Article Master. Defaults to the latest season as Current and the next-latest as Fallback — rolls forward on its own as new seasons appear. Click a pill to add or remove it from a group; combine two seasons in Current during a transition, then drop back to one when it's over.</div>
+    }
+    <div class="ss-lbl">Current Season(s)</div>
+    <div class="ss-pills" style="margin-bottom:12px">@Pills("current")</div>
+    <div class="ss-lbl">Fallback Season(s)</div>
+    <div class="ss-pills">@Pills("fallback")</div>
+</div>
+
+@code {
+    /// <summary>Show the "Season Selection" name and the explanatory text above the pills.</summary>
+    [Parameter] public bool ShowTitle { get; set; } = true;
+    /// <summary>Colours for the dark Data Setup sidebar (v1.1.4 .uslot).</summary>
+    [Parameter] public bool Dark { get; set; }
+    /// <summary>Raised after a pill click was saved (v1.1.4 re-rendered the GRC screen then).</summary>
+    [Parameter] public EventCallback<SeasonSelectionDto> OnChanged { get; set; }
+
+    private SeasonSelectionDto? _sel;
+    private bool _busy;
+
+    protected override async Task OnInitializedAsync() => await ReloadAsync();
+
+    /// <summary>Re-reads the seasons (call after Article Master was uploaded).</summary>
+    public async Task ReloadAsync()
+    {
+        var res = await Api.GetAsync<SeasonSelectionDto>("api/v1/seasons");
+        if (!res.IsSuccess) { Snackbar.Add(res.ResponseMessage); return; }
+        _sel = res.Data;
+        // The browser wrote the defaulted selection back into S.params on render.
+        if (_sel is { Changed: true, Seasons.Count: > 0 }) await SaveAsync(_sel);
+        StateHasChanged();
+    }
+
+    private RenderFragment Pills(string group) => __builder =>
+    {
+        if (_sel == null) return;
+        if (_sel.Seasons.Count == 0)
+        {
+            <span class="ss-msg">@(_sel.Message ?? "No Season column found in Article Master yet.")</span>
+            return;
+        }
+        var selected = group == "current" ? _sel.SeasonCurrent : _sel.SeasonFallback;
+        foreach (var s in _sel.Seasons)
+        {
+            var on = selected.Contains(s);
+            <span class="ss-pill @(on ? "on" : "")" @onclick="() => ToggleAsync(group, s)">@s</span>
+        }
+    };
+
+    private async Task ToggleAsync(string group, string season)
+    {
+        if (_busy) return;
+        _busy = true;
+        try
+        {
+            var res = await Api.PostAsync<SeasonSelectionDto>("api/v1/seasons/toggle", new SeasonToggleRequest { Group = group, Season = season });
+            if (!res.IsSuccess || res.Data == null) { Snackbar.Add(res.ResponseMessage); return; }
+            _sel = res.Data;
+            StateHasChanged();
+            if (await SaveAsync(_sel)) await OnChanged.InvokeAsync(_sel);
+        }
+        finally { _busy = false; }
+    }
+
+    private async Task<bool> SaveAsync(SeasonSelectionDto sel)
+    {
+        var err = await PlannerParams.SaveAsync(Api, new Dictionary<string, JsonNode?>
+        {
+            ["seasonCurrent"] = PlannerParams.ToArray(sel.SeasonCurrent),
+            ["seasonFallback"] = PlannerParams.ToArray(sel.SeasonFallback),
+        });
+        if (err != null) { Snackbar.Add(err, Severity.Error); return false; }
+        return true;
+    }
+}

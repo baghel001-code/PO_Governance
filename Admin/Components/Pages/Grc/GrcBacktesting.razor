@@ -1,0 +1,509 @@
+@page "/planner/grc"
+@* Planner "📈 GRC Back Testing" — port of index.html view-analytics (renderGRCImpact, renderArticleTrace,
+   _grcResetFilters, exportGRCRowDetail). Every figure / text comes from api/v1/grc-backtest; this page only
+   lays out GrcImpactDto / GrcArticleTraceDto (see docs/ui/grc-backtesting.md). *@
+@attribute [Authorize(Roles = Roles.Staff)]
+@using System.Text.Json.Nodes
+@using Application.DTOs.Analytics.Grc
+@using Admin.Components.Shared.Recommendation
+@using Admin.Components.Shared.Seasons
+@using Microsoft.AspNetCore.Components.Authorization
+@inject IAPICallService Api
+@inject FileDownloadService Files
+@inject ISnackbar Snackbar
+@inject IHttpClientFactory HttpFactory
+@inject AuthenticationStateProvider AuthState
+
+<PageTitle>GRC Back Testing · VMM PO Governance</PageTitle>
+
+<div class="grc-page">
+    <div style="margin-bottom:14px">
+        <div class="pg-title">@GrcTexts.PageTitle</div>
+        <div class="pg-accent"></div>
+        <div class="pg-sub">@GrcTexts.PageSubtitle</div>
+    </div>
+
+    @* ── Card 1: GRC Impact ── *@
+    <div class="grc-card" style="margin-top:20px">
+        <div class="rc-hdr">@GrcTexts.ImpactCardTitle <span class="rc-badge">@GrcTexts.ImpactCardBadge</span></div>
+
+        @if (_impact == null)
+        {
+            <div class="grc-msg">@(_loadError ?? "⏳ Computing…")</div>
+        }
+        else if (!_impact.HasGrcData)
+        {
+            <div class="grc-ph">
+                <div style="font-size:36px;margin-bottom:10px">📦</div>
+                <div style="font-size:13px;font-weight:500;color:var(--ink2);margin-bottom:4px">@_impact.PlaceholderTitle</div>
+                <div style="font-size:11.5px;max-width:380px;margin:0 auto">@_impact.PlaceholderText</div>
+            </div>
+        }
+        else
+        {
+            var c = _impact.Controls;
+            <div class="grc-controls">
+                <div class="grc-row">
+                    <div class="grc-f">
+                        <label>Assess as of</label>
+                        <select id="grc-as-of" class="grc-sel asof" value="@c.AsOfPeriod" @onchange='e => OnControl("asOf", e)'>
+                            @foreach (var p in c.AsOfOptions)
+                            {
+                                <option value="@p" selected="@(p == c.AsOfPeriod)">@p</option>
+                            }
+                        </select>
+                    </div>
+                    @if (c.ViewModeVisible)
+                    {
+                        <div class="grc-f">
+                            <label>View by</label>
+                            <select id="grc-view-mode" class="grc-sel" value="@c.ViewMode" @onchange='e => OnControl("view", e)'>
+                                @foreach (var o in c.ViewModeOptions)
+                                {
+                                    <option value="@o.Value" selected="@(o.Value == c.ViewMode)">@o.Label</option>
+                                }
+                            </select>
+                        </div>
+                    }
+                    <div style="font-size:11px;color:var(--ink3);font-weight:600">Compare periods before</div>
+                    <select id="grc-cutover-month" class="grc-sel" value="@c.Cutover" @onchange='e => OnControl("cutover", e)'>
+                        @foreach (var p in c.CutoverOptions)
+                        {
+                            <option value="@p" selected="@(p == c.Cutover)">@p</option>
+                        }
+                    </select>
+                    <div style="font-size:11px;color:var(--ink3)">against that period onward</div>
+                    <button class="grc-btn-export" @onclick="ExportAsync" disabled="@_exporting">⬇ Export Row Detail</button>
+                </div>
+                <div class="grc-row grc-row2">
+                    @Filter("Brand Type", "grc-f-brand", "brand", c.BrandAllLabel, c.BrandOptions, c.Brand)
+                    @Filter("Division", "grc-f-division", "division", c.DivisionAllLabel, c.DivisionOptions, c.Division)
+                    @Filter("Category Head", "grc-f-cathead", "cathead", c.CatHeadAllLabel, c.CatHeadOptions, c.CatHead)
+                    @Filter("Drill into period", "grc-drill-month", "drill", c.DrillAllLabel, c.DrillOptions, c.DrillPeriod)
+                    <button class="grc-btn-clear" @onclick="ClearFiltersAsync">Clear Filters</button>
+                    <button class="grc-btn-pink" @onclick="RecomputeAsync">↻ Recompute</button>
+                </div>
+            </div>
+
+            <div class="grc-body @(_computing ? "busy" : "")">
+                @if (_impact.Message != null)
+                {
+                    <div class="grc-msg">@_impact.Message</div>
+                }
+                else
+                {
+                    @ImpactBody(_impact)
+                }
+            </div>
+        }
+    </div>
+
+    @* ── Card 2: Article Trace ── *@
+    <div class="grc-card" style="margin-top:20px">
+        <div class="rc-hdr">@GrcTexts.TraceCardTitle</div>
+        <div style="font-size:11.5px;color:var(--ink3);margin-bottom:14px">@GrcTexts.TraceCardText</div>
+        <div style="display:flex;align-items:flex-end;gap:10px;margin-bottom:16px;flex-wrap:wrap">
+            <div class="grc-f">
+                <label>@GrcTexts.TraceInputLabel</label>
+                <input id="grc-trace-gm" type="text" class="grc-trace-in" placeholder="@GrcTexts.TraceInputPlaceholder"
+                       @bind="_traceGm" @bind:event="oninput" @onkeydown="OnTraceKey" />
+            </div>
+            <button class="grc-btn-pink" style="padding:8px 18px" @onclick="TraceAsync">Trace</button>
+        </div>
+        @TraceBody()
+    </div>
+</div>
+
+@code {
+    private GrcImpactDto? _impact;
+    private string? _loadError;
+    private bool _computing, _exporting;
+    private int _seq;
+    private string? _savedAsOf;
+
+    // Current control values (sent on every recompute — the browser re-rendered on each onchange).
+    private string? _asOf, _viewMode, _cutover;
+    private string _brand = "", _division = "", _catHead = "", _drill = "";
+
+    private string _traceGm = "";
+    private GrcArticleTraceDto? _trace;
+    private string? _traceError;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var p = await PlannerParams.GetAsync(Api);
+        _savedAsOf = PlannerParams.GetString(p, "grcAsOfPeriod");
+        await ComputeAsync();
+    }
+
+    private GrcImpactRequest BuildRequest() => new()
+    {
+        AsOfPeriod = _asOf, ViewMode = _viewMode, Cutover = _cutover,
+        Brand = _brand, Division = _division, CatHead = _catHead, DrillPeriod = _drill,
+    };
+
+    private async Task ComputeAsync()
+    {
+        var seq = ++_seq;
+        _computing = true;
+        StateHasChanged();
+        var res = await Api.PostAsync<GrcImpactDto>("api/v1/grc-backtest/compute", BuildRequest());
+        if (seq != _seq) return;
+        _computing = false;
+        if (!res.IsSuccess || res.Data == null)
+        {
+            if (_impact == null) _loadError = res.ResponseMessage;
+            else Snackbar.Add(res.ResponseMessage, Severity.Error);
+            StateHasChanged();
+            return;
+        }
+        _impact = res.Data;
+        var c = _impact.Controls;
+        // Each select ends on the value the server settled on (options + value, _populateSelectPreserving).
+        _asOf = c.AsOfPeriod; _viewMode = c.ViewMode; _cutover = c.Cutover;
+        _brand = c.Brand; _division = c.Division; _catHead = c.CatHead; _drill = c.DrillPeriod;
+        StateHasChanged();
+        // The browser kept S.params.grcAsOfPeriod = the as-of the screen ended on.
+        if (_impact.HasGrcData && !string.IsNullOrEmpty(c.AsOfPeriod) && c.AsOfPeriod != _savedAsOf)
+        {
+            var err = await PlannerParams.SaveAsync(Api, new Dictionary<string, JsonNode?> { ["grcAsOfPeriod"] = c.AsOfPeriod });
+            if (err == null) _savedAsOf = c.AsOfPeriod;
+            else Snackbar.Add(err, Severity.Error);
+        }
+    }
+
+    private async Task OnControl(string which, ChangeEventArgs e)
+    {
+        var v = e.Value?.ToString() ?? "";
+        switch (which)
+        {
+            case "asOf": _asOf = v; break;
+            case "view": _viewMode = v; break;
+            case "cutover": _cutover = v; break;
+            case "brand": _brand = v; break;
+            case "division": _division = v; break;
+            case "cathead": _catHead = v; break;
+            case "drill": _drill = v; break;
+        }
+        await ComputeAsync();
+    }
+
+    private async Task ClearFiltersAsync()
+    {
+        _brand = _division = _catHead = _drill = "";
+        await ComputeAsync();
+    }
+
+    private Task RecomputeAsync() => ComputeAsync();
+
+    private async Task ExportAsync()
+    {
+        _exporting = true;
+        try
+        {
+            var client = new GrcExportClient(HttpFactory, AuthState, Api);
+            var (file, msg) = await client.ExportAsync(_asOf);
+            if (!file.IsSuccess || file.Data == null) { Snackbar.Add(file.ResponseMessage); return; }
+            await Files.SaveAsync(file.Data);
+            Snackbar.Add(string.IsNullOrEmpty(msg) ? "Exported" : msg);
+        }
+        finally { _exporting = false; }
+    }
+
+    private async Task OnTraceKey(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter") await TraceAsync();
+    }
+
+    private async Task TraceAsync()
+    {
+        var gm = _traceGm.Trim();
+        _traceError = null;
+        if (gm.Length == 0) { _trace = null; return; }
+        var res = await Api.GetAsync<GrcArticleTraceDto>($"api/v1/grc-backtest/trace/{Uri.EscapeDataString(gm)}?asOfPeriod={Uri.EscapeDataString(_asOf ?? "")}");
+        if (!res.IsSuccess || res.Data == null) { _trace = null; _traceError = res.ResponseMessage; return; }
+        _trace = res.Data;
+    }
+
+    // ─────────────────────────── painting (renderGRCImpact) ───────────────────────────
+
+    private static string S(double v) => RecText.Svg(v);
+
+    private RenderFragment Filter(string label, string id, string which, string allLabel, List<string> options, string value) => __builder =>
+    {
+        <div class="grc-f">
+            <label>@label</label>
+            <select id="@id" class="grc-sel" style="min-width:130px" value="@value" @onchange="e => OnControl(which, e)">
+                <option value="" selected="@(value == "")">@allLabel</option>
+                @foreach (var o in options)
+                {
+                    <option value="@o" selected="@(o == value)">@o</option>
+                }
+            </select>
+        </div>
+    };
+
+    private RenderFragment ImpactBody(GrcImpactDto d) => __builder =>
+    {
+        @if (d.CoverageWarning != null)
+        {
+            <div class="grc-warn">@d.CoverageWarning</div>
+        }
+        <div class="grc-legend">
+            @foreach (var l in d.Legend)
+            {
+                <span><span class="sq" style="background:@l.Color"></span>@l.Label</span>
+            }
+        </div>
+        <div style="margin-bottom:20px">@Composition(d.Composition)</div>
+
+        <div class="grc-sect">@d.QuartileTitle</div>
+        <div class="grc-scroll" style="margin-bottom:20px">
+            <table class="grc-tbl">
+                <thead>
+                    <tr>
+                        <th>@d.QuartileTable.PeriodHeader</th>
+                        @foreach (var h in d.QuartileTable.Headers)
+                        {
+                            <th class="r">@h</th>
+                        }
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var r in d.QuartileTable.Rows)
+                    {
+                        <tr>
+                            <td class="mono" style="font-weight:600">@r.Period</td>
+                            @foreach (var cell in r.Cells)
+                            {
+                                <td class="r mono" style="color:@cell.Color;font-weight:700">@cell.Text</td>
+                            }
+                            <td class="r mono">@r.WrongValueText</td>
+                        </tr>
+                    }
+                    <tr class="tot">
+                        <td class="mono">@d.QuartileTable.Total.Period</td>
+                        @foreach (var cell in d.QuartileTable.Total.Cells)
+                        {
+                            <td class="r mono" style="color:@cell.Color">@cell.Text</td>
+                        }
+                        <td class="r mono">@d.QuartileTable.Total.WrongValueText</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+
+        <div class="grc-box">
+            <div class="grc-sect">@d.CoverageTitle</div>
+            @foreach (var cv in d.Coverage)
+            {
+                <div class="grc-cov">
+                    <div class="p">@cv.Period</div>
+                    <div class="track"><div style="width:@S(cv.Pct)%;height:100%;background:@cv.Color;border-radius:5px"></div></div>
+                    <div class="v" style="color:@cv.Color">@cv.Text</div>
+                </div>
+            }
+        </div>
+
+        <div class="grc-box">
+            <div class="grc-sect" style="margin-bottom:12px">@d.Breakdown.Heading</div>
+            @foreach (var t in d.Breakdown.Tables)
+            {
+                <div style="margin-bottom:16px">
+                    <div class="grc-sect" style="font-size:11px;margin-bottom:8px">@t.Title</div>
+                    <div class="grc-scroll">
+                        <table class="grc-tbl">
+                            <thead>
+                                <tr>
+                                    @for (var i = 0; i < t.Headers.Count; i++)
+                                    {
+                                        <th class="@(i == 0 ? "" : "r")" style="@(i == 0 ? "white-space:nowrap" : "")">@t.Headers[i]</th>
+                                    }
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach (var r in t.Rows)
+                                {
+                                    @BreakdownRow(r, false)
+                                }
+                                @BreakdownRow(t.Total, true)
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            }
+        </div>
+
+        <div class="grc-cards">
+            @GroupCard(d.BeforeCard)
+            @GroupCard(d.WithCard)
+        </div>
+
+        <div class="grc-scroll">
+            <table class="grc-tbl ledger">
+                <thead>
+                    <tr>
+                        @for (var i = 0; i < d.Ledger.Headers.Count; i++)
+                        {
+                            <th class="@(i == 0 ? "" : "r")">@d.Ledger.Headers[i]</th>
+                        }
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var r in d.Ledger.Rows)
+                    {
+                        @LedgerRow(r, false)
+                    }
+                    @LedgerRow(d.Ledger.Total, true)
+                </tbody>
+            </table>
+        </div>
+
+        @if (d.ShowMonthMappingNote)
+        {
+            <div class="grc-note">
+                @for (var i = 0; i < d.MonthMappingNoteParagraphs.Count; i++)
+                {
+                    if (i > 0)
+                    {
+                        <br /><br />
+                    }
+                    @RecText.GrcMappingNote(d.MonthMappingNoteParagraphs[i])
+                }
+            </div>
+        }
+        <div class="grc-foot">@d.FooterNote</div>
+    };
+
+    /// <summary>100 %-stacked bars, SVG viewBox 1000×280 (same geometry as renderGRCImpact): all rects, then all labels.</summary>
+    private static MarkupString Composition(List<GrcCompositionBarDto> bars)
+    {
+        const double W = 1000, H = 280, padL = 10, padR = 10, padT = 10, padB = 36;
+        var plotW = W - padL - padR;
+        var plotH = H - padT - padB;
+        var n = bars.Count;
+        var gap = Math.Max(14, 26 - n);
+        var barW = n > 0 ? (plotW - gap * (n - 1)) / n : 0;
+        var rects = new System.Text.StringBuilder();
+        var labels = new System.Text.StringBuilder();
+        for (var i = 0; i < n; i++)
+        {
+            var b = bars[i];
+            var x = padL + i * (barW + gap);
+            var cursorY = padT + plotH;
+            if (b.Total != 0)
+            {
+                foreach (var seg in b.Segments)
+                {
+                    var segH = seg.Share * plotH;
+                    var y = cursorY - segH;
+                    rects.Append($"<rect x=\"{S(x)}\" y=\"{S(y)}\" width=\"{S(barW)}\" height=\"{S(segH)}\" fill=\"{RecText.Encode(seg.Color)}\"/>");
+                    if (seg.Label != null)
+                        labels.Append($"<text x=\"{S(x + barW / 2)}\" y=\"{S(y + segH / 2 + 4)}\" text-anchor=\"middle\" style=\"font:600 10.5px monospace;fill:#fff\">{RecText.Encode(seg.Label)}</text>");
+                    cursorY = y;
+                }
+            }
+            labels.Append($"<text x=\"{S(x + barW / 2)}\" y=\"{S(H - padB + 18)}\" text-anchor=\"middle\" style=\"font:600 10px monospace;fill:var(--ink3)\">{RecText.Encode(b.Period)}</text>");
+        }
+        return new MarkupString($"<svg viewBox=\"0 0 {S(W)} {S(H)}\" style=\"width:100%;height:auto;overflow:visible\">{rects}{labels}</svg>");
+    }
+
+    private RenderFragment BreakdownRow(GrcBreakdownRowDto r, bool total) => __builder =>
+    {
+        var rc = total || r.RateColor == null ? "" : $"color:{r.RateColor};font-weight:700";
+        <tr class="@(total ? "tot" : "")">
+            <td style="white-space:nowrap">@r.Key</td>
+            <td class="r mono">@r.TrueTotalText</td>
+            <td class="r mono">@r.TotalText</td>
+            <td class="r mono">@r.JudgeableText</td>
+            <td class="r mono">@r.WrongText</td>
+            <td class="r mono">@r.WrongValueText</td>
+            <td class="r mono">@r.CoverageText</td>
+            <td class="r mono" style="@rc">@r.RateText</td>
+            <td class="r mono" style="@rc">@r.RateOfMcText</td>
+        </tr>
+    };
+
+    private RenderFragment LedgerRow(GrcLedgerRowDto r, bool total) => __builder =>
+    {
+        <tr class="@(total ? "tot" : "")">
+            <td class="mono" style="@(total ? "" : "font-weight:600")">@r.Period</td>
+            <td class="r mono">@r.TrueTotalText</td>
+            <td class="r mono">@r.TotalText</td>
+            <td class="r mono" style="@(r.CoverageColor != null ? $"color:{r.CoverageColor};font-weight:700" : "")">@r.CoverageText</td>
+            <td class="r mono">@r.JudgeableText</td>
+            <td class="r mono">@r.WrongText</td>
+            <td class="r mono">@r.RateText</td>
+            <td class="r mono">@r.WrongValueText</td>
+        </tr>
+    };
+
+    private RenderFragment GroupCard(GrcGroupCardDto g) => __builder =>
+    {
+        if (g.IsEmpty)
+        {
+            <div class="grc-gcard empty">@g.Title<br />@g.EmptyText</div>
+            return;
+        }
+        <div class="grc-gcard">
+            <div class="t">@g.Title</div>
+            <div class="s">Total GRC Qty: <b>@g.TrueTotalText</b> · Multi Concept GRC Qty: <b>@g.TotalText</b></div>
+            <div class="s" style="margin-bottom:12px">@g.CoverageText</div>
+            @foreach (var b in g.Buckets)
+            {
+                <div class="bk">
+                    <span class="l"><span class="sq" style="background:@b.Color"></span>@b.Bucket</span>
+                    <b class="mono">@b.Text</b>
+                </div>
+            }
+        </div>
+    };
+
+    // ─────────────────────────── renderArticleTrace ───────────────────────────
+    private RenderFragment TraceBody() => __builder =>
+    {
+        if (_traceError != null)
+        {
+            <div class="grc-err">@_traceError</div>
+            return;
+        }
+        var t = _trace;
+        if (t == null || t.IsBlank) return;
+        if (t.Error != null)
+        {
+            <div class="grc-err">@t.Error</div>
+            return;
+        }
+        <div class="grc-tsum">
+            <div><span>GM</span> <b class="mono">@t.Gm</b></div>
+            <div><span>Brand</span> <b>@t.Brand</b></div>
+            <div><span>Division</span> <b>@t.Division</b></div>
+            <div><span>MC</span> <b>@t.McCd — @t.McDesc</b></div>
+            <div><span>MRP</span> <b>₹@t.Mrp</b></div>
+            <div><span>Flag</span> <b>@t.FlagText</b></div>
+            @if (t.SingleConceptNote != null)
+            {
+                <div style="color:#B4790E;font-weight:700">@t.SingleConceptNote</div>
+            }
+        </div>
+        <div class="grc-scroll">
+            <table class="grc-tbl ledger">
+                <thead>
+                    <tr><th>Week</th><th>Colour</th><th class="r">GRC Qty</th><th>Bucket</th><th>Reasoning</th></tr>
+                </thead>
+                <tbody>
+                    @foreach (var r in t.WeekRows)
+                    {
+                        <tr>
+                            <td class="mono" style="font-weight:600">@r.Period</td>
+                            <td class="mono">@r.Colour</td>
+                            <td class="r mono">@r.QtyText</td>
+                            <td><span class="grc-bpill" style="background:@(r.BucketColor)22;color:@r.BucketColor" title="@r.Detail">@r.Bucket</span></td>
+                            <td style="font-size:11px;color:var(--ink3)" title="@r.Detail">@RecText.GrcReasoning(r.Extra)</td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    };
+}

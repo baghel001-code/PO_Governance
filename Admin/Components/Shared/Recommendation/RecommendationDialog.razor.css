@@ -1,0 +1,48 @@
+/* Port of index.html "RECOMMENDATION MODAL" styles (#rec-box, .rec-*, .gm-qty-*, .rbadge) */
+.rec-box { background: #fff; width: 100%; font-family: var(--font); color: var(--ink); animation: recFadeUp .22s cubic-bezier(.34,1.56,.64,1); }
+@keyframes recFadeUp { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+.rec-hdr { display: flex; align-items: flex-start; justify-content: space-between; padding: 18px 24px 12px; border-bottom: 1px solid #E5E7EB; gap: 12px; }
+.rec-title { font-size: 15px; font-weight: 700; color: #1A4FAF; }
+.rec-sub { font-size: 11px; color: #9CA3AF; margin-top: 2px; }
+.rec-close { width: 30px; height: 30px; border-radius: 50%; background: #F1F5F9; border: none; cursor: pointer; font-size: 16px; color: #4B5563; flex-shrink: 0; transition: .15s; }
+.rec-close:hover { background: #DC2626; color: #fff; }
+.rec-body { padding: 16px 24px 24px; }
+.rec-mbar { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 16px; padding: 10px 14px; background: #F8FAFF; border-radius: 10px; border: 1px solid #E2E8F0; }
+.rec-mlbl { font-size: 10px; font-weight: 700; color: #9CA3AF; text-transform: uppercase; letter-spacing: .06em; width: 100%; margin-bottom: 4px; }
+.rec-mbtn { padding: 4px 12px; border-radius: 20px; border: 1.5px solid #CBD5E1; background: #fff; font-size: 11px; font-weight: 600; cursor: pointer; color: #4B5563; transition: .15s; font-family: var(--font); }
+.rec-mbtn.on { background: #1A4FAF; color: #fff; border-color: #1A4FAF; }
+.rec-mbtn:hover:not(.on) { border-color: #1A4FAF; color: #1A4FAF; }
+
+.rec-scroll { overflow-x: auto; }
+.rec-tbl { width: 100%; border-collapse: collapse; font-size: 11px; }
+.rec-tbl th { background: #1A4FAF; color: #fff; padding: 7px 10px; font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; white-space: nowrap; text-align: left; }
+.rec-tbl th.sub { color: #CADCFC; font-size: 9px; }
+.rec-tbl td { padding: 6px 10px; border-bottom: 1px solid #F1F5F9; color: #4B5563; vertical-align: middle; }
+.rec-tbl tr:hover td { background: #F8FAFF; }
+.rec-tbl td.r { text-align: right; }
+.rec-tbl td.mono { font-family: var(--mono); }
+.rec-sec { font-size: 12px; font-weight: 700; color: #1A4FAF; margin: 14px 0 8px; padding-bottom: 5px; border-bottom: 2px solid #EAF0FB; }
+.rec-empty { text-align: center; padding: 36px; color: #9CA3AF; font-size: 13px; }
+.rec-foot { margin-top: 12px; padding: 10px 14px; background: #EAF0FB; border-radius: 8px; font-size: 11px; color: #1A4FAF; }
+.rbadge { display: inline-block; padding: 2px 8px; border-radius: 5px; font-size: 10px; font-weight: 700; }
+
+/* Max Permissible badge */
+.rec-maxb { padding: 2px 8px; border-radius: 5px; font-weight: 700; font-size: 10px; font-family: var(--mono); cursor: help; white-space: nowrap; }
+
+/* Small ▾ / ▲ trace toggles */
+.rec-tbtn { background: none; border: 1px solid #CBD5E1; border-radius: 3px; color: #1A4FAF; font-size: 8px; line-height: 1; cursor: pointer; padding: 1px 3px; vertical-align: 2px; }
+
+/* Step 1 dimension override */
+.rec-dimsel { font-size: 11px; padding: 4px 10px; border-radius: 6px; border: 1.5px solid #C7D7F0; background: #F5F8FF; color: #1A4FAF; font-weight: 600; font-family: var(--font); cursor: pointer; }
+
+/* Step 2+3 toolbar */
+.rec-grp { border: 1px solid #CBD5E1; border-radius: 6px; color: #1A4FAF; font-size: 10.5px; font-weight: 700; cursor: pointer; padding: 5px 10px; font-family: var(--font); }
+.rec-xls { margin-left: auto; background: #00873E; border: none; border-radius: 6px; color: #fff; font-size: 10.5px; font-weight: 700; cursor: pointer; padding: 5px 12px; font-family: var(--font); }
+.rec-qsec { background: #1E2A55 !important; color: #fff !important; font-weight: 700; font-size: 11.5px; padding: 7px 12px !important; letter-spacing: .02em; }
+.rec-attrchip { display: inline-block; color: #fff; font-weight: 700; font-size: 10.5px; padding: 3px 9px; border-radius: 5px; white-space: nowrap; }
+
+/* Recommended Qty trigger — invisible until the Gen Mat Recom cell is hovered */
+.gm-qty-cell { position: relative; }
+.gm-qty-trigger { opacity: 0; transition: opacity .12s ease; margin-left: 5px; font-size: 9px; color: #1A4FAF; background: #EAF0FB; border: 1px solid #B8CCE8; border-radius: 3px; padding: 1px 5px; cursor: pointer; white-space: nowrap; }
+.gm-qty-cell:hover .gm-qty-trigger { opacity: 1; }
+.gm-qty-trigger.gm-qty-open { opacity: 1; background: #1A4FAF; color: #fff; border-color: #1A4FAF; }

@@ -174,12 +174,26 @@ namespace Application.Services.V1.Tool1
         public async Task<Tool1TodayDto> GetTodayAsync(AppUserContext user, bool onlyMine, CancellationToken ct = default)
         {
             var today = _clock.Today;
-            var (reqs, seq) = await _ledger.GetDayAsync(today, ct);
-            var list = reqs.Where(r => LedgerHelpers.IsToday(r, today)).ToList();
-            if (!user.IsStaff)
-                list = list.Where(r => Equals(LedgerHelpers.Get(r, "requestedByEmail"), user.Email) || IsApprover(r, user.Email)).ToList();
+            List<JsonObject> visible;
+            int seq;
+            if (_ledger is IRequestService platform)
+            {
+                // server.py visible_to (own requests, requests they approve, their SCR Brand × MC × MRP) —
+                // the same set GET api/v1/requests returns, which is what v1.1.4 kept in S.requests.
+                var day = await platform.GetDayForUserAsync(today, user, ct);
+                visible = day.Requests;
+                seq = day.Seq;
+            }
+            else
+            {
+                var (reqs, s) = await _ledger.GetDayAsync(today, ct);
+                visible = user.IsStaff ? reqs
+                    : reqs.Where(r => Equals(LedgerHelpers.Get(r, "requestedByEmail"), user.Email) || IsApprover(r, user.Email)).ToList();
+                seq = s;
+            }
+            var list = visible.Where(r => LedgerHelpers.IsToday(r, today)).ToList();
             if (onlyMine) list = list.Where(r => Equals(LedgerHelpers.Get(r, "requestedByEmail"), user.Email)).ToList();
-            return new Tool1TodayDto { Rows = HistoryRows(list), Seq = seq, Count = reqs.Count };
+            return new Tool1TodayDto { Rows = HistoryRows(list), Seq = seq, Count = visible.Count };
         }
 
         private static bool IsApprover(JsonObject r, string email) =>

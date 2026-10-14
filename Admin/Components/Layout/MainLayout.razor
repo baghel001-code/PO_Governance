@@ -1,9 +1,120 @@
-﻿@inherits LayoutComponentBase
+@inherits LayoutComponentBase
+@implements IDisposable
+@using Admin.Navigation
+@using Microsoft.Extensions.Options
+@inject UserSessionState Session
+@inject ServerStatusService Status
+@inject NavigationManager Nav
+@inject IOptions<PortalSettings> Settings
 
-@Body
+<MudThemeProvider Theme="PortalTheme.Theme" />
+<MudPopoverProvider />
+<MudDialogProvider />
+<MudSnackbarProvider />
+
+<div class="pg-topbar">
+    <a class="pg-brand" href="/">
+        <img src="img/logo.png" alt="VMM" />
+        <span class="pg-brand-name">PO Governance Platform</span>
+        <span class="pg-brand-sub">@(Session.View == "planner" ? "Planner View" : "Category View")</span>
+    </a>
+    <nav class="pg-tabs">
+        @foreach (var item in Items)
+        {
+            <NavLink class="pg-tab" href="@item.Href" ActiveClass="active">
+                <span>@item.Icon</span> @item.Label
+                @if (item.ApprovalsBadge && Status.PendingApprovals > 0)
+                {
+                    <span class="pg-badge">@Status.PendingApprovals</span>
+                }
+            </NavLink>
+        }
+    </nav>
+    <div class="pg-topbar-right">
+        <span class="pg-status @(Status.Online ? "ok" : "bad")" title="Server status">@Status.Message</span>
+        <MudMenu AnchorOrigin="Origin.BottomRight" TransformOrigin="Origin.TopRight" Dense="true">
+            <ActivatorContent>
+                <span class="pg-user">@Session.Name <small>(@Session.RoleLabel)</small> ▾</span>
+            </ActivatorContent>
+            <ChildContent>
+                @if (Session.IsStaff)
+                {
+                    @if (Session.View == "planner")
+                    {
+                        <MudMenuItem OnClick='() => Switch("category")'>⇄ Switch to Category view</MudMenuItem>
+                    }
+                    else
+                    {
+                        <MudMenuItem OnClick='() => Switch("planner")'>⇄ Switch to Planner view</MudMenuItem>
+                    }
+                }
+                <MudMenuItem Href="/feedback">💬 Feedback</MudMenuItem>
+                @if (Session.IsAdmin)
+                {
+                    <MudMenuItem Href="/admin/audit">📜 Audit log</MudMenuItem>
+                    <MudMenuItem Href="/admin/backups">💾 Backups</MudMenuItem>
+                    <MudMenuItem Href="/admin/feedback">📥 All feedback</MudMenuItem>
+                }
+                <MudMenuItem Href="/Account/ChangePassword" ForceLoad="true">🔑 Change password</MudMenuItem>
+                <MudMenuItem Href="/Account/Logout" ForceLoad="true">⏻ Sign out</MudMenuItem>
+            </ChildContent>
+        </MudMenu>
+    </div>
+</div>
+
+@if (Status.HasNewData)
+{
+    <div class="pg-banner">
+        New data on the server.
+        <MudButton Size="Size.Small" Variant="Variant.Filled" Color="Color.Primary" OnClick="LoadNow">Load now</MudButton>
+    </div>
+}
+
+<main class="pg-main">
+    @Body
+</main>
 
 <div id="blazor-error-ui">
     An unhandled error has occurred.
     <a href="" class="reload">Reload</a>
     <a class="dismiss">🗙</a>
 </div>
+
+@code {
+    private IEnumerable<NavItem> Items =>
+        (Session.View == "planner" ? NavItems.Planner : NavItems.Category)
+        .Where(i => i.Roles == null || Session.Has(i.Roles));
+
+    protected override async Task OnInitializedAsync()
+    {
+        await Session.InitAsync();
+        if (Session.MustChange)
+        {
+            Nav.NavigateTo("/Account/ChangePassword?forced=1", forceLoad: true);
+            return;
+        }
+        Session.Changed += OnChanged;
+        Status.Changed += OnChanged;
+        Status.Start(Settings.Value.StatusPollSeconds);
+    }
+
+    private void Switch(string view)
+    {
+        Session.SwitchView(view);
+        Nav.NavigateTo(view == "planner" ? "/planner/data" : "/category/request");
+    }
+
+    private void LoadNow()
+    {
+        Status.MarkLoaded();
+        Nav.NavigateTo(Nav.Uri, forceLoad: true);
+    }
+
+    private void OnChanged() => InvokeAsync(StateHasChanged);
+
+    public void Dispose()
+    {
+        Session.Changed -= OnChanged;
+        Status.Changed -= OnChanged;
+    }
+}

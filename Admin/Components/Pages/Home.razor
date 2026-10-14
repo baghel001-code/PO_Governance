@@ -1,7 +1,10 @@
-﻿@page "/"
-
-<PageTitle>Home</PageTitle>
-
-<h1>Hello, world!</h1>
-
-Welcome to your new app.
+@page "/"
+@inject UserSessionState Session
+@inject NavigationManager Nav
+@code {
+    protected override async Task OnInitializedAsync()
+    {
+        await Session.InitAsync();
+        Nav.NavigateTo(Session.IsStaff ? "/planner/data" : "/category/request", replace: true);
+    }
+}

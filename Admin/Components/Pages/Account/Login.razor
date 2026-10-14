@@ -1,0 +1,50 @@
+@page "/Account/Login"
+@layout AccountLayout
+@attribute [AllowAnonymous]
+@using Admin.Auth
+@inject PortalAuthService AuthService
+@inject NavigationManager Nav
+
+<PageTitle>Sign in · VMM PO Governance</PageTitle>
+
+<div class="pg-login-sub">Sign in with your company email</div>
+
+<EditForm Model="Input" FormName="login" OnValidSubmit="SignInAsync" method="post">
+    @if (!string.IsNullOrEmpty(_error))
+    {
+        <div class="pg-msg err">@_error</div>
+    }
+    <div class="pg-field">
+        <label for="email">Email</label>
+        <InputText id="email" type="email" @bind-Value="Input.Email" autocomplete="username" required placeholder="name@vishalwholesale.co.in" />
+    </div>
+    <div class="pg-field">
+        <label for="pw">Password</label>
+        <InputText id="pw" type="password" @bind-Value="Input.Password" autocomplete="current-password" required />
+    </div>
+    <button class="pg-primary" type="submit">Sign in</button>
+    <div class="pg-foot">Forgot your password? Ask the administrator to reset it.<br />First time here? Your starting password was given to you by the administrator.</div>
+</EditForm>
+
+@code {
+    [CascadingParameter] private HttpContext HttpContext { get; set; } = default!;
+    [SupplyParameterFromForm] private LoginInput Input { get; set; } = new();
+    [SupplyParameterFromQuery(Name = "next")] private string? Next { get; set; }
+    private string? _error;
+
+    protected override void OnInitialized()
+    {
+        if (HttpMethods.IsGet(HttpContext.Request.Method) && HttpContext.User.Identity?.IsAuthenticated == true)
+            Nav.NavigateTo(SafeNext(), forceLoad: true);
+    }
+
+    private async Task SignInAsync()
+    {
+        var res = await AuthService.SignInAsync(HttpContext, Input.Email, Input.Password);
+        if (!res.Ok) { _error = res.Error; Input.Password = ""; return; }
+        Nav.NavigateTo(res.MustChange ? "/Account/ChangePassword?forced=1&next=" + Uri.EscapeDataString(SafeNext()) : SafeNext(), forceLoad: true);
+    }
+
+    private string SafeNext() =>
+        !string.IsNullOrEmpty(Next) && Next.StartsWith('/') && !Next.StartsWith("//") && !Next.StartsWith("/Account") ? Next : "/";
+}

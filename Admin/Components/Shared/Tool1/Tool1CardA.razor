@@ -1,0 +1,81 @@
+@* Multi Concept part of the result card (renderResult, engine 'A'): Steps 1–4 and the absolute block note. *@
+<div class="t1-a-sec">
+    <div class="t1-a-h">Step 1 — Article &amp; Peer Pool</div>
+    <div class="t1-a-grid">
+        @foreach (var k in A.Step1)
+        {
+            <div class="t1-a-tile">
+                <div class="t1-a-v" style="color:@(k.Colour ?? "#1A4FAF")">@k.Value</div>
+                <div class="t1-a-k">@k.Key</div>
+            </div>
+        }
+    </div>
+</div>
+
+@if (A.Step2 != null)
+{
+    <div class="t1-a-sec">
+        <div class="t1-a-h">Step 2 — Per-Day Sell Through% vs Peer Average</div>
+        <div class="t1-a-grid">
+            @foreach (var k in A.Step2)
+            {
+                <div class="t1-a-tile">
+                    <div class="t1-a-v" style="font-size:15px;color:@(k.Colour ?? "#1A4FAF")">@k.Value</div>
+                    <div class="t1-a-k">@k.Key</div>
+                </div>
+            }
+        </div>
+    </div>
+}
+
+@if (A.Step3 is { } q)
+{
+    <div class="t1-a-sec" data-testid="quartile">
+        <div class="t1-a-h">@q.Heading</div>
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:7px;gap:10px;flex-wrap:wrap">
+            <span style="font-size:11px;font-weight:600;color:var(--ink2)">@q.PoolText</span>
+            <span style="font-size:12px;font-weight:700;color:@q.RankColour">@q.RankText</span>
+        </div>
+        <div class="rank-bar">
+            <div class="rank-line" style="left:25%"></div>
+            <div class="rank-line" style="left:50%"></div>
+            <div class="rank-line" style="left:75%"></div>
+            <div class="rank-dot" style="left:@(q.Position.ToString(System.Globalization.CultureInfo.InvariantCulture))%;background:@q.RankColour"></div>
+        </div>
+        <div class="rank-labels"><span>Q4 Slow</span><span>Q3 Watch</span><span>Q2 Healthy</span><span>Q1 Top</span></div>
+    </div>
+}
+
+@if (A.Step4 is { } bz)
+{
+    var c = bz.InBorderZone ? "#00873E" : "#DC2626";
+    <div class="t1-a-sec" data-testid="border-zone">
+        <div class="t1-a-h">Step 4 — Border Zone Check (PDSTR Gap)</div>
+        <div class="t1-border-box">
+            @for (var i = 0; i < bz.Lines.Count; i++)
+            {
+                var line = bz.Lines[i];
+                var last = i == bz.Lines.Count - 1;
+                var at = line.IndexOf("= ", StringComparison.Ordinal);
+                @if (last && at >= 0)
+                {
+                    <div>@line[..(at + 2)]<strong style="color:@c">@line[(at + 2)..]</strong></div>
+                }
+                else
+                {
+                    <div>@line</div>
+                }
+            }
+        </div>
+        <div class="t1-strip" style="background:@(bz.InBorderZone ? "#DCFCE7" : "#FEF2F2");border-color:@c;color:@c">@bz.Verdict</div>
+    </div>
+}
+
+@if (!string.IsNullOrEmpty(A.AbsoluteBlockNote))
+{
+    <div class="t1-a-sec t1-strip" style="background:#FEF2F2;border-color:#DC2626;color:#DC2626">@A.AbsoluteBlockNote</div>
+}
+
+@code {
+    [Parameter, EditorRequired] public Tool1CardADto A { get; set; } = default!;
+}

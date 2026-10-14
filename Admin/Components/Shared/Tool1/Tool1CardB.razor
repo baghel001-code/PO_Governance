@@ -1,0 +1,241 @@
+@* Single Concept part of the result card (renderResult, engine 'B'): mix banner, or KPI cards +
+   the "Show Step-by-Step Computation" toggle with Steps 1–5. Every figure comes from Tool1CardBDto. *@
+@if (B.MixFailed)
+{
+    <div class="t1-mixbanner" data-testid="mix-banner">@B.MixBanner</div>
+}
+else
+{
+    <div class="t1-kpis" style="grid-template-columns:repeat(@Math.Max(1, B.Kpis.Count),1fr)" data-testid="kpis">
+        @foreach (var k in B.Kpis)
+        {
+            var c = k.Colour ?? "#1A4FAF";
+            <div class="t1-kpi" style="border-color:@(c)22;box-shadow:0 1px 4px @(c)10">
+                <div class="t1-kpi-v" style="color:@c">@k.Value</div>
+                <div class="t1-kpi-k">@k.Key</div>
+            </div>
+        }
+    </div>
+
+    <button class="t1-toggle" @onclick="() => _open = !_open" data-testid="steps-toggle">@(_open ? B.HideStepsLabel : B.ShowStepsLabel)</button>
+
+    @if (_open)
+    {
+        <div style="margin-bottom:14px" data-testid="steps">
+            @* STEP 1 *@
+            <div class="t1-step">
+                <div class="t1-step-h" style="background:#1A4FAF"><span class="t1-step-n">STEP 1</span><span class="t1-step-t">@B.Step1.Title</span></div>
+                <div class="t1-step-b" style="background:#F8FAFF">
+                    <div class="t1-step-txt">
+                        F1 stock is uploaded <strong>as-of-today</strong>. It already reflects all sales consumed up to today.
+                        All rows in F1 matching <strong>KEY-3 = Brand × MC × MRP × Flag × Colour</strong> are summed
+                        (multiple rows exist for different RDC/warehouse locations).
+                    </div>
+                    <div class="t1-boxes">
+                        @if (B.Step1.OpStock != null)
+                        {
+                            <div class="t1-box" style="border-color:#1A4FAF22">
+                                <div class="t1-box-k">F1 Op Stock (SUM all rows)</div>
+                                <div class="t1-box-v" style="font-size:16px;color:#1A4FAF">@B.Step1.OpStock</div>
+                            </div>
+                        }
+                        <div class="t1-box" style="border-color:#1A4FAF22">
+                            <div class="t1-box-k">KEY-3 Used</div>
+                            <div class="t1-box-v" style="font-size:10px;font-weight:600;color:#1A4FAF">@B.Step1.Key3</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            @* STEP 2 *@
+            <div class="t1-step">
+                <div class="t1-step-h" style="background:#00873E"><span class="t1-step-n">STEP 2</span><span class="t1-step-t">@B.Step2.Title</span></div>
+                <div class="t1-step-b" style="background:#F0FDF4">
+                    <div class="t1-step-txt">
+                        Mix % = <strong>Colour total sales ÷ MC total sales</strong> @B.Step2.Basis.
+                        This tells us what share of the MC's total demand belongs to this colour.
+                        Used to split the F4 MC-level forecast down to colour level.
+                    </div>
+                    <div class="t1-boxes">
+                        @Box2("Colour Avg Sales/" + B.Step2.Per, B.Step2.ColAvg, "#00873E")
+                        @Box2("MC Total Avg Sales/" + B.Step2.Per, B.Step2.McAvg, "#00873E")
+                        @Box2("Colour Mix % = Col ÷ MC", B.Step2.MixPct, "#00873E")
+                        @Box2("Min Mix% Threshold", B.Step2.Threshold, B.Step2.ThresholdOk ? "#00873E" : "#DC2626")
+                    </div>
+                </div>
+            </div>
+
+            @* STEP 3 *@
+            <div class="t1-step">
+                <div class="t1-step-h" style="background:#0891B2"><span class="t1-step-n">STEP 3</span><span class="t1-step-t">@B.Step3.Title</span></div>
+                <div class="t1-step-b" style="background:#F0F9FF">
+                    <div class="t1-step-txt" style="margin-bottom:10px">
+                        Starting from F1 Op Stock (as-of-today), we roll forward month by month adding existing F2 POs and
+                        subtracting colour demand (F4 × Mix%). <strong>Current month uses only remaining days demand</strong>
+                        (F1 already reflects elapsed days). Future months use full month demand.
+                        Proposed PO of <strong>@B.Step3.ProposedQty units</strong> lands in the delivery month.
+                    </div>
+                    @if (B.Step3.Rows.Count > 0)
+                    {
+                        <div style="overflow-x:auto">
+                            <table class="t1-tbl" style="min-width:620px" data-testid="chain-table">
+                                <thead>
+                                    <tr style="background:#0891B222">
+                                        <th style="text-align:left;color:#0891B2;border-bottom:2px solid #0891B233">Month</th>
+                                        <th class="r" style="color:#0891B2;border-bottom:2px solid #0891B233">Open Stock</th>
+                                        <th class="r" style="color:#1A4FAF;border-bottom:2px solid #0891B233">+ Existing PO (F2)</th>
+                                        <th class="r" style="color:#E8006E;border-bottom:2px solid #0891B233">+ Proposed PO</th>
+                                        <th class="r" style="color:#DC2626;border-bottom:2px solid #0891B233">− Colour Demand</th>
+                                        <th class="r" style="color:#0891B2;border-bottom:2px solid #0891B233">= Close Stock</th>
+                                        <th class="c" style="color:#6B7280;border-bottom:2px solid #0891B233">Note</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    @foreach (var r in B.Step3.Rows)
+                                    {
+                                        <tr style="background:@r.Background">
+                                            <td style="font-weight:@(r.Bold ? "700" : "400")">@r.Month @if (r.Tag != null)
+                                                {
+                                                    <span class="t1-tag" style="color:@TagColour(r.Tag)">@r.Tag</span>
+                                                }</td>
+                                            <td class="r m">@r.OpenStock</td>
+                                            <td class="r m" style="color:#1A4FAF">@r.ExistingPo</td>
+                                            <td class="r m" style="color:#E8006E">@r.Proposed</td>
+                                            <td class="r m" style="color:#DC2626">@r.Demand @if (r.DemandNote != null)
+                                                {
+                                                    <span class="t1-tag" style="color:#D97706">@r.DemandNote</span>
+                                                }</td>
+                                            <td class="r m" style="font-weight:700">@r.CloseStock</td>
+                                            <td class="c" style="font-size:9px;color:@r.NoteColour">@r.Note</td>
+                                        </tr>
+                                    }
+                                </tbody>
+                            </table>
+                        </div>
+                    }
+                    else
+                    {
+                        <div style="color:var(--ink3);font-size:11px">No chain data available</div>
+                    }
+                </div>
+            </div>
+
+            @* STEP 4 *@
+            <div class="t1-step">
+                <div class="t1-step-h" style="background:#7C3AED"><span class="t1-step-n">STEP 4</span><span class="t1-step-t">@B.Step4.Title</span></div>
+                <div class="t1-step-b" style="padding:12px 14px;background:#FAF5FF">
+                    <div class="t1-step-txt" style="margin-bottom:10px">
+                        From <strong>Day 1 of the Delivery Month</strong>, we look ahead <strong>D=@B.Step4.D days</strong> and compute
+                        total colour demand (F4 × Mix%) across those days. This gives us the Daily Rate.
+                        STR tells us how many days the opening stock of the Delivery Month will last at that daily rate.
+                    </div>
+                    @if (B.Step4.Rows.Count > 0)
+                    {
+                        <div style="overflow-x:auto;margin-bottom:10px">
+                            <table class="t1-tbl" style="min-width:500px" data-testid="window-table">
+                                <thead>
+                                    <tr style="background:#7C3AED22">
+                                        <th style="text-align:left;color:#7C3AED;border-bottom:2px solid #7C3AED33">Month in Window</th>
+                                        <th class="r" style="color:#7C3AED;border-bottom:2px solid #7C3AED33">Colour Demand (F4×Mix%)</th>
+                                        <th class="c" style="color:#7C3AED;border-bottom:2px solid #7C3AED33">Days in Month</th>
+                                        <th class="c" style="color:#7C3AED;border-bottom:2px solid #7C3AED33">Days Taken</th>
+                                        <th class="r" style="color:#7C3AED;border-bottom:2px solid #7C3AED33">Period Demand</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    @foreach (var w in B.Step4.Rows)
+                                    {
+                                        <tr style="background:@w.Background">
+                                            <td>@w.Month</td>
+                                            <td class="r m">@w.Demand</td>
+                                            <td class="c m">@w.DaysInMonth</td>
+                                            <td class="c m" style="@(w.Partial ? "font-weight:700;color:#D97706" : "")">@w.DaysTaken</td>
+                                            <td class="r m" style="font-weight:700">@w.PeriodDemand</td>
+                                        </tr>
+                                    }
+                                    <tr style="background:#7C3AED11;font-weight:700">
+                                        <td style="padding:6px 10px;color:#7C3AED;border:none">@B.Step4.TotalLabel</td>
+                                        <td style="border:none"></td>
+                                        <td class="c m" style="color:#7C3AED;border:none">@B.Step4.D</td>
+                                        <td class="c m" style="color:#7C3AED;border:none">@B.Step4.D</td>
+                                        <td class="r m" style="color:#7C3AED;border:none">@B.Step4.TotalDemand</td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    }
+                    <div class="t1-formula">
+                        <div class="t1-formula-t">STR Formula</div>
+                        <div class="t1-mono-lines">@for (var i = 0; i < B.Step4.Formula.Count; i++)
+                            {
+                                var line = B.Step4.Formula[i];
+                                var (head, tail) = SplitTail(line, i);
+                                var col = i == 0 ? "#0891B2" : B.Step4.StrColour;
+                                <div>@head@if (tail != null)
+                                    {
+                                        <strong style="color:@col">@tail</strong>
+                                    }</div>
+                            }</div>
+                    </div>
+                </div>
+            </div>
+
+            @* STEP 5 *@
+            <div class="t1-step" style="margin-bottom:4px">
+                <div class="t1-step-h" style="background:@B.Step5.HeaderColour"><span class="t1-step-n">STEP 5</span><span class="t1-step-t">@B.Step5.Title</span></div>
+                <div class="t1-step-b" style="padding:12px 14px;background:@B.Step5.PanelBg">
+                    <div class="t1-step5-box t1-mono-lines">@for (var i = 0; i < B.Step5.Formula.Count; i++)
+                        {
+                            var last = i == B.Step5.Formula.Count - 1;
+                            var f5 = B.Step5.Formula[i];
+                            <div style="@(i > 0 ? "padding-left:18ch" : "")">@if (last && f5.StartsWith("= ", StringComparison.Ordinal))
+                                {
+                                    @("= ")<strong style="color:@B.Step5.ResultColour">@f5.Substring(2)</strong>
+                                }
+                                else
+                                {
+                                    @f5
+                                }</div>
+                        }</div>
+                    <div style="font-size:12px;color:var(--ink);line-height:1.8" data-testid="verdict">
+                        <strong style="color:@B.Step5.VerdictColour">@B.Step5.VerdictLead</strong> @B.Step5.VerdictText
+                    </div>
+                </div>
+            </div>
+        </div>
+    }
+}
+
+@code {
+    [Parameter, EditorRequired] public Tool1CardBDto B { get; set; } = default!;
+
+    private bool _open;
+
+    private static string TagColour(string tag) =>
+        tag.Contains("current", StringComparison.Ordinal) ? "#D97706" : tag.Contains("Delivery", StringComparison.Ordinal) ? "#E8006E" : "#1A4FAF";
+
+    // The STR Formula box bolds the figure after the last " = " (daily rate, STR) and the verdict of the
+    // "Result :" line, as renderResult did. Layout only — the texts come from the server.
+    private static (string Head, string? Tail) SplitTail(string line, int index)
+    {
+        if (index == 0 || index == 2)
+        {
+            var at = line.LastIndexOf(" = ", StringComparison.Ordinal);
+            if (at >= 0) return (line[..(at + 3)], line[(at + 3)..]);
+        }
+        if (index == 4)
+        {
+            var at = line.IndexOf("d ", line.IndexOf("STR", StringComparison.Ordinal) + 1, StringComparison.Ordinal);
+            if (at >= 0) return (line[..(at + 2)], line[(at + 2)..]);
+        }
+        return (line, null);
+    }
+
+    private static RenderFragment Box2(string key, string value, string colour) => __builder =>
+    {
+        <div class="t1-box" style="border-color:#00873E22;min-width:0">
+            <div class="t1-box-k">@key</div>
+            <div class="t1-box-v" style="font-size:14px;color:@colour">@value</div>
+        </div>
+    };
+}

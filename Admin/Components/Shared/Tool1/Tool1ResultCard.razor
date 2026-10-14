@@ -1,0 +1,89 @@
+@* index.html renderResult(r): one Tool 1 result card, laid out from Tool1CardDto (all texts and colours come
+   from the server). The Watch List approval badge (shared.js approvalBadge) sits under the decision pill. *@
+@inject IDialogService Dialogs
+
+<div class="res-card" data-testid="result-card" data-decision="@Card.Decision">
+    <div class="res-hdr">
+        <div class="rh-l">
+            <div class="rh-num">@Card.Id</div>
+            <div style="min-width:0">
+                <div class="rh-title">
+                    <span class="rh-gm">@Card.Gm</span>
+                    <span class="rh-col">@Card.Colour</span>
+                    <span class="rh-chip" style="background:@Card.EngineBg;color:@Card.EngineColour">@Card.EngineLabel</span>
+                    @if (!string.IsNullOrEmpty(Card.OptionTypeChip))
+                    {
+                        <span class="rh-ot">@Card.OptionTypeChip</span>
+                    }
+                </div>
+                <div class="rh-sub">@Card.SubLine</div>
+            </div>
+        </div>
+        <div class="rh-r">
+            <div class="rh-dec" style="background:@Card.DecisionBg;color:@Card.DecisionColour;border-color:@Card.DecisionBorder" data-testid="decision">@Card.Decision</div>
+            @if (Request != null)
+            {
+                <ApprovalBadge Request="Request" />
+            }
+        </div>
+    </div>
+
+    <div class="res-body">
+        <div class="t1-chips">
+            @for (var i = 0; i < Card.Chips.Count; i++)
+            {
+                var ch = Card.Chips[i];
+                @if (i > 0)
+                {
+                    <div class="t1-chip-sep"></div>
+                }
+                <div class="t1-chip">
+                    <span class="t1-chip-k">@ch.Key</span>
+                    <span class="t1-chip-v" style="@(ch.Colour != null ? "color:" + ch.Colour : "")">@ch.Value</span>
+                </div>
+            }
+        </div>
+
+        @if (Card.B != null)
+        {
+            <Tool1CardB B="Card.B" />
+        }
+        @if (Card.A != null)
+        {
+            <Tool1CardA A="Card.A" />
+        }
+
+        <div class="t1-reason" style="background:@Card.DecisionBg;border-color:@Card.DecisionBorder;border-left-color:@Card.DecisionColour;color:@Card.DecisionColour" data-testid="reason">
+            <strong>@Card.ReasonTitle</strong><br />
+            <span>@(string.IsNullOrEmpty(Card.Reason) ? "—" : Card.Reason)</span>
+        </div>
+
+        <StrCautionBox Caution="Card.StrCaution" />
+    </div>
+
+    <div class="t1-foot">
+        <span class="t1-foot-hint">@Card.FooterHint</span>
+        <button class="rec-btn" @onclick="OpenRecommendation" data-testid="view-rec">📊 View Recommendation</button>
+    </div>
+</div>
+
+@code {
+    [Parameter, EditorRequired] public Tool1CardDto Card { get; set; } = default!;
+    /// <summary>The saved request (for the approval badge); null before it is saved.</summary>
+    [Parameter] public JsonObject? Request { get; set; }
+
+    // openRec(btn): the bucket of the card (MC / MRP / Brand / Flag / Div / MC desc) and its engine.
+    private Task OpenRecommendation() =>
+        RecommendationDialog.ShowAsync(Dialogs, new RecommendationRequestDto
+        {
+            // The card's bucket is what openRec used; the GM only when the bucket is unknown.
+            Gm = string.IsNullOrEmpty(Card.RecInfo.McCd) ? Card.Gm : null,
+            Engine = Card.RecEngine,
+            McCd = Card.RecInfo.McCd,
+            Mrp = Card.RecInfo.Mrp,
+            Brand = Card.RecInfo.Brand,
+            Flag = Card.RecInfo.Flag,
+            Div = Card.RecInfo.Div,
+            McDesc = Card.RecInfo.McDesc,
+        });
+}

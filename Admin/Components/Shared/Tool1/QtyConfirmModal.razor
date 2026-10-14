@@ -1,0 +1,115 @@
+@* index.html #qty-confirm-overlay (_confirmFinalQty / qcClamp / qcConfirm / qcDecline).
+   AskAsync(proposed, max) shows the pop-up and completes with the confirmed quantity, or Declined. *@
+@inject IJSRuntime JS
+
+@if (_visible)
+{
+    <div class="t1-qc-overlay" data-testid="qty-confirm">
+        <div class="t1-qc" role="dialog" aria-modal="true" aria-labelledby="t1-qc-title">
+            <div class="t1-qc-title" id="t1-qc-title">Confirm Final Quantity</div>
+            <div class="t1-qc-sub">Max Permissible headroom is available beyond (or different from) what you proposed. Choose the quantity to actually raise.</div>
+            <div class="t1-qc-figs">
+                <div class="t1-qc-fig" style="background:#F8FAFF;border:1px solid #E2E8F0">
+                    <div class="k" style="color:#9CA3AF">You proposed</div>
+                    <div class="v" style="color:#4B5563" data-testid="qc-proposed">@Js.Fmt(_proposed)</div>
+                </div>
+                <div class="t1-qc-fig" style="background:#EAF0FB;border:1px solid #C7D9F8">
+                    <div class="k" style="color:#1A4FAF">Max Permissible</div>
+                    <div class="v" style="color:#1A4FAF" data-testid="qc-max">@Js.Fmt(_max)</div>
+                </div>
+            </div>
+            <label for="t1-qc-input">Final quantity to raise (max @Js.Fmt(_max))</label>
+            <input type="number" id="t1-qc-input" min="0" max="@_maxInt" value="@_value" @oninput="Clamp" @onkeydown="OnKey" @ref="_input" data-testid="qc-input" />
+            <div class="t1-qc-btns">
+                <button class="t1-btn-sec" @onclick="Decline" data-testid="qc-decline">✕ Don't Raise</button>
+                <button class="t1-btn-pri" @onclick="Confirm" data-testid="qc-confirm">✓ Confirm Quantity</button>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    /// <summary>The planner's answer: the quantity to raise, or "Don't Raise".</summary>
+    public sealed record Answer(bool Declined, double ConfirmedQty);
+
+    private bool _visible;
+    private double _proposed, _max;
+    private long _maxInt;
+    private string _value = "";
+    private bool _focus;
+    private ElementReference _input;
+    private TaskCompletionSource<Answer>? _tcs;
+
+    /// <summary>Shows the pop-up pre-filled with Max Permissible; completes on Confirm / Don't Raise.</summary>
+    public Task<Answer> AskAsync(double proposed, double maxPermissible)
+    {
+        _tcs?.TrySetResult(new Answer(true, 0));
+        _tcs = new TaskCompletionSource<Answer>(TaskCreationOptions.RunContinuationsAsynchronously);
+        _proposed = proposed;
+        _max = maxPermissible;
+        _maxInt = (long)Math.Truncate(maxPermissible);
+        _value = _maxInt.ToString(System.Globalization.CultureInfo.InvariantCulture);
+        _visible = true;
+        _focus = true;
+        StateHasChanged();
+        return _tcs.Task;
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (_focus && _visible)
+        {
+            _focus = false;
+            try { await _input.FocusAsync(); } catch { /* element gone */ }
+        }
+    }
+
+    // qcClamp: parseInt; NaN → leave as typed; < 0 → 0; > max → max.
+    private void Clamp(ChangeEventArgs e)
+    {
+        var s = e.Value?.ToString() ?? "";
+        _value = s;
+        if (!TryParseInt(s, out var v)) return;
+        if (v < 0) _value = "0";
+        else if (v > _maxInt) _value = _maxInt.ToString(System.Globalization.CultureInfo.InvariantCulture);
+    }
+
+    private void OnKey(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter") Confirm();
+    }
+
+    // qcConfirm: parseInt || 0, clamped to 0 … max.
+    private void Confirm()
+    {
+        var v = TryParseInt(_value, out var n) ? n : 0;
+        if (v < 0) v = 0;
+        if (v > _maxInt) v = _maxInt;
+        Close(new Answer(false, v));
+    }
+
+    private void Decline() => Close(new Answer(true, 0));
+
+    private void Close(Answer a)
+    {
+        _visible = false;
+        var t = _tcs;
+        _tcs = null;
+        t?.TrySetResult(a);
+    }
+
+    private static bool TryParseInt(string s, out long v)
+    {
+        v = 0;
+        s = s.Trim();
+        var i = 0;
+        var neg = false;
+        if (i < s.Length && (s[i] == '-' || s[i] == '+')) { neg = s[i] == '-'; i++; }
+        var start = i;
+        while (i < s.Length && char.IsAsciiDigit(s[i])) i++;
+        if (i == start) return false;
+        if (!long.TryParse(s.AsSpan(start, i - start), out v)) v = long.MaxValue;
+        if (neg) v = -v;
+        return true;
+    }
+}

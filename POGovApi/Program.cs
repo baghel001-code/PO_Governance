@@ -32,6 +32,8 @@ builder.Services.AddGrcAnalyticsServices();
 builder.Services.AddGrcExcelExport();
 builder.Services.AddIngestServices();
 builder.Services.AddIngestInfrastructure();
+builder.Services.AddAnalyticsServices();
+builder.Services.AddAnalyticsAdapters();
 builder.Services.AddAuthorization();
 
 builder.Services.AddControllers()

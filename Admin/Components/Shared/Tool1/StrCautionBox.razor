@@ -1,0 +1,51 @@
+@* index.html _cautionBoxHtml(sc): the amber "⚠ Caution — STR" box, a separate box from the green reason.
+   Each item has its own "▾ Show calculation" breakdown (first 4 chain months + footer). *@
+@if (Caution is { Items.Count: > 0 })
+{
+    <div class="t1-caution" data-testid="str-caution">
+        <strong>⚠ Caution — STR</strong><br />
+        @for (var ii = 0; ii < Caution.Items.Count; ii++)
+        {
+            var idx = ii;
+            var it = Caution.Items[ii];
+            var open = _open.Contains(idx);
+            <div style="margin-top:@(idx > 0 ? "6px" : "2px")">
+                <span>@it.Text</span>
+                <button class="t1-caution-btn" @onclick="() => Toggle(idx)">@(open ? "▲ Hide calculation" : "▾ Show calculation")</button>
+                @if (open && it.Cs.Chain.Count > 0)
+                {
+                    <div style="margin-top:6px;overflow-x:auto">
+                        <table>
+                            <thead><tr><th>Month</th><th>Open</th><th>+PO</th><th>−Fcst</th><th>=Close</th></tr></thead>
+                            <tbody>
+                                @for (var ci = 0; ci < Math.Min(4, it.Cs.Chain.Count); ci++)
+                                {
+                                    var c = it.Cs.Chain[ci];
+                                    <tr style="@(ci == it.Cs.D1Idx ? "background:#FEF3C7" : "")">
+                                        <td style="font-weight:700">@c.MKey@(ci == 0 ? " (a)" : "")</td>
+                                        <td style="text-align:right;font-family:var(--mono)">@Js.Fmt(c.OpenStock)</td>
+                                        <td style="text-align:right;font-family:var(--mono);color:#00873E">@Js.Fmt(c.PoIn)</td>
+                                        <td style="text-align:right;font-family:var(--mono);color:#D97706">@Js.Fmt(c.ColPlan)</td>
+                                        <td style="text-align:right;font-family:var(--mono);font-weight:700">@Js.Fmt(c.CloseStock)</td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                        <div class="foot">@it.Footer</div>
+                    </div>
+                }
+            </div>
+        }
+    </div>
+}
+
+@code {
+    [Parameter] public StrCautionDto? Caution { get; set; }
+
+    private readonly HashSet<int> _open = new();
+
+    private void Toggle(int i)
+    {
+        if (!_open.Remove(i)) _open.Add(i);
+    }
+}

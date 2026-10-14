@@ -1,0 +1,329 @@
+@page "/category/request"
+@* Tool 1 — "✏️ New Request" (index.html #view-cat-request: formGMInput / formColChange / formSubmit /
+   formClear / renderResult, shared.js saveRequest). The server decides; this page collects the four
+   fields, asks the Confirm Final Quantity question and lays out the returned cards. *@
+@implements IDisposable
+@inject IAPICallService Api
+@inject UserSessionState Session
+@inject ISnackbar Snackbar
+@inject ILogger<NewRequest> Log
+
+<PageTitle>New Request · VMM PO Governance</PageTitle>
+<HeadContent>
+    <link rel="stylesheet" href="css/tool1.css" />
+</HeadContent>
+<PlatformStyles />
+
+<div class="t1" id="view-cat-request">
+    <div class="t1-head">
+        <div>
+            <div class="t1-head-row">
+                <svg width="20" height="20" fill="none" stroke="var(--vmm-pink)" stroke-width="2" viewBox="0 0 24 24"><path d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                <div class="pg-title">New PO Request</div>
+            </div>
+            <div class="t1-accent"></div>
+            <div class="pg-sub" style="margin-left:30px">Enter article details to validate a PO request before raising.</div>
+        </div>
+        <div class="t1-counter">Session: <span data-testid="session-count">@_count</span></div>
+    </div>
+
+    <div class="card">
+        <div class="rc-hdr">
+            <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" /><line x1="12" y1="8" x2="12" y2="12" /><line x1="12" y1="16" x2="12" y2="16" /></svg>
+            New Request <span class="rc-badge">Category</span>
+        </div>
+        <div class="fgrid">
+            <div class="ffield">
+                <label for="c-gm">Generic Material Code</label>
+                <input type="text" id="c-gm" class="mono" placeholder="e.g. 1130153468" value="@_gm" @oninput="OnGmInput" autocomplete="off" />
+            </div>
+            <div class="ffield">
+                <label for="c-col">Colour</label>
+                <select id="c-col" value="@_colour" @onchange="OnColourChange">
+                    <option value="">@(_opts?.ColourPlaceholder is { Length: > 0 } ph ? ph : "— enter material first —")</option>
+                    @if (_opts != null)
+                    {
+                        @foreach (var c in _opts.Colours)
+                        {
+                            <option value="@c.Value">@c.Label</option>
+                        }
+                        @if (_opts.NewColourLabel != null)
+                        {
+                            <option value="__new__">@_opts.NewColourLabel</option>
+                        }
+                    }
+                </select>
+                @if (_showColTxt)
+                {
+                    <input type="text" id="c-col-txt" class="t1-coltxt" placeholder="Type colour code..." value="@_colourText" @oninput="OnColourText" autocomplete="off" />
+                }
+            </div>
+            <div class="ffield">
+                <label for="c-mon">Delivery Month</label>
+                <select id="c-mon" value="@_month" @onchange="e => _month = e.Value?.ToString() ?? string.Empty">
+                    <option value="">— select month —</option>
+                    @foreach (var m in _months)
+                    {
+                        <option value="@m.Value">@m.Label</option>
+                    }
+                </select>
+            </div>
+            <div class="ffield">
+                <label for="c-qty">Proposed Qty (units)</label>
+                <input type="number" id="c-qty" placeholder="e.g. 10000" min="1" value="@_qty" @oninput="e => _qty = e.Value?.ToString() ?? string.Empty" @onkeydown="OnQtyKey" />
+            </div>
+        </div>
+
+        @if (_opts is { ShowStrip: true, Strip: { } s })
+        {
+            <div class="res-strip" id="c-strip" data-testid="strip">
+                <div class="rs-item"><div class="rs-k">Brand Type</div><div class="rs-v">@s.Brand</div></div>
+                <div class="rs-item"><div class="rs-k">Division</div><div class="rs-v">@s.Div</div></div>
+                <div class="rs-item"><div class="rs-k">MC CD</div><div class="rs-v">@s.McCd</div></div>
+                <div class="rs-item"><div class="rs-k">MC Desc</div><div class="rs-v">@s.McDesc</div></div>
+                <div class="rs-item"><div class="rs-k">MRP</div><div class="rs-v">@s.Mrp</div></div>
+                <div class="rs-item"><div class="rs-k">Flag</div><div class="rs-v">@s.Flag</div></div>
+            </div>
+        }
+
+        @if (_missing.Count > 0)
+        {
+            <div class="t1-missing" data-testid="missing-files">⚠ Upload required files first: @string.Join(", ", _missing). Validation is unavailable until the planner uploads them in Data Setup.</div>
+        }
+
+        <div class="sub-row">
+            <button class="t1-btn-pri" id="c-btn" @onclick="ValidateAsync" disabled="@_busy" data-testid="validate">
+                <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12" /></svg> Validate Request
+            </button>
+            <button class="t1-btn-sec" @onclick="Clear" data-testid="clear">✕ Clear</button>
+            @if (_busy)
+            {
+                <div class="analyzing" data-testid="analyzing"><div class="spin"></div>Analyzing…</div>
+            }
+        </div>
+    </div>
+
+    <div id="c-results" data-testid="results">
+        @foreach (var r in _results)
+        {
+            <Tool1ResultCard @key="r.Key" Card="r.Card" Request="r.Request" />
+        }
+    </div>
+
+    @if (_results.Count == 0)
+    {
+        <div class="empty" id="c-empty" data-testid="empty">
+            <div class="empty-icon"><svg width="48" height="48" fill="none" stroke="var(--vmm-navy-m)" stroke-width="1.5" viewBox="0 0 24 24"><path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2" /><rect x="9" y="3" width="6" height="4" rx="1" /><path d="M9 12h6M9 16h4" /></svg></div>
+            <div class="empty-title">No requests validated yet</div>
+            <div class="empty-sub">Enter a Generic Material code and colour above to validate your first PO request.</div>
+        </div>
+    }
+
+    <div class="t1-today" data-testid="today">
+        <div class="t1-today-h">🕒 Today's Requests</div>
+        <div class="t1-today-sub">PO validation requests raised today. Quantities approved today for Single Concept MRP colours also reduce Max Permissible headroom for further requests against the same colour today.</div>
+        <TodaysRequestsTable @ref="_today" ShowNewRequestButton="false" OnCleared="RefreshCountAsync" />
+    </div>
+
+    <QtyConfirmModal @ref="_confirm" />
+</div>
+
+@code {
+    private const string NewColour = "__new__";
+
+    private sealed record ResultEntry(int Key, Tool1CardDto Card, JsonObject? Request);
+
+    private string _gm = "";
+    private string _colour = "";
+    private string _colourText = "";
+    private bool _showColTxt;
+    private string _month = "";
+    private string _qty = "";
+    private Tool1FormOptionsDto? _opts;
+    private List<Tool1OptionDto> _months = new();
+    private List<string> _missing = new();
+    private readonly List<ResultEntry> _results = new();
+    private int _resultKey;
+    private int _count;
+    private bool _busy;
+
+    private TodaysRequestsTable? _today;
+    private QtyConfirmModal _confirm = default!;
+    private CancellationTokenSource? _optCts;
+    private int _optSeq;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await Session.InitAsync();
+        await LoadOptionsAsync("", CancellationToken.None);
+        await RefreshCountAsync();
+    }
+
+    // ── formGMInput: re-read the attribute strip / colours on every keystroke (debounced) ──
+    private async Task OnGmInput(ChangeEventArgs e)
+    {
+        _gm = e.Value?.ToString() ?? "";
+        _optCts?.Cancel();
+        var cts = _optCts = new CancellationTokenSource();
+        try { await Task.Delay(250, cts.Token); }
+        catch (TaskCanceledException) { return; }
+        await LoadOptionsAsync(_gm, cts.Token);
+    }
+
+    private async Task LoadOptionsAsync(string gm, CancellationToken ct)
+    {
+        var seq = ++_optSeq;
+        ApiResponse<Tool1FormOptionsDto> res;
+        try { res = await Api.GetAsync<Tool1FormOptionsDto>("api/v1/tool1/options?gm=" + Uri.EscapeDataString(gm.Trim()), ct); }
+        catch (OperationCanceledException) { return; }
+        if (seq != _optSeq || ct.IsCancellationRequested) return; // a newer keystroke won
+        if (!res.IsSuccess || res.Data == null)
+        {
+            if (!string.IsNullOrEmpty(res.ResponseMessage)) Snackbar.Add(res.ResponseMessage, Severity.Warning);
+            return;
+        }
+        var o = res.Data;
+        _opts = o;
+        if (o.Months.Count > 0) _months = o.Months;
+        if (!_months.Any(m => m.Value == _month)) _month = "";
+        _missing = o.MissingFiles;
+        // formPopulateColours rebuilds the select: back to the placeholder, text box only when no colours exist.
+        _colour = "";
+        _showColTxt = o.ShowManualColour;
+        StateHasChanged();
+    }
+
+    // ── formColChange ──
+    private void OnColourChange(ChangeEventArgs e)
+    {
+        _colour = e.Value?.ToString() ?? "";
+        _showColTxt = _colour == NewColour;
+        if (_colour != NewColour) _colourText = "";
+    }
+
+    private void OnColourText(ChangeEventArgs e) => _colourText = (e.Value?.ToString() ?? "").ToUpperInvariant();
+
+    private async Task OnQtyKey(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter" && !_busy) await ValidateAsync();
+    }
+
+    // ── formSubmit: validate → (Confirm Final Quantity) → submit → card ──
+    private async Task ValidateAsync()
+    {
+        if (_busy) return;
+        _busy = true;
+        StateHasChanged();
+        try
+        {
+            var input = new Tool1RequestInputDto
+            {
+                Gm = _gm.Trim(),
+                Colour = _colour,
+                ColourText = _colourText,
+                Month = _month,
+                Qty = ParseQty(_qty),
+            };
+            var v = await Api.PostAsync<Tool1ResultDto>("api/v1/tool1/validate", input);
+            if (!v.IsSuccess || v.Data == null) { Toast(v.ResponseMessage, "Validation failed"); return; }
+
+            var result = await SubmitAsync(input, v.Data);
+            if (result == null) return;
+
+            foreach (var t in result.Toasts) Toast(t, null);
+            if (result.Card != null)
+                _results.Insert(0, new ResultEntry(++_resultKey, result.Card, result.Status == "saved" ? result.Request : null));
+            StateHasChanged();
+            if (_today != null) await _today.RefreshAsync();
+            await RefreshCountAsync();
+        }
+        catch (Exception ex)
+        {
+            Log.LogError(ex, "Tool 1 validate/submit failed");
+            Snackbar.Add("Error: " + ex.Message, Severity.Error);
+        }
+        finally
+        {
+            _busy = false;
+            StateHasChanged();
+        }
+    }
+
+    /// <summary>
+    /// Submits with the answer to the pop-up (asked whenever the server says NeedsConfirmation, also again when
+    /// Submit itself comes back "needsConfirmation"). The 409 / headroom-changed re-check happens on the server;
+    /// a 409 that still reaches the portal is retried once with Force, like shared.js's second POST.
+    /// </summary>
+    private async Task<Tool1ResultDto?> SubmitAsync(Tool1RequestInputDto input, Tool1ResultDto decided)
+    {
+        var current = decided;
+        var force = false;
+        for (var attempt = 0; attempt < 4; attempt++)
+        {
+            var body = new Tool1SubmitInputDto
+            {
+                Gm = input.Gm, Colour = input.Colour, ColourText = input.ColourText, Month = input.Month, Qty = input.Qty,
+                SeenSeq = current.SeenSeq, Force = force,
+            };
+            if (current.NeedsConfirmation)
+            {
+                StateHasChanged();
+                var ans = await _confirm.AskAsync(current.ProposedQty ?? 0, current.MaxPermissibleQty ?? 0);
+                if (ans.Declined) body.Declined = true;
+                else body.ConfirmedQty = ans.ConfirmedQty;
+            }
+
+            var s = await Api.PostAsync<Tool1ResultDto>("api/v1/tool1/submit", body);
+            if (!s.IsSuccess || s.Data == null)
+            {
+                if (s.ResponseCode == 409 && !force) { force = true; continue; }
+                Toast(s.ResponseMessage, "Request decided but NOT saved to server (HTTP " + s.ResponseCode + ")");
+                return null;
+            }
+            if (s.Data.Status == "needsConfirmation" && s.Data.NeedsConfirmation) { current = s.Data; continue; }
+            return s.Data;
+        }
+        Snackbar.Add("⚠ The quantity could not be confirmed — please validate again.", Severity.Warning);
+        return null;
+    }
+
+    private async Task RefreshCountAsync()
+    {
+        var res = await Api.GetAsync<Tool1TodayDto>("api/v1/tool1/today");
+        if (res.IsSuccess && res.Data != null) _count = res.Data.Count;
+        await InvokeAsync(StateHasChanged);
+    }
+
+    // ── formClear ──
+    private void Clear()
+    {
+        _optCts?.Cancel();
+        _optSeq++;
+        _gm = "";
+        _colour = "";
+        _colourText = "";
+        _showColTxt = false;
+        _qty = "";
+        _month = "";
+        if (_opts != null)
+            _opts = new Tool1FormOptionsDto { ColourPlaceholder = "— enter material first —", Months = _opts.Months, MissingFiles = _opts.MissingFiles };
+        _results.Clear();
+    }
+
+    private void Toast(string? message, string? fallback)
+    {
+        var text = string.IsNullOrWhiteSpace(message) ? fallback : message;
+        if (string.IsNullOrWhiteSpace(text)) return;
+        Snackbar.Add(text, text.StartsWith("⚠", StringComparison.Ordinal) ? Severity.Warning : Severity.Info);
+    }
+
+    /// <summary>The raw number typed (the server truncates it like parseInt); null when empty / not a number.</summary>
+    private static double? ParseQty(string s) =>
+        double.TryParse(s, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var v) ? v : null;
+
+    public void Dispose()
+    {
+        _optCts?.Cancel();
+        _optCts?.Dispose();
+    }
+}

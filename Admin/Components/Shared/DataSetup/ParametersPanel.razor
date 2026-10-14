@@ -1,0 +1,176 @@
+@* "⚙ Parameters" of the v1.1.4 Data Setup sidebar (inputs pp-T1 … pp-borderTolerance, syncParams).
+   Each change is parsed like syncParams (JS parseFloat — a value that is not a number is ignored) and
+   saved with PUT api/v1/params: the full params object is re-read and the edit merged into it, so keys
+   this panel does not show (seasonCurrent, seasonFallback, grcAsOfPeriod …) are kept. *@
+@using System.Text.Json.Nodes
+@implements IDisposable
+@inject IAPICallService Api
+@inject ServerStatusService Status
+@inject ISnackbar Snackbar
+
+<div class="sb-sec" id="sb-params">
+    <div class="sb-lbl">⚙ Parameters</div>
+    @if (_loadError != null)
+    {
+        <div class="ds-perr">@_loadError</div>
+    }
+    <div class="p-row" style="flex-direction:column;align-items:flex-start;gap:4px">
+        <span class="p-lbl" style="font-weight:700">STR Threshold T (days)</span>
+        <div style="display:flex;gap:10px;width:100%">
+            <div style="flex:1">
+                <div class="p-sub">Tool 1 · PO Raise Assessment</div>
+                @Input("T1", "width:100%")
+            </div>
+            <div style="flex:1">
+                <div class="p-sub">Tool 2 · Raised PO Assessment</div>
+                @Input("T2", "width:100%")
+            </div>
+        </div>
+    </div>
+    <div class="p-row"><span class="p-lbl">Window D (days)</span>@Input("D")</div>
+    <div class="p-row"><span class="p-lbl">Mix % Min</span>@Input("mix")</div>
+    <div class="p-row"><span class="p-lbl">Ref Period N (months)</span>@Input("N")</div>
+    <div class="p-row"><span class="p-lbl">WOF Gate (weeks)</span>@Input("wof")</div>
+    <div class="p-row"><span class="p-lbl">Peer Min (styles)</span>@Input("peer")</div>
+    <div class="p-row" style="border-top:1px solid rgba(255,255,255,0.12);margin-top:6px;padding-top:6px">
+        <span class="p-lbl" style="color:#D97706;font-weight:600">STR Buffer % <span class="p-note">(Single Concept MRP)</span></span>
+        @Input("strBuffer", amber: true)
+    </div>
+    <div class="p-row">
+        <span class="p-lbl" style="color:#D97706;font-weight:600">Border Zone % <span class="p-note">(Multi Concept MRP)</span></span>
+        @Input("borderTolerance", amber: true)
+    </div>
+    <div class="p-row" style="border-top:1px solid rgba(255,255,255,0.12);margin-top:6px;padding-top:6px">
+        <span class="p-lbl" title="Mix % = colour sales ÷ MC sales across Day 1 to Day N of a daily F3 (default 45)">Mix Window (days) <span class="p-note">(daily F3)</span></span>
+        @Input("mixWindowDays")
+    </div>
+    <div class="p-row">
+        <span class="p-lbl" title="Up to this day of the month, last month's still-pending PO qty is carried into this month's pending PO figure (default 5)">Prev-month PO cut-off (day)</span>
+        @Input("prevMonthPendingCutoffDay")
+    </div>
+    <div class="p-help">
+        Mix Window: Mix % uses Day 1 … Day N of a daily F3. Cut-off: up to this day of the month, last month's
+        still-pending PO is carried into this month's pending PO.
+    </div>
+    <div class="ds-psave @(_saveError ? "er" : "")">
+        @if (_saving)
+        {
+            <span class="ds-spin"></span> <span>Saving parameters…</span>
+        }
+        else if (_saveMsg != null)
+        {
+            <span>@_saveMsg</span>
+        }
+    </div>
+</div>
+
+@code {
+    /// <summary>index.html S.params defaults (line 1645).</summary>
+    public static readonly IReadOnlyDictionary<string, double> Defaults = new Dictionary<string, double>
+    {
+        ["T1"] = 75, ["T2"] = 100, ["D"] = 75, ["mix"] = 2, ["N"] = 2, ["wof"] = 4, ["peer"] = 5,
+        ["mixWindowDays"] = 45, ["borderTolerance"] = 10, ["strBuffer"] = 5, ["prevMonthPendingCutoffDay"] = 5,
+    };
+
+    [Parameter] public bool ReadOnly { get; set; }
+    /// <summary>Raised after a successful save (new paramsVersion).</summary>
+    [Parameter] public EventCallback<long> OnSaved { get; set; }
+
+    private readonly Dictionary<string, string> _text = new();
+    private readonly Dictionary<string, int> _keys = new();
+    private long _loadedVersion;
+    private bool _saving;
+    private bool _saveError;
+    private string? _saveMsg;
+    private string? _loadError;
+
+    protected override async Task OnInitializedAsync()
+    {
+        foreach (var kv in Defaults) _text[kv.Key] = Js.NumberToString(kv.Value);
+        await LoadAsync();
+        Status.Changed += OnStatusChanged;
+    }
+
+    private async Task LoadAsync()
+    {
+        var res = await Api.GetAsync<JsonNode>("api/v1/params");
+        if (!res.IsSuccess) { _loadError = "Could not load parameters: " + res.ResponseMessage; return; }
+        _loadError = null;
+        _loadedVersion = Status.ParamsVersion;
+        if (res.Data is JsonObject o)
+            foreach (var k in Defaults.Keys)
+                if (o[k] is JsonValue v && v.TryGetValue<double>(out var d)) { _text[k] = Js.NumberToString(d); Bump(k); }
+    }
+
+    private void Bump(string k) => _keys[k] = _keys.GetValueOrDefault(k) + 1;
+
+    // shared.js poll: another planner changed the parameters → apply them here.
+    private void OnStatusChanged()
+    {
+        if (_saving || Status.ParamsVersion <= _loadedVersion || _loadedVersion == 0) return;
+        _ = InvokeAsync(async () => { await LoadAsync(); StateHasChanged(); });
+    }
+
+    private RenderFragment Input(string key, string? width = null, bool amber = false) => __builder =>
+    {
+        <input @key="(key + _keys.GetValueOrDefault(key))" class="p-inp @(amber ? "amber" : "")" id="pp-@key" value="@_text[key]"
+               style="@(width ?? "width:56px")" disabled="@ReadOnly" inputmode="decimal"
+               @onchange="e => ChangedAsync(key, e.Value?.ToString())" />
+    };
+
+    private async Task ChangedAsync(string key, string? raw)
+    {
+        // syncParams: const v = parseFloat(input.value); if (!isNaN(v)) S.params[k] = v;
+        var v = Js.ParseFloat(raw);
+        if (double.IsNaN(v) || double.IsInfinity(v))
+        {
+            _saveError = true;
+            _saveMsg = $"“{raw}” is not a number — kept {_text[key]}";
+            Bump(key);
+            return;
+        }
+        _text[key] = Js.NumberToString(v);
+        Bump(key);
+        await SaveAsync(key, v);
+    }
+
+    private async Task SaveAsync(string key, double v)
+    {
+        _saving = true; _saveError = false; _saveMsg = null;
+        StateHasChanged();
+        try
+        {
+            var cur = await Api.GetAsync<JsonNode>("api/v1/params");
+            if (!cur.IsSuccess) throw new InvalidOperationException(cur.ResponseMessage);
+            var full = cur.Data as JsonObject ?? new JsonObject();
+            full = (JsonObject)full.DeepClone();
+            foreach (var kv in Defaults)
+                if (full[kv.Key] == null) full[kv.Key] = kv.Value;
+            full[key] = v;
+            var res = await Api.PutAsync<JsonObject>("api/v1/params", full);
+            if (!res.IsSuccess) throw new InvalidOperationException(res.ResponseMessage);
+            long ver = 0;
+            if (res.Data?["paramsVersion"] is JsonValue pv && pv.TryGetValue<long>(out var l)) ver = l;
+            // refresh our copy of every value (someone may have changed another one meanwhile)
+            foreach (var k in Defaults.Keys)
+                if (full[k] is JsonValue fv && fv.TryGetValue<double>(out var d) && k != key) { _text[k] = Js.NumberToString(d); Bump(k); }
+            await Status.RefreshAsync();
+            Status.MarkLoaded();
+            _loadedVersion = Math.Max(ver, Status.ParamsVersion);
+            _saveMsg = "✓ Parameters saved to server" + (ver > 0 ? " (v" + ver + ")" : "");
+            await OnSaved.InvokeAsync(ver);
+        }
+        catch (InvalidOperationException e)
+        {
+            _saveError = true;
+            _saveMsg = "Parameters not saved — " + e.Message;
+            Snackbar.Add("⚠ Parameters not saved: " + e.Message, Severity.Error);
+        }
+        finally
+        {
+            _saving = false;
+        }
+    }
+
+    public void Dispose() => Status.Changed -= OnStatusChanged;
+}

@@ -1,0 +1,50 @@
+@* One upload slot of the v1.1.4 Data Setup sidebar (index.html .uslot): an invisible file input over
+   the whole box, the slot name, help text and the status line (us-st / ok / er). *@
+
+<div class="uslot @(State.Loaded ? "loaded" : "") @(State.Error ? "err" : "") @(State.Busy ? "busy" : "") @(Disabled && !State.Busy ? "disabled" : "") @Class"
+     id="sl-@Id" style="@Style">
+    @* The input must stay in the DOM while the upload streams (Blazor reads the file through it). *@
+    <InputFile @key="State.InputKey" OnChange="OnChange" accept="@Accept" multiple="@Multiple" title=""
+               style="@(State.Busy || Disabled ? "pointer-events:none" : null)" tabindex="@(State.Busy || Disabled ? -1 : 0)" />
+    <div class="us-name">
+        @Name
+        @if (Clearable && OnClear.HasDelegate && !State.Busy)
+        {
+            <a class="us-clear" @onclick="OnClear" @onclick:stopPropagation="true">Clear</a>
+        }
+    </div>
+    @if (!string.IsNullOrEmpty(Description))
+    {
+        <div class="us-desc">@((MarkupString)Description)</div>
+    }
+    <div class="us-st @State.StatusClass" id="st-@Id" title="@State.Title">
+        @if (State.Busy)
+        {
+            <span class="ds-spin"></span>
+        }
+        @State.Status
+    </div>
+    @if (State.Busy && State.Progress is int p)
+    {
+        <div class="us-progress"><div style="width:@(p)%"></div></div>
+    }
+    @ChildContent
+</div>
+
+@code {
+    [Parameter, EditorRequired] public string Id { get; set; } = "";
+    [Parameter, EditorRequired] public string Name { get; set; } = "";
+    [Parameter] public string? Description { get; set; }
+    [Parameter, EditorRequired] public SlotState State { get; set; } = new();
+    [Parameter] public string Accept { get; set; } = DataSetupText.Accept;
+    [Parameter] public bool Multiple { get; set; }
+    [Parameter] public bool Clearable { get; set; }
+    [Parameter] public bool Disabled { get; set; }
+    [Parameter] public string? Class { get; set; }
+    [Parameter] public string? Style { get; set; }
+    [Parameter] public EventCallback<InputFileChangeEventArgs> OnFiles { get; set; }
+    [Parameter] public EventCallback OnClear { get; set; }
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+
+    private Task OnChange(InputFileChangeEventArgs e) => OnFiles.InvokeAsync(e);
+}

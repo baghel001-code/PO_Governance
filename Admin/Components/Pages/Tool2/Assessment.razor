@@ -1,0 +1,379 @@
+@page "/planner/assessment"
+@* Planner "📋 PO Assessment" (Tool 2) — port of index.html #sb-assess + #view-assess (runAssessment,
+   renderAssessmentDashboard, renderBrandSummary, filterAssTable, renderRollupTables, exportAssXLSX / CSV,
+   toggleCatHeadExportPanel) and shared.js enterHistoryRun / exitHistory. Every number and text comes from
+   api/v1/assessment (Tool2ViewDto, see docs/ui/tool2.md); this page only lays it out.
+   ?run={id} re-opens a saved run (History → Open). *@
+@attribute [Authorize(Roles = Roles.Staff)]
+@using Application.DTOs.Platform
+@using Domain.Entities.Store
+@using Microsoft.AspNetCore.Components.Authorization
+@using Microsoft.AspNetCore.Components.Server.ProtectedBrowserStorage
+@inject IAPICallService Api
+@inject FileDownloadService Files
+@inject ISnackbar Snackbar
+@inject IDialogService Dialogs
+@inject NavigationManager Nav
+@inject IHttpClientFactory HttpFactory
+@inject AuthenticationStateProvider AuthState
+@inject ProtectedSessionStorage SessionStore
+@inject ILogger<Assessment> Log
+
+<PageTitle>PO Assessment · VMM PO Governance</PageTitle>
+<HeadContent>
+    <link rel="stylesheet" href="css/datasetup.css" />
+    <link rel="stylesheet" href="css/tool2.css" />
+</HeadContent>
+
+<div class="ds-shell">
+    @* ── PO Assessment sidebar (index.html #sb-assess) ── *@
+    <aside class="ds-sidebar" id="sb-assess">
+        <DataStatusPanel Datasets="_datasets" />
+        <div class="sb-sec">
+            <div class="sb-lbl">▸ Raised PO Assessment</div>
+            <div class="t2-sb-text">Assesses every line in F2 automatically. Upload files in Data Setup first.</div>
+            <button id="btn-run-assessment" class="t2-run-btn" disabled="@(_running || !_ready)" @onclick="RunAsync"
+                    title="@(_options is { HasF2: false } ? "Upload the F2 (Released PO) file in Data Setup first" : null)">
+                @(_running ? "⏳ Running…" : "▶ Run Assessment")
+            </button>
+            <div id="ass-status" class="t2-run-status @(_statusWarn ? "warn" : "")">@StatusText</div>
+            <a class="t2-help-link" href="/category/how-it-works">❓ How Tool 2 works (Multi / Single Concept, export)</a>
+        </div>
+        <div class="t2-sb-foot">
+            <span>Lines assessed</span>
+            <span class="session-pill" id="ass-line-count">@(_view?.Lines.Count ?? 0)</span>
+        </div>
+    </aside>
+
+    <div class="ds-main t2-page" id="view-assess">
+        <div style="margin-bottom:20px">
+            <div class="pg-title">📋 Raised PO Assessment</div>
+            <div class="pg-accent"></div>
+            <div class="pg-sub">Batch assessment of all lines in F2 (Released PO file). Click Run Assessment in the sidebar.</div>
+        </div>
+
+        @if (_history && _view != null)
+        {
+            <div class="t2-hist" id="shared-history-banner">
+                <span>
+                    📜 <strong>Viewing saved run @(_view.RunNo ?? _view.RunId)</strong> of @DataSetupText.FmtTime(_view.At)@(string.IsNullOrEmpty(_view.By) ? "" : " by " + _view.By)
+                    — dashboard, tables, Excel export and parameters are as they were then.
+                    @if (_view.MissingFiles.Count > 0)
+                    {
+                        <span class="t2-hist-missing"> Not available any more: @string.Join(", ", _view.MissingFiles).</span>
+                    }
+                </span>
+                <button @onclick="BackToCurrent">Back to current data</button>
+            </div>
+        }
+
+        @if (!_ready || _loadingRun)
+        {
+            <div class="t2-loading">⏳ @(_loadingRun ? "Loading saved run…" : "Loading…")</div>
+        }
+        else if (_loadError != null && _view == null)
+        {
+            <div class="t2-empty">
+                <div style="font-size:40px;margin-bottom:12px">⚠</div>
+                <div class="t2-empty-title">@_loadError</div>
+                <div class="t2-empty-text"><a class="pg-link" @onclick="BackToCurrent">Back to current data</a></div>
+            </div>
+        }
+        else if (_view == null)
+        {
+            <div class="t2-empty" id="ass-empty">
+                <div style="font-size:44px;margin-bottom:14px">
+                    <svg width="48" height="48" fill="none" stroke="var(--vmm-pink-m)" stroke-width="1.5" viewBox="0 0 24 24"><path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2" /><rect x="9" y="3" width="6" height="4" rx="1" /><path d="M9 12h6M9 16h4" /></svg>
+                </div>
+                <div class="t2-empty-title">No assessment run yet</div>
+                <div class="t2-empty-text">Upload files in <strong><a href="/planner/data" style="color:inherit">Data Setup</a></strong>, then click <strong>▶ Run Assessment</strong> in the sidebar.</div>
+            </div>
+        }
+        else
+        {
+            <div id="ass-results" class="@(_running ? "t2-busy" : "")">
+                <T2KpiStrip Kpis="_view.Kpis" OnKpiClick="KpiClickAsync" />
+
+                @if (!_showDetail)
+                {
+                    <T2BrandSummary Nodes="_view.Tree" Lines="_lines" OnDetailView="ShowDetailAsync" OnRecommend="RecommendLineAsync">
+                        <Actions>
+                            <T2CatHeadPicker Id="cathead-exp-a" Names="_view.CatHeads" Selected="_catSel" @bind-SeparateFiles="_separate" OnChanged="StateHasChanged" />
+                            <button class="t2-xbtn ghost" title="All lines as CSV" disabled="@_exporting" @onclick='() => ExportAsync("csv")'>⬇ CSV</button>
+                            <button class="t2-xbtn" disabled="@_exporting" @onclick='() => ExportAsync("xlsx")'>@(_exporting ? "⏳ Exporting…" : "⬇ Excel")</button>
+                        </Actions>
+                    </T2BrandSummary>
+                }
+                else
+                {
+                    <T2DetailView Detail="_detail" Options="_view.DetailFilters" Filter="_filter" Lines="_lines" Busy="_detailBusy"
+                                  OnFilterChanged="DetailChangedAsync" OnBack="() => _showDetail = false"
+                                  OnRecommend="RecommendLineAsync" OnRecommendGroup="RecommendGroupAsync">
+                        <Actions>
+                            <T2CatHeadPicker Id="cathead-exp-b" Light="true" Names="_view.CatHeads" Selected="_catSel" @bind-SeparateFiles="_separate" OnChanged="StateHasChanged" />
+                            <button class="t2-xbtn" style="padding:7px 14px" disabled="@_exporting" @onclick='() => ExportAsync("xlsx")'>@(_exporting ? "⏳ Exporting…" : "⬇ Excel")</button>
+                        </Actions>
+                    </T2DetailView>
+                }
+
+                <div class="t2-grid2">
+                    <div class="t2-card"><div class="t2-card-title">By Division</div><T2BarChart Id="ass-div-chart" Bars="_view.DivisionChart" Legend="true" /></div>
+                    <div class="t2-card"><div class="t2-card-title">By Delivery Month</div><T2BarChart Id="ass-month-chart" Bars="_view.MonthChart" /></div>
+                </div>
+
+                <T2DivMcTable Rollup="_rollup" Options="_view.RollupFilters" Filter="_rollupFilter" Busy="_rollupBusy" OnFilterChanged="RollupChangedAsync" />
+
+                <div class="t2-grid12">
+                    <div class="t2-card"><div class="t2-card-title" style="margin-bottom:12px">Engine Split</div><T2EngineSplit Rows="_view.EngineSplit" /></div>
+                    <T2VendorTable Rollup="_rollup" Busy="_rollupBusy" />
+                </div>
+            </div>
+        }
+    </div>
+</div>
+
+@code {
+    private const string LastRunKey = "t2.lastRunId";
+
+    /// <summary>?run={id}: a saved run opened from History.</summary>
+    [SupplyParameterFromQuery(Name = "run")] public string? RunParam { get; set; }
+
+    private bool _ready, _running, _loadingRun, _exporting, _detailBusy, _rollupBusy, _showDetail, _history, _statusWarn;
+    private string? _loadError, _statusOverride;
+    private string? _runId;
+    private string? _shownParam;
+    private Tool2ViewDto? _view;
+    private Tool2OptionsDto? _options;
+    private IReadOnlyDictionary<string, DatasetEntry>? _datasets;
+    private Dictionary<int, Tool2LineDto> _lines = new();
+    private Tool2DetailViewDto _detail = new();
+    private Tool2DetailFilterDto _filter = new();
+    private Tool2RollupDto _rollup = new();
+    private Tool2RollupFilterDto _rollupFilter = new();
+    private readonly HashSet<string> _catSel = new();
+    private bool _separate = true;
+    private int _detailSeq, _rollupSeq, _openSeq;
+
+    private string StatusText =>
+        _statusOverride ?? (_view != null ? _view.StatusText
+            : _options is { HasF2: false } ? "Upload the F2 (Released PO) file in Data Setup first."
+            : _options != null ? $"{Domain.Entities.Common.Js.GroupIN(_options.AssessableLines)} F2 lines ready to assess." : "");
+
+    // Data is loaded once the circuit is interactive (not during prerender) so large runs are fetched once.
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender) return;
+        _shownParam = RunParam;
+        var side = LoadSideAsync();
+        if (!string.IsNullOrEmpty(RunParam)) await OpenSavedAsync(RunParam);
+        else await RestoreLastRunAsync();
+        await side;
+        _ready = true;
+        StateHasChanged();
+    }
+
+    // History → Open / "Back to current data" change only the query string.
+    protected override async Task OnParametersSetAsync()
+    {
+        if (!_ready || RunParam == _shownParam) return;
+        _shownParam = RunParam;
+        if (!string.IsNullOrEmpty(RunParam)) await OpenSavedAsync(RunParam);
+        else if (_history || _loadError != null)
+        {
+            _history = false;
+            _loadError = null;
+            ClearView();
+            await RestoreLastRunAsync();
+            Snackbar.Add("Back to current data", Severity.Info);
+        }
+    }
+
+    private async Task LoadSideAsync()
+    {
+        var opt = Api.GetAsync<Tool2OptionsDto>("api/v1/assessment/options");
+        var st = Api.GetAsync<StatusResponse>("api/v1/status");
+        var o = await opt;
+        if (o.IsSuccess) _options = o.Data;
+        else Snackbar.Add("⚠ " + o.ResponseMessage, Severity.Error);
+        var s = await st;
+        if (s.IsSuccess && s.Data != null) _datasets = s.Data.Datasets ?? new Dictionary<string, DatasetEntry>();
+    }
+
+    private async Task OpenSavedAsync(string id)
+    {
+        var seq = ++_openSeq;
+        _loadingRun = true;
+        _loadError = null;
+        StateHasChanged();
+        var res = await Api.GetAsync<Tool2ViewDto>("api/v1/assessment/runs/" + Uri.EscapeDataString(id));
+        if (seq != _openSeq) return;
+        _loadingRun = false;
+        if (!res.IsSuccess || res.Data == null)
+        {
+            ClearView();
+            _history = false;
+            _loadError = "Could not open saved run " + id + ": " + res.ResponseMessage;
+            Snackbar.Add("⚠ " + res.ResponseMessage, Severity.Error);
+            return;
+        }
+        SetView(res.Data, id, history: true);
+        _statusOverride = "📜 Saved run — " + res.Data.Lines.Count + " lines";
+    }
+
+    /// <summary>The last run of this browser tab (v1.1.4 kept batchResults while the page stayed open).</summary>
+    private async Task RestoreLastRunAsync()
+    {
+        string? id = null;
+        try
+        {
+            var r = await SessionStore.GetAsync<string>(LastRunKey);
+            id = r.Success ? r.Value : null;
+        }
+        catch (Exception e) { Log.LogDebug(e, "Session storage not readable"); }
+        if (string.IsNullOrEmpty(id)) return;
+        var res = await Api.GetAsync<Tool2ViewDto>("api/v1/assessment/runs/" + Uri.EscapeDataString(id));
+        if (res.IsSuccess && res.Data != null && string.IsNullOrEmpty(RunParam)) SetView(res.Data, id, history: false);
+    }
+
+    private void ClearView()
+    {
+        _view = null;
+        _runId = null;
+        _lines = new();
+        _statusOverride = null;
+        _statusWarn = false;
+        _showDetail = false;
+        _catSel.Clear();
+    }
+
+    private void SetView(Tool2ViewDto v, string? runId, bool history)
+    {
+        _view = v;
+        _runId = runId ?? v.RunId;
+        _history = history;
+        _lines = v.Lines.GroupBy(l => l.Idx).ToDictionary(g => g.Key, g => g.First());
+        _detail = v.Detail;
+        _filter = new Tool2DetailFilterDto { Tab = "B" };
+        _rollup = v.Rollup;
+        _rollupFilter = new Tool2RollupFilterDto();
+        _showDetail = false;
+        _statusOverride = null;
+        _statusWarn = false;
+        _catSel.Clear(); // the Category Head selection is cleared on every new run
+    }
+
+    private async Task RunAsync()
+    {
+        if (_running) return;
+        _running = true;
+        _statusOverride = "⏳ Assessing F2 lines…";
+        StateHasChanged();
+        var res = await Api.PostAsync<Tool2RunResultDto>("api/v1/assessment/run");
+        _running = false;
+        if (!res.IsSuccess || res.Data == null)
+        {
+            _statusOverride = null;
+            Snackbar.Add(res.ResponseMessage, Severity.Error);
+            return;
+        }
+        var v = res.Data.View;
+        SetView(v, res.Data.RunId ?? v.RunId, history: false);
+        if (!string.IsNullOrEmpty(v.Toast)) Snackbar.Add(v.Toast, Severity.Success);
+        if (!string.IsNullOrEmpty(v.SaveError))
+        {
+            _statusWarn = true;
+            Snackbar.Add("⚠ " + v.SaveError, Severity.Warning);
+        }
+        try { if (_runId != null) await SessionStore.SetAsync(LastRunKey, _runId); }
+        catch (Exception e) { Log.LogDebug(e, "Session storage not writable"); }
+        if (!string.IsNullOrEmpty(RunParam))
+        {
+            // A new run leaves history mode: drop ?run= without reloading the view.
+            _shownParam = null;
+            Nav.NavigateTo("/planner/assessment", replace: true);
+        }
+        _ = RefreshSideAsync();
+    }
+
+    private async Task RefreshSideAsync()
+    {
+        await LoadSideAsync();
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private void BackToCurrent() => Nav.NavigateTo("/planner/assessment");
+
+    private async Task ShowDetailAsync()
+    {
+        _showDetail = true;
+        await Task.CompletedTask;
+    }
+
+    private async Task KpiClickAsync(string decision)
+    {
+        _showDetail = true;
+        _filter.Dec = decision;
+        await DetailChangedAsync();
+    }
+
+    private async Task DetailChangedAsync()
+    {
+        if (_runId == null) return;
+        var seq = ++_detailSeq;
+        _detailBusy = true;
+        StateHasChanged();
+        var res = await Api.PostAsync<Tool2DetailViewDto>($"api/v1/assessment/runs/{Uri.EscapeDataString(_runId)}/detail", _filter);
+        if (seq != _detailSeq) return;
+        _detailBusy = false;
+        if (res.IsSuccess && res.Data != null) _detail = res.Data;
+        else Snackbar.Add("⚠ " + res.ResponseMessage, Severity.Error);
+    }
+
+    private async Task RollupChangedAsync()
+    {
+        if (_runId == null) return;
+        var seq = ++_rollupSeq;
+        _rollupBusy = true;
+        StateHasChanged();
+        var res = await Api.PostAsync<Tool2RollupDto>($"api/v1/assessment/runs/{Uri.EscapeDataString(_runId)}/rollup", _rollupFilter);
+        if (seq != _rollupSeq) return;
+        _rollupBusy = false;
+        if (res.IsSuccess && res.Data != null) _rollup = res.Data;
+        else Snackbar.Add("⚠ " + res.ResponseMessage, Severity.Error);
+    }
+
+    private async Task ExportAsync(string format)
+    {
+        if (_runId == null || _exporting) return;
+        _exporting = true;
+        StateHasChanged();
+        try
+        {
+            var client = new Tool2ExportClient(HttpFactory, AuthState, Api);
+            var req = new Tool2ExportRequestDto
+            {
+                RunId = _runId,
+                Format = format,
+                CatHeads = format == "csv" || _catSel.Count == 0 ? null : _view!.CatHeads.Where(_catSel.Contains).ToList(),
+                SeparateFiles = _separate,
+            };
+            var (file, msg) = await client.ExportAsync(req);
+            if (!file.IsSuccess || file.Data == null)
+            {
+                Snackbar.Add(file.ResponseMessage, Severity.Error);
+                return;
+            }
+            await Files.SaveAsync(file.Data);
+            Snackbar.Add(msg ?? (format == "csv" ? "CSV exported ✓" : "Excel exported ✓"), Severity.Success);
+        }
+        finally
+        {
+            _exporting = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task RecommendLineAsync(Tool2LineDto line) => await RecommendationDialog.ShowAsync(Dialogs, T2Ui.RecRequest(line));
+
+    private async Task RecommendGroupAsync(Tool2ColourGroupDto g) => await RecommendationDialog.ShowAsync(Dialogs, T2Ui.RecRequest(g));
+}

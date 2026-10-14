@@ -1,0 +1,36 @@
+@* "By Division" / "By Delivery Month" stacked bars (renderAssessmentDashboard). Widths come from the API. *@
+@using System.Globalization
+<div id="@Id">
+    @foreach (var b in Bars)
+    {
+        <div class="t2-bar">
+            <div class="t2-bar-top">
+                <span class="l @(Legend ? "" : "wide")" title="@b.Label">@b.Label</span>
+                <span class="n">@b.Note</span>
+            </div>
+            <div class="t2-bar-track" title="Retain @b.Retain · Reduce @b.Reduce · Cancel @b.Cancel · Watch @b.Watch">
+                @for (var i = 0; i < Math.Min(b.Widths.Count, Colors.Length); i++)
+                {
+                    <div style="width:@(b.Widths[i].ToString("0.###", CultureInfo.InvariantCulture))%;background:@Colors[i]"></div>
+                }
+            </div>
+        </div>
+    }
+    @if (Legend)
+    {
+        <div class="t2-legend">
+            <span><i style="background:#00873E"></i>Retain</span>
+            <span><i style="background:#D97706"></i>Reduce</span>
+            <span><i style="background:#DC2626"></i>Cancel</span>
+            <span><i style="background:#FBBF24"></i>Watch</span>
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter] public string Id { get; set; } = "";
+    [Parameter] public List<Tool2ChartBarDto> Bars { get; set; } = new();
+    [Parameter] public bool Legend { get; set; }
+
+    private static readonly string[] Colors = { "#00873E", "#D97706", "#DC2626", "#FBBF24" };
+}

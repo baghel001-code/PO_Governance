@@ -1,0 +1,134 @@
+@* The "{decision} – Detailed Computation" expander of a line: buildDetailedReason(r) (index.html line 6201)
+   + _cautionBoxHtml. Everything is in Tool2LineDto.reason; this only lays it out. *@
+@{
+    var (col, bg) = T2Ui.ReasonColors(Line.Decision);
+    var r = Line.Reason;
+}
+<div class="t2-reason" style="background:@bg;border-left-color:@col">
+    <div class="t2-reason-title" style="color:@col">
+        <span>@Line.Decision@Separator@("Detailed Computation")</span>
+        @if (OnRecommend.HasDelegate && !string.IsNullOrEmpty(Line.Gm))
+        {
+            <button class="t2-rec-btn" title="Open the Stock &amp; PO Recommendation for @Line.Gm"
+                    @onclick="() => OnRecommend.InvokeAsync(Line)" @onclick:stopPropagation="true">📊 View Recommendation</button>
+        }
+    </div>
+
+    @if (r.Kvs.Count > 0)
+    {
+        <div class="t2-kvs">
+            @foreach (var kv in r.Kvs)
+            {
+                <div class="t2-kv"><div class="t2-kv-l">@kv.Label</div><div class="t2-kv-v">@kv.Value</div></div>
+            }
+        </div>
+    }
+
+    <div class="t2-why"><strong>Why this action: </strong><T2Segs Segs="r.Why" /></div>
+
+    @if (r.Caution is { Items.Count: > 0 } sc)
+    {
+        <div class="t2-caution">
+            <strong class="t2-caution-h">⚠ Caution — STR</strong><br />
+            @for (var i = 0; i < sc.Items.Count; i++)
+            {
+                var it = sc.Items[i];
+                var ii = i;
+                var open = _cautionOpen.Contains(ii);
+                <div style="margin-top:@(ii > 0 ? "6px" : "2px")">
+                    <span>@it.Text</span>
+                    <button class="t2-caution-btn" @onclick="() => ToggleCaution(ii)" @onclick:stopPropagation="true">@(open ? "▲ Hide calculation" : "▾ Show calculation")</button>
+                    @if (open && it.Cs.Chain.Count > 0)
+                    {
+                        <div style="margin-top:6px;overflow-x:auto">
+                            <table class="t2-ctbl">
+                                <thead><tr><th>Month</th><th>Open</th><th>+PO</th><th>&minus;Fcst</th><th>=Close</th></tr></thead>
+                                <tbody>
+                                    @for (var ci = 0; ci < Math.Min(4, it.Cs.Chain.Count); ci++)
+                                    {
+                                        var c = it.Cs.Chain[ci];
+                                        <tr class="@(ci == it.Cs.D1Idx ? "ws" : "")">
+                                            <td style="font-weight:700">@c.MKey@(ci == 0 ? " (a)" : "")</td>
+                                            <td class="t2-r mono">@T2Ui.Fmt(c.OpenStock)</td>
+                                            <td class="t2-r mono" style="color:#00873E">@T2Ui.Fmt(c.PoIn)</td>
+                                            <td class="t2-r mono" style="color:#D97706">@T2Ui.Fmt(c.ColPlan)</td>
+                                            <td class="t2-r mono" style="font-weight:700">@T2Ui.Fmt(c.CloseStock)</td>
+                                        </tr>
+                                    }
+                                </tbody>
+                            </table>
+                            <div class="t2-ctbl-foot">@it.Footer</div>
+                        </div>
+                    }
+                </div>
+            }
+        </div>
+    }
+
+    @if (r.StrSteps is { Count: > 0 })
+    {
+        <div class="t2-strsteps">
+            <strong>STR Computation Steps:</strong>
+            @foreach (var line in r.StrSteps)
+            {
+                <div><T2Segs Segs="line" /></div>
+            }
+        </div>
+    }
+
+    @if (r.Steps is { } st)
+    {
+        <div class="t2-step-h">Step 1 — Article &amp; Peer Pool</div>
+        <div class="t2-tiles">
+            @foreach (var t in st.Step1)
+            {
+                <div class="t2-tile"><div class="t2-tile-v" style="color:@t.Color">@t.Value</div><div class="t2-tile-l">@t.Label</div></div>
+            }
+        </div>
+        @if (st.Step2 is { Count: > 0 })
+        {
+            <div class="t2-step-h" style="margin-top:0">Step 2 — PDSTR vs Peer Average</div>
+            <div class="t2-tiles s2">
+                @foreach (var t in st.Step2)
+                {
+                    <div class="t2-tile"><div class="t2-tile-v" style="color:@t.Color">@t.Value</div><div class="t2-tile-l">@t.Label</div></div>
+                }
+            </div>
+        }
+        @if (st.Step3Heading != null)
+        {
+            <div class="t2-step-h" style="margin-top:0">@st.Step3Heading</div>
+            <div class="t2-rank-bar">
+                <div class="q" style="left:25%"></div><div class="q" style="left:50%"></div><div class="q" style="left:75%"></div>
+                <div class="dot" style="left:@(Pos(st.Step3MarkerPos))%;background:@st.DecisionColor" title="@st.Step3Heading"></div>
+            </div>
+            <div class="t2-rank-lbls"><span>Q4 Slow</span><span>Q3 Watch</span><span>Q2 Healthy</span><span>Q1 Top</span></div>
+        }
+        @if (st.Step4 is { } bz)
+        {
+            <div class="t2-step-h" style="margin-top:0">Step 4 — Border Zone Check (PDSTR Gap)</div>
+            <div class="t2-bz">@bz.Threshold<br />@bz.Gap<br />Result                : <strong style="color:@(bz.InZone ? "#00873E" : "#DC2626")">@bz.Result</strong></div>
+            <div class="t2-verdict" style="background:@bz.Bg;border-left-color:@bz.Color;color:@bz.Color">@bz.Message</div>
+        }
+        @if (st.AbsBlockNote != null)
+        {
+            <div class="t2-verdict" style="background:#FEF2F2;border-left-color:#DC2626;color:#DC2626">@st.AbsBlockNote</div>
+        }
+    }
+</div>
+
+@code {
+    [Parameter, EditorRequired] public Tool2LineDto Line { get; set; } = default!;
+    /// <summary>" - " (tree) or " — " (detail table).</summary>
+    [Parameter] public string Separator { get; set; } = " — ";
+    [Parameter] public EventCallback<Tool2LineDto> OnRecommend { get; set; }
+
+    private readonly HashSet<int> _cautionOpen = new();
+
+    private void ToggleCaution(int i)
+    {
+        if (!_cautionOpen.Remove(i)) _cautionOpen.Add(i);
+    }
+
+    private static string Pos(double? p) => (p ?? 50).ToString(System.Globalization.CultureInfo.InvariantCulture);
+}

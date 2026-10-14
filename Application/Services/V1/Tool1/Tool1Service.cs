@@ -23,9 +23,10 @@ namespace Application.Services.V1.Tool1
         /// <summary>
         /// Apply v1.1.4 README "What changed" item 1 ("Recommend Reduced Qty" when Max Permissible is above 0 but
         /// the proposal breaches; kept after confirming a smaller quantity). The shipped index.html still labels
-        /// these Hold / Auto Allow; false reproduces that exactly (used by the parity tests). Default true.
+        /// these Hold / Auto Allow; false reproduces that exactly (used by the parity tests). Default false —
+        /// the running v1.1.4 behaviour; set "Tool1:ReducedLabel": true in appsettings to switch it on.
         /// </summary>
-        public bool ReducedLabel { get; set; } = true;
+        public bool ReducedLabel { get; set; }
     }
 
     public sealed class Tool1Service : ITool1Service

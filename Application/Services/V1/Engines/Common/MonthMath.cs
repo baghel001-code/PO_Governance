@@ -36,11 +36,13 @@ namespace Application.Services.V1.Engines.Common
         /// <summary>Port of index.html <c>ymKey(y,m)</c> (line 1890): "2026-07".</summary>
         public static string YmKey(int y, int m) => y.ToString(CultureInfo.InvariantCulture) + "-" + m.ToString(CultureInfo.InvariantCulture).PadLeft(2, '0');
 
-        /// <summary>Port of index.html <c>monLabel(y,m)</c> (line 1758): <c>toLocaleString('en-IN',{month:'short',year:'numeric'})</c> → "Oct 2026".</summary>
+        /// <summary>Port of index.html <c>monLabel(y,m)</c> (line 1758): <c>toLocaleString('en-IN',{month:'short',year:'numeric'})</c> → "Oct 2026" ("Sept 2026" for September).</summary>
         public static string MonLabel(int y, int m)
         {
             var (yy, mm) = AddMonths(y, m, 0);
-            return CultureInfo.InvariantCulture.DateTimeFormat.GetAbbreviatedMonthName(mm) + " " + yy.ToString(CultureInfo.InvariantCulture);
+            // en-IN (ICU / Chrome, Node) abbreviates September as "Sept"; every other month as the invariant culture.
+            var name = mm == 9 ? "Sept" : CultureInfo.InvariantCulture.DateTimeFormat.GetAbbreviatedMonthName(mm);
+            return name + " " + yy.ToString(CultureInfo.InvariantCulture);
         }
 
         /// <summary>Port of index.html <c>isMMYYYY(k)</c> (line 1712): /^\d{2}\.\d{4}$/ on the trimmed key.</summary>

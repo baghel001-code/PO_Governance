@@ -1,0 +1,14 @@
+@* index.html dpill(decision) + shared.js approvalBadge(r) under it. *@
+<span class="pf-dp @Fmt.DpillClass(Text)">@Text</span>
+@if (Request != null && ShowApproval)
+{
+    <ApprovalBadge Request="Request" />
+}
+
+@code {
+    [Parameter] public string? Decision { get; set; }
+    [Parameter] public JsonObject? Request { get; set; }
+    [Parameter] public bool ShowApproval { get; set; } = true;
+
+    private string Text => Decision ?? Request.Str("decision");
+}

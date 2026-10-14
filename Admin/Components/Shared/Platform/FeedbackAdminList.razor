@@ -1,0 +1,132 @@
+@* feedback.js F.renderAdmin(): every user's feedback, status filter, search, average rating, status + note per item. *@
+@inject IAPICallService Api
+@inject ISnackbar Snackbar
+
+@if (_error != null)
+{
+    <div class="card pf-err">@_error</div>
+}
+else if (_items == null)
+{
+    <div class="pf-empty">Loading…</div>
+}
+else
+{
+    var counts = _items.GroupBy(f => f.Str("status")).ToDictionary(g => g.Key, g => g.Count());
+    var rated = _items.Where(f => f.Truthy("rating")).ToList();
+    var avg = rated.Count > 0 ? (rated.Sum(f => f.Num("rating") ?? 0) / rated.Count).ToString("0.0", System.Globalization.CultureInfo.InvariantCulture) : "—";
+    var list = Filtered;
+    <div style="display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin-bottom:12px">
+        @foreach (var s in new[] { "", "new", "in progress", "closed" })
+        {
+            var label = s.Length > 0 ? FeedbackStatusBadge.Statuses[s].Label + " (" + counts.GetValueOrDefault(s) + ")" : "All (" + _items.Count + ")";
+            <button class="pf-pill navy @(_status == s ? "on" : "")" style="padding:6px 12px" @onclick="() => _status = s">@label</button>
+        }
+        <MudTextField T="string" Value="_q" ValueChanged="v => _q = v ?? string.Empty" Placeholder="Search text, person, article…"
+                      Variant="Variant.Outlined" Margin="Margin.Dense" Style="width:260px" Class="ml-auto flex-grow-0" />
+        <span style="font-size:12px;color:#46526f">Average usefulness: <strong>@avg</strong> / 5 (@rated.Count ratings)</span>
+    </div>
+    @if (list.Count == 0)
+    {
+        <div class="card pf-empty">No feedback yet.</div>
+    }
+    @foreach (var f in list)
+    {
+        var id = f.Str("id");
+        var e = Edit(f);
+        var st = FeedbackStatusBadge.Statuses.TryGetValue(f.Str("status"), out var x) ? x : FeedbackStatusBadge.Statuses["new"];
+        <div class="card" style="padding:14px 16px;margin-bottom:10px;border-left:4px solid @st.Color" data-testid="fb-item">
+            <div style="display:flex;flex-wrap:wrap;gap:10px;align-items:center">
+                <strong style="font-family:var(--mono);color:#E8006E">@id</strong>
+                <FeedbackStatusBadge Status="@f.Str("status")" />
+                <span style="font-size:12px;font-weight:700">@f.Str("kind")</span>
+                <span style="font-size:12px;color:#46526f">· @f.Str("screen")</span>
+                @if (f.Truthy("article"))
+                {
+                    <span style="font-size:12px;color:#46526f;font-family:var(--mono)">· @f.Str("article")</span>
+                }
+                @if (f.Truthy("rating"))
+                {
+                    <span style="font-size:12px;color:#46526f">· rated @f.Str("rating")/5</span>
+                }
+                <span style="margin-left:auto;font-size:11.5px;color:#8a94ad">@(f.Truthy("byName") ? f.Str("byName") : f.Str("by")) · @Fmt.When(f.Str("at"))</span>
+            </div>
+            <div style="margin:8px 0;font-size:13px;color:#15213f;white-space:pre-wrap">@f.Str("message")</div>
+            <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+                <div style="width:150px;flex:none">
+                <MudSelect T="string" @bind-Value="e.Status" Variant="Variant.Outlined" Margin="Margin.Dense" Dense="true">
+                    @foreach (var kv in FeedbackStatusBadge.Statuses)
+                    {
+                        <MudSelectItem Value="@kv.Key">@kv.Value.Label</MudSelectItem>
+                    }
+                </MudSelect>
+                </div>
+                <MudTextField T="string" @bind-Value="e.Note" Placeholder="Reply / note (the user sees it)" Variant="Variant.Outlined" Margin="Margin.Dense"
+                              Style="min-width:220px" Class="flex-grow-1" Immediate="true" />
+                <button class="btn-pri" disabled="@_busy" @onclick="() => SaveAsync(id)">Save</button>
+                @if (f.Truthy("updatedBy"))
+                {
+                    <span style="font-size:11px;color:#8a94ad">updated by @f.Str("updatedBy") · @Fmt.When(f.Str("updatedAt"))</span>
+                }
+            </div>
+        </div>
+    }
+}
+
+@code {
+    private sealed class EditState
+    {
+        public string Status { get; set; } = "new";
+        public string Note { get; set; } = "";
+    }
+
+    private List<JsonObject>? _items;
+    private string? _error;
+    private string _status = "", _q = "";
+    private bool _busy;
+    private readonly Dictionary<string, EditState> _edits = new();
+
+    private List<JsonObject> Filtered => (_items ?? new()).Where(f =>
+    {
+        if (_status.Length > 0 && f.Str("status") != _status) return false;
+        if (_q.Length > 0)
+        {
+            var q = _q.ToLowerInvariant();
+            if (!string.Join(" ", f.Str("message"), f.Str("byName"), f.Str("by"), f.Str("article"), f.Str("screen"), f.Str("kind")).ToLowerInvariant().Contains(q)) return false;
+        }
+        return true;
+    }).ToList();
+
+    private EditState Edit(JsonObject f)
+    {
+        var id = f.Str("id");
+        if (!_edits.TryGetValue(id, out var e))
+            _edits[id] = e = new EditState { Status = FeedbackStatusBadge.Statuses.ContainsKey(f.Str("status")) ? f.Str("status") : "new", Note = f.Str("note") };
+        return e;
+    }
+
+    protected override Task OnInitializedAsync() => LoadAsync();
+
+    public async Task LoadAsync()
+    {
+        var res = await Api.GetFeedbackAsync(mine: false);
+        if (!res.IsSuccess) { _error = res.ResponseMessage; return; }
+        _error = null;
+        _items = res.Data?.Items ?? new();
+        _edits.Clear();
+    }
+
+    private async Task SaveAsync(string id)
+    {
+        if (!_edits.TryGetValue(id, out var e)) return;
+        _busy = true;
+        try
+        {
+            var res = await Api.SetFeedbackStatusAsync(id, e.Status, (e.Note ?? "").Trim());
+            if (!res.IsSuccess) { Snackbar.Warn(res.ResponseMessage); return; }
+            Snackbar.Toast("Saved " + id);
+            await LoadAsync();
+        }
+        finally { _busy = false; }
+    }
+}

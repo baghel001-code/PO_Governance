@@ -1,0 +1,33 @@
+@page "/admin/feedback"
+@* Users & Security → 💬 Feedback (admin roll-up) on its own page. *@
+@inject UserSessionState Session
+
+<PageTitle>All feedback · VMM PO Governance</PageTitle>
+<PlatformStyles />
+
+<PfHeader Icon="💬" Title="Feedback">
+    <Sub>Everything users sent with 💬 Feedback. Set the status and write a reply — the user sees it under their earlier feedback.</Sub>
+</PfHeader>
+
+@if (!_ready)
+{
+    <div class="pf-empty">Loading…</div>
+}
+else if (!Session.IsAdmin)
+{
+    <div class="card pf-err">Admin only</div>
+}
+else
+{
+    <FeedbackAdminList />
+}
+
+@code {
+    private bool _ready;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await Session.InitAsync();
+        _ready = true;
+    }
+}

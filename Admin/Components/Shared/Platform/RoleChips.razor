@@ -1,0 +1,16 @@
+@* users.js roleChips(roles, labels). *@
+@foreach (var r in Roles)
+{
+    var c = Colours.TryGetValue(r, out var col) ? col : "#6B7280";
+    <span class="role-chip" style="color:@c;border:1px solid @(c)55;background:@(c)10">@(Labels != null && Labels.TryGetValue(r, out var l) ? l : r)</span>
+}
+
+@code {
+    public static readonly IReadOnlyDictionary<string, string> Colours = new Dictionary<string, string>
+    {
+        ["admin"] = "#7C3AED", ["planner"] = "#E8006E", ["cathead"] = "#1A4FAF", ["buyer"] = "#0891B2"
+    };
+
+    [Parameter] public IEnumerable<string> Roles { get; set; } = Array.Empty<string>();
+    [Parameter] public IReadOnlyDictionary<string, string>? Labels { get; set; }
+}

@@ -1,0 +1,9 @@
+@* shared.js approvalBadge(r): "⏳ Awaiting X" / "✓ Approved by X · qty" / "✕ Rejected by X" / "⊘ Cleared…". *@
+@if (Request != null && Fmt.ApprovalBadge(Request) is { } b)
+{
+    <div class="pf-abadge" title="@b.Title" style="color:@b.Color;background:@b.Bg">@b.Text</div>
+}
+
+@code {
+    [Parameter] public JsonObject? Request { get; set; }
+}

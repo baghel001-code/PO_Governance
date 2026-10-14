@@ -1,0 +1,19 @@
+@* feedback.js "💬 Send feedback" overlay as a MudDialog. Open with:
+   DialogService.ShowAsync<FeedbackDialog>("", new DialogOptions { MaxWidth = MaxWidth.Small, FullWidth = true, NoHeader = true }) *@
+<PlatformStyles />
+<MudDialog>
+    <DialogContent>
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:4px">
+            <div style="font-size:17px;font-weight:800;color:#1A4FAF;flex:1">💬 Send feedback</div>
+            <button type="button" style="border:none;background:none;font-size:18px;cursor:pointer;color:#6b7a99" @onclick="Cancel">✕</button>
+        </div>
+        <FeedbackForm OnSent="Sent" OnCancel="Cancel" />
+    </DialogContent>
+</MudDialog>
+
+@code {
+    [CascadingParameter] private MudDialogInstance? Dialog { get; set; }
+
+    private void Sent(string id) => Dialog?.Close(DialogResult.Ok(id));
+    private void Cancel() => Dialog?.Cancel();
+}

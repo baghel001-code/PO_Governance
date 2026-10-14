@@ -1,0 +1,302 @@
+@* users.js renderUsers / drawEdit / bulk: the sign-in accounts. *@
+@using System.Text.RegularExpressions
+@inject IAPICallService Api
+@inject UserSessionState Session
+@inject ISnackbar Snackbar
+@inject IDialogService Dialogs
+
+@if (_error != null)
+{
+    <div class="card pf-err">@_error</div>
+}
+else if (_data == null)
+{
+    <div class="pf-empty">Loading…</div>
+}
+else
+{
+    var list = Filtered;
+    var counts = _data.Users.Where(u => u.Active).SelectMany(u => u.Roles).GroupBy(r => r).ToDictionary(g => g.Key, g => g.Count());
+    <div class="pf-row">
+        <MudTextField T="string" @bind-Value="_q" Immediate="true" Placeholder="Search name or email…" Variant="Variant.Outlined" Margin="Margin.Dense"
+                      Style="min-width:240px" Class="flex-grow-0" UserAttributes='@(new Dictionary<string, object> { ["data-testid"] = "us-q" })' />
+        <MudSelect T="string" @bind-Value="_role" Variant="Variant.Outlined" Margin="Margin.Dense" Dense="true" Style="min-width:190px" Class="flex-grow-0">
+            <MudSelectItem Value="@("")">All roles</MudSelectItem>
+            @foreach (var r in _data.Roles)
+            {
+                <MudSelectItem Value="@r.Id">@r.Label (@counts.GetValueOrDefault(r.Id))</MudSelectItem>
+            }
+            <MudSelectItem Value="@("inactive")">Inactive</MudSelectItem>
+        </MudSelect>
+        <span class="pf-count">@list.Count of @_data.Users.Count users</span>
+        <button class="btn-sec" style="margin-left:auto" @onclick="OpenBulk">Bulk add…</button>
+        <button class="btn-pri" @onclick='() => EditUser("")'>+ Add user</button>
+    </div>
+
+    @if (_bulk)
+    {
+        <div class="card" style="padding:16px 18px;margin-bottom:12px;border-left:4px solid var(--vmm-pink)">
+            <div style="font-weight:700;margin-bottom:6px">Bulk add users</div>
+            <div style="font-size:11.5px;color:var(--ink2);margin-bottom:8px">One per line: <code>email, name, role</code> — role is one of admin, planner, cathead, buyer (use + for several, e.g. <code>planner+buyer</code>). You can paste straight from Excel (tab-separated works too).</div>
+            <textarea class="pf-in" rows="6" style="width:100%;font-family:var(--mono)" placeholder="ravi.kumar@vishalwholesale.co.in, Ravi Kumar, planner" @bind="_bulkText" @bind:event="oninput" data-testid="ub-text"></textarea>
+            <div style="display:flex;gap:8px;margin-top:8px;justify-content:flex-end">
+                <button class="btn-sec" @onclick="CloseEdit">Cancel</button>
+                <button class="btn-pri" disabled="@_busy" @onclick="SaveBulkAsync">Add all</button>
+            </div>
+        </div>
+    }
+    else if (_edit != null)
+    {
+        var isNew = _edit.Length == 0;
+        <div class="card" style="padding:16px 18px;margin-bottom:12px;border-left:4px solid var(--vmm-pink)" data-testid="us-edit">
+            <div style="font-weight:700;margin-bottom:10px">@(isNew ? "Add a user" : "Edit " + _form.Name)</div>
+            <div style="display:flex;flex-wrap:wrap;gap:12px;align-items:flex-end">
+                <div>
+                    <div class="pf-lbl">Email</div>
+                    <input class="pf-in" style="min-width:280px" @bind="_form.Email" disabled="@(!isNew)" data-testid="ue-email" />
+                </div>
+                <div>
+                    <div class="pf-lbl">Name</div>
+                    <input class="pf-in" style="min-width:200px" @bind="_form.Name" data-testid="ue-name" />
+                </div>
+                <div>
+                    <div class="pf-lbl" style="margin-bottom:5px">Roles</div>
+                    @foreach (var r in _data.Roles)
+                    {
+                        var id = r.Id;
+                        <label style="margin-right:12px;font-size:12px;cursor:pointer">
+                            <input type="checkbox" checked="@_form.Roles.Contains(id)" @onchange="e => ToggleRole(id, e)" data-testid="ue-role-@id" /> @r.Label
+                        </label>
+                    }
+                </div>
+                @if (!isNew)
+                {
+                    <label style="font-size:12px;cursor:pointer"><input type="checkbox" @bind="_form.Active" data-testid="ue-active" /> Active (can sign in)</label>
+                }
+                <div style="display:flex;gap:8px;margin-left:auto">
+                    @if (!isNew && _edit != Session.Email)
+                    {
+                        <button class="btn-sec btn-danger" @onclick="RemoveAsync">Delete user</button>
+                    }
+                    <button class="btn-sec" @onclick="CloseEdit">Cancel</button>
+                    <button class="btn-pri" disabled="@_busy" @onclick="SaveEditAsync">@(isNew ? "Add user" : "Save")</button>
+                </div>
+            </div>
+            @if (isNew)
+            {
+                <div style="font-size:11px;color:var(--ink3);margin-top:8px">They sign in with password <strong style="font-family:var(--mono)">@_data.DefaultPassword</strong> and must change it straight away. <strong>Planner</strong> = upload data, parameters, Tool 2. <strong>Admin</strong> = also manage users.</div>
+            }
+        </div>
+    }
+
+    <PfTable Headers="Headers" Count="list.Count" Empty="No users match.">
+        @foreach (var u in list)
+        {
+            var email = u.Email;
+            <tr style="@(u.Active ? "" : "opacity:.55")" data-testid="us-row">
+                <td><strong>@u.Name</strong><div style="font-size:11px;color:var(--ink3)">@u.Email</div></td>
+                <td><RoleChips Roles="u.Roles" Labels="_labels" /></td>
+                <td>
+                    @if (!u.Active)
+                    {
+                        <span style="color:#6B7280">Inactive</span>
+                    }
+                    else if (u.Locked)
+                    {
+                        <span style="color:#DC2626;font-weight:700">🔒 Locked</span>
+                    }
+                    else if (u.MustChange)
+                    {
+                        <span style="color:#B45309">Not signed in yet</span>
+                    }
+                    else
+                    {
+                        <span style="color:#00873E">Active</span>
+                    }
+                </td>
+                <td class="pf-mono">@(u.McCount is > 0 ? u.McCount.ToString() : "—")</td>
+                <td class="pf-nowrap" style="font-size:11.5px">@(string.IsNullOrEmpty(u.LastLogin) ? "—" : Fmt.When(u.LastLogin))</td>
+                <td style="font-size:11px;color:var(--ink3)">@SourceLabel(u.Source)</td>
+                <td class="pf-nowrap">
+                    <button class="btn-sec btn-sm" @onclick="() => EditUser(email)">Edit</button>
+                    <button class="btn-sec btn-sm" @onclick="() => ResetAsync(email)">Reset password</button>
+                    @if (u.Locked)
+                    {
+                        <button class="btn-sec btn-sm" @onclick="() => UnlockAsync(email)">Unlock</button>
+                    }
+                </td>
+            </tr>
+        }
+    </PfTable>
+}
+
+@code {
+    private static readonly string[] Headers = { "User", "Roles", "Status", "MCs (SCR)", "Last sign-in", "Source", "" };
+
+    private sealed class UserForm
+    {
+        public string Email { get; set; } = "";
+        public string Name { get; set; } = "";
+        public HashSet<string> Roles { get; set; } = new();
+        public bool Active { get; set; } = true;
+    }
+
+    private UsersListResponse? _data;
+    private Dictionary<string, string> _labels = new();
+    private string? _error;
+    private string _q = "", _role = "";
+    private string? _edit;           // null = closed, "" = new user, else the e-mail being edited
+    private bool _bulk, _busy;
+    private string _bulkText = "";
+    private UserForm _form = new();
+
+    private static string SourceLabel(string? s) => s switch
+    {
+        "scr" => "SCR file", "manual" => "Added by admin", "bulk" => "Bulk add", "system" => "Built-in", _ => s ?? ""
+    };
+
+    private List<UserPublicDto> Filtered
+    {
+        get
+        {
+            var q = _q.ToLowerInvariant();
+            return (_data?.Users ?? new()).Where(u =>
+            {
+                if (_role == "inactive") return !u.Active;
+                if (_role.Length > 0 && !u.Roles.Contains(_role)) return false;
+                return q.Length == 0 || (u.Name + " " + u.Email).ToLowerInvariant().Contains(q);
+            }).ToList();
+        }
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        await Session.InitAsync();
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        var res = await Api.GetUsersAsync();
+        if (!res.IsSuccess || res.Data == null) { _error = res.ResponseMessage; return; }
+        _error = null;
+        _data = res.Data;
+        _labels = _data.Roles.ToDictionary(r => r.Id, r => r.Label);
+    }
+
+    private void EditUser(string email)
+    {
+        _bulk = false;
+        _edit = email;
+        var u = email.Length > 0 ? _data!.Users.FirstOrDefault(x => x.Email == email) : null;
+        _form = u == null
+            ? new UserForm { Roles = new HashSet<string> { "buyer" } }
+            : new UserForm { Email = u.Email, Name = u.Name, Roles = u.Roles.ToHashSet(), Active = u.Active };
+    }
+
+    private void CloseEdit()
+    {
+        _edit = null;
+        _bulk = false;
+    }
+
+    private void OpenBulk()
+    {
+        _edit = null;
+        _bulk = true;
+        _bulkText = "";
+    }
+
+    private void ToggleRole(string id, ChangeEventArgs e)
+    {
+        if (e.Value is bool b && b) _form.Roles.Add(id); else _form.Roles.Remove(id);
+    }
+
+    private List<string> OrderedRoles => _data!.Roles.Select(r => r.Id).Where(_form.Roles.Contains).ToList();
+
+    private async Task SaveEditAsync()
+    {
+        _busy = true;
+        try
+        {
+            if (string.IsNullOrEmpty(_edit))
+            {
+                var res = await Api.AddUserAsync(_form.Email.Trim(), _form.Name.Trim(), OrderedRoles);
+                if (!res.IsSuccess) { Snackbar.Warn(res.ResponseMessage); return; }
+                Snackbar.Toast("User added — starting password " + _data!.DefaultPassword);
+            }
+            else
+            {
+                var changes = new JsonObject
+                {
+                    ["name"] = _form.Name.Trim(),
+                    ["roles"] = new JsonArray(OrderedRoles.Select(r => (JsonNode?)r).ToArray()),
+                    ["active"] = _form.Active
+                };
+                var res = await Api.UpdateUserAsync(_edit, changes);
+                if (!res.IsSuccess) { Snackbar.Warn(res.ResponseMessage); return; }
+                Snackbar.Toast("Saved");
+            }
+            _edit = null;
+            await LoadAsync();
+        }
+        finally { _busy = false; }
+    }
+
+    private async Task RemoveAsync()
+    {
+        var email = _edit;
+        if (string.IsNullOrEmpty(email)) return;
+        if (!await Dialogs.Confirm("Delete the login " + email + "?\n\nThey can no longer sign in. Their past requests and approvals stay in History.\nIf they are in the SCR products file, the next SCR upload creates the login again.\n\nTo block someone without deleting, untick \"Active\" instead.")) return;
+        var res = await Api.DeleteUserAsync(email);
+        if (!res.IsSuccess) { Snackbar.Warn(res.ResponseMessage); return; }
+        Snackbar.Toast("Deleted " + email);
+        _edit = null;
+        await LoadAsync();
+    }
+
+    private async Task UnlockAsync(string email)
+    {
+        var res = await Api.UpdateUserAsync(email, new JsonObject { ["unlock"] = true });
+        if (!res.IsSuccess) { Snackbar.Warn(res.ResponseMessage); return; }
+        Snackbar.Toast("Done");
+        await LoadAsync();
+    }
+
+    private async Task ResetAsync(string email)
+    {
+        if (!await Dialogs.Confirm("Reset the password of " + email + " to the default (" + _data!.DefaultPassword + ")?\n\nThey are signed out everywhere and must choose a new password at next sign-in.")) return;
+        var res = await Api.ResetPasswordAsync(email);
+        if (!res.IsSuccess) { Snackbar.Warn(res.ResponseMessage); return; }
+        Snackbar.Toast("Password reset to " + _data.DefaultPassword);
+        await LoadAsync();
+    }
+
+    /// <summary>users.js saveBulk line parsing: "email, name, role" (tab / comma / semicolon separated; roles joined with + | / or space).</summary>
+    private async Task SaveBulkAsync()
+    {
+        var users = _bulkText.Split('\n').Select(l => l.Trim()).Where(l => l.Length > 0).Select(l =>
+        {
+            var p = Regex.Split(l, "\t|,|;").Select(x => x.Trim()).ToList();
+            var role = p.Count > 2 && p[2].Length > 0 ? p[2] : "buyer";
+            return new AddUserRequest
+            {
+                Email = p[0],
+                Name = p.Count > 1 ? p[1] : "",
+                Roles = Regex.Split(Regex.Replace(role.ToLowerInvariant(), "category ?head", "cathead"), "[+|/ ]+").ToList()
+            };
+        }).ToList();
+        _busy = true;
+        try
+        {
+            var res = await Api.BulkAddUsersAsync(users);
+            if (!res.IsSuccess || res.Data == null) { Snackbar.Warn(res.ResponseMessage); return; }
+            var d = res.Data;
+            Snackbar.Toast("Added " + d.Added.Count + (d.Errors.Count > 0 ? " · " + d.Errors.Count + " skipped" : ""));
+            if (d.Errors.Count > 0) await Dialogs.Alert("Skipped:\n" + string.Join("\n", d.Errors));
+            CloseEdit();
+            await LoadAsync();
+        }
+        finally { _busy = false; }
+    }
+}

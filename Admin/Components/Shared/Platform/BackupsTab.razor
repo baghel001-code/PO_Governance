@@ -1,0 +1,60 @@
+@* users.js renderBackups / backupNow. *@
+@inject IAPICallService Api
+@inject ISnackbar Snackbar
+
+@if (_error != null)
+{
+    <div class="card pf-err">@_error</div>
+}
+else if (_d == null)
+{
+    <div class="pf-empty">Loading…</div>
+}
+else
+{
+    <div class="card" style="padding:14px 16px;margin-bottom:12px;display:flex;gap:12px;align-items:center;flex-wrap:wrap">
+        <div style="font-size:12px;color:var(--ink2);line-height:1.6">A copy of all shared data is saved automatically every night after @((_d.Hour ?? 0).ToString("00")):00, and kept for @_d.KeepDays days, in <code>@_d.Dir</code> on the server. Copy that folder to another drive or share regularly — a backup on the same disk won't survive a disk failure.</div>
+        <button class="btn-pri" style="margin-left:auto" disabled="@_busy" @onclick="BackupNowAsync">💾 Back up now</button>
+    </div>
+    <PfTable Headers="Headers" Count="_d.Items.Count" Empty="No backups yet.">
+        @foreach (var b in _d.Items)
+        {
+            <tr>
+                <td class="pf-mono">@b.Name</td>
+                <td>@Fmt.When(b.At)</td>
+                <td>@Fmt.Mb(b.Bytes)</td>
+            </tr>
+        }
+    </PfTable>
+}
+
+@code {
+    private static readonly string[] Headers = { "Backup file", "Made at", "Size" };
+    private BackupListResponse? _d;
+    private string? _error;
+    private bool _busy;
+
+    protected override Task OnInitializedAsync() => LoadAsync();
+
+    private async Task LoadAsync()
+    {
+        var res = await Api.GetBackupsAsync();
+        if (!res.IsSuccess || res.Data == null) { _error = res.ResponseMessage; return; }
+        _error = null;
+        _d = res.Data;
+    }
+
+    private async Task BackupNowAsync()
+    {
+        Snackbar.Toast("Backing up…");
+        _busy = true;
+        try
+        {
+            var res = await Api.BackupNowAsync();
+            if (!res.IsSuccess || res.Data == null) { Snackbar.Warn(res.ResponseMessage); return; }
+            Snackbar.Toast("Saved " + res.Data.Name);
+            await LoadAsync();
+        }
+        finally { _busy = false; }
+    }
+}

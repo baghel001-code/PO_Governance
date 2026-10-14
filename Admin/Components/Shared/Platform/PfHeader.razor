@@ -1,0 +1,16 @@
+@* users.js H1(): icon + title, the pink→cyan bar, sub text, optional right-hand content. *@
+<div class="pf-h1">
+    <div class="pf-h1-l">
+        <div class="pg-title">@Icon @Title</div>
+        <div class="pf-bar"></div>
+        <div class="pg-sub">@Sub</div>
+    </div>
+    @Right
+</div>
+
+@code {
+    [Parameter] public string Icon { get; set; } = "";
+    [Parameter] public string Title { get; set; } = "";
+    [Parameter] public RenderFragment? Sub { get; set; }
+    [Parameter] public RenderFragment? Right { get; set; }
+}

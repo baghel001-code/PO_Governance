@@ -1,0 +1,509 @@
+@page "/history"
+@* history.js: Tool 2 runs, Tool 1 requests and Data uploads by date range. Runs and uploads are for planners / admins. *@
+@inject IAPICallService Api
+@inject UserSessionState Session
+@inject ServerStatusService Status
+@inject FileDownloadService Files
+@inject ISnackbar Snackbar
+@inject IDialogService Dialogs
+@inject NavigationManager Nav
+
+<PageTitle>History · VMM PO Governance</PageTitle>
+<PlatformStyles />
+
+<PfHeader Icon="🗂" Title="History">
+    <Sub>Everything uploaded and every result, kept on the server. Pick a date range, then open, filter or download.</Sub>
+    <Right>
+        <div style="display:flex;gap:8px;align-items:center">
+            @if (Session.IsStaff)
+            {
+                <button class="pf-back" style="@BackStyle("planner", "#E8006E")" title="Leave History and go to the Planner screens" @onclick='() => BackTo("planner")'>← Planner@(Session.View == "planner" ? " (you)" : "")</button>
+            }
+            <button class="pf-back" style="@BackStyle("category", "#1A4FAF")" title="Leave History and go to the @(Session.IsStaff ? "Category" : "New Request") screens" @onclick='() => BackTo("category")'>← @(Session.IsStaff ? "Category" : "New Request")@(Session.View == "category" ? " (you)" : "")</button>
+        </div>
+    </Right>
+</PfHeader>
+
+<div class="card" style="padding:14px 16px;margin-bottom:16px;display:flex;flex-wrap:wrap;gap:10px;align-items:flex-end">
+    <div>
+        <div class="pf-lbl">From</div>
+        <input type="date" class="pf-in" value="@_from" @onchange="e => OnDate(e, true)" data-testid="h-from" />
+    </div>
+    <div>
+        <div class="pf-lbl">To</div>
+        <input type="date" class="pf-in" value="@_to" @onchange="e => OnDate(e, false)" data-testid="h-to" />
+    </div>
+    <div style="display:flex;gap:6px;flex-wrap:wrap">
+        @foreach (var p in Presets)
+        {
+            <button class="btn-sec btn-sm" style="padding:6px 11px" @onclick="() => PresetAsync(p.Key)">@p.Label</button>
+        }
+    </div>
+    <button class="btn-pri" style="margin-left:auto" @onclick="LoadAsync">Show</button>
+</div>
+
+<div style="display:flex;gap:6px;margin-bottom:12px">
+    @foreach (var t in Tabs)
+    {
+        <button class="pf-pill @(t.Key == _tab ? "on" : "")" @onclick="() => SetTab(t.Key)">
+            @t.Label
+            @if (CountOf(t.Key) is { } c)
+            {
+                <span class="cnt">&nbsp;(@c)</span>
+            }
+        </button>
+    }
+</div>
+
+@if (_loading)
+{
+    <div class="pf-empty">Loading…</div>
+}
+else if (_error != null)
+{
+    <div class="pf-empty" style="color:#DC2626">Could not load history: @_error</div>
+}
+else if (_tab == "runs")
+{
+    var runs = FilteredRuns;
+    <MudTextField T="string" @bind-Value="_runQ" Immediate="true" Placeholder="Search Run ID or user…" Variant="Variant.Outlined" Margin="Margin.Dense" Style="max-width:320px" Class="mb-2" />
+    <div class="pf-note">Every <strong>Run Assessment</strong> is saved automatically with its own Run ID. <strong>Open</strong> shows that run's dashboard, tables and Excel export exactly as they were, using the data files and parameters of that moment. @runs.Count run(s), @RangeTxt.</div>
+    <PfTable Headers="RunHeaders" Count="runs.Count" Empty="No saved runs in this date range." MaxHeight="68vh">
+        @foreach (var r in runs)
+        {
+            var c = r.Obj("counts");
+            var files = string.Join(", ", (r.Obj("dataVersions") ?? new JsonObject()).Select(kv => Fmt.Label(kv.Key)));
+            var id = r.Str("id");
+            <tr>
+                <td><button class="pf-id" @onclick="() => OpenRun(id)">@r.Str("runNo")</button></td>
+                <td class="pf-nowrap">@Fmt.When(r.Str("at"))</td>
+                <td>@r.Str("by")</td>
+                <td class="pf-mono">@Fmt.N(r, "lines")</td>
+                <td class="pf-mono" style="color:#00873E">@Fmt.N(c.Num("Retain") ?? 0)</td>
+                <td class="pf-mono" style="color:#D97706">@Fmt.N(c.Num("Reduce Qty") ?? 0)</td>
+                <td class="pf-mono" style="color:#DC2626">@Fmt.N(c.Num("Cancel") ?? 0)</td>
+                <td class="pf-mono" style="color:#92400E">@Fmt.N(c.Num("Watch List") ?? 0)</td>
+                <td class="pf-mono" style="font-weight:700;color:#E8006E">@Fmt.N(r, "atRisk")</td>
+                <td class="pf-mono">@(r.Num("valueAtRisk") is { } v && v != 0 ? "₹" + Js.FmtCr(v) : "—")</td>
+                <td style="font-size:10.5px;color:var(--ink3);max-width:220px">@files</td>
+                <td class="pf-nowrap">
+                    <button class="btn-pri btn-sm" style="padding:5px 12px" @onclick="() => OpenRun(id)">Open</button>
+                    <button class="btn-sec btn-sm" style="padding:5px 9px" title="Delete this saved run" @onclick="() => DeleteRunAsync(id)">🗑</button>
+                </td>
+            </tr>
+        }
+    </PfTable>
+}
+else if (_tab == "requests")
+{
+    var list = FilteredRequests;
+    var decs = (_requests ?? new()).Select(r => r.Str("decision")).Distinct().OrderBy(x => x, StringComparer.Ordinal).ToList();
+    var totalProp = list.Sum(r => r.Num("qty") ?? 0);
+    var totalAppr = list.Sum(r => J.ApprovedQtyFor(r) ?? 0);
+    <div class="pf-row">
+        <MudTextField T="string" @bind-Value="_reqQ" Immediate="true" Placeholder="Search Request ID, GM, colour, user, MC…" Variant="Variant.Outlined" Margin="Margin.Dense" Style="min-width:280px" />
+        <MudSelect T="string" @bind-Value="_reqDec" Variant="Variant.Outlined" Margin="Margin.Dense" Style="min-width:200px" Dense="true">
+            <MudSelectItem Value="@("")">All decisions</MudSelectItem>
+            @foreach (var d in decs)
+            {
+                <MudSelectItem Value="@d">@d</MudSelectItem>
+            }
+        </MudSelect>
+        <span class="pf-count">@list.Count request(s) · proposed @Fmt.N(totalProp) · approved @Fmt.N(totalAppr) · @RangeTxt</span>
+        <button class="btn-pri btn-sm" style="margin-left:auto;padding:6px 13px" disabled="@_busy" @onclick="ExportRequestsAsync">⬇ Excel</button>
+    </div>
+    <PfTable Headers="ReqHeaders" Count="list.Count" Empty="No Tool 1 requests in this date range." MaxHeight="68vh">
+        @foreach (var r in list)
+        {
+            var i = r.Obj("info");
+            var a = J.ApprovedQtyFor(r);
+            var rid = r.Str("reqId");
+            var open = _openReq == rid;
+            var cleared = r.Obj("cleared");
+            <tr style="@(cleared != null ? "opacity:.55" : "")">
+                <td class="pf-nowrap"><button class="pf-id" style="font-size:10.5px" @onclick="() => ToggleReq(rid)">@(open ? "▾ " : "▸ ")@(rid.Length > 0 ? rid : "—")</button></td>
+                <td class="pf-nowrap">@Fmt.When(r.Truthy("savedAt") ? r.Str("savedAt") : r.Str("createdAt"))</td>
+                <td>@(r.Truthy("requestedBy") ? r.Str("requestedBy") : "—")</td>
+                <td class="pf-mono">@r.Str("gm")</td>
+                <td>@r.Str("colour")</td>
+                <td class="pf-small">@(i.Truthy("mcDesc") ? i.Str("mcDesc") : "—")</td>
+                <td>@(i.Truthy("mrp") ? "₹" + i.Str("mrp") : "—")</td>
+                <td>@r.Str("month")</td>
+                <td class="pf-mono">@Fmt.N(r, "qty")</td>
+                <td style="font-size:10px">@(r.Str("engine") == "B" ? "Single Concept" : r.Str("engine") == "A" ? "Multi · " + r.Str("optionType") : "New")</td>
+                <td>
+                    <DecisionPill Decision="@r.Str("decision")" />
+                    @if (cleared != null)
+                    {
+                        <div style="font-size:9px;color:var(--ink3)">cleared by @(cleared.Truthy("by") ? cleared.Str("by") : "?")</div>
+                    }
+                </td>
+                <td class="pf-mono" style="font-weight:700">@(a != null ? Fmt.N(a) : "—")</td>
+                <td style="font-size:10.5px;color:var(--ink2);max-width:320px">@Cut(r.Str("decisionReason"), 180)</td>
+            </tr>
+            @if (open)
+            {
+                <tr>
+                    <td colspan="13" style="background:#F8FAFF;padding:12px 16px;font-size:12px;line-height:1.7">
+                        <strong>@rid</strong> · @i.Str("brand") · @i.Str("div") · MC @i.Str("mcCd") @i.Str("mcDesc") · Flag @(i.Truthy("flag") ? i.Str("flag") : "—")
+                        @if (r.Num("maxPermQty") is { } mp)
+                        {
+                            <span> · Max Permissible @Fmt.N(mp)</span>
+                        }
+                        @if (r.Num("artSTR") is { } str)
+                        {
+                            <span> · Colour STR @(Js.Round(str))d</span>
+                        }
+                        @if (r.Truthy("quartile_"))
+                        {
+                            <span> · @r.Str("quartile_")@(r.Get("percentile") is JsonValue ? " (" + r.Str("percentile") + "th pct)" : "")</span>
+                        }
+                        <div style="margin-top:6px;color:var(--ink2)"><strong>Reason:</strong> @(r.Truthy("decisionReason") ? r.Str("decisionReason") : "—")</div>
+                    </td>
+                </tr>
+            }
+        }
+    </PfTable>
+}
+else if (_openUpload != null && (_uploads ?? new()).FirstOrDefault(x => x.UploadId == _openUpload) is { } g)
+{
+    var stored = g.Files.Where(f => f.Str("action") != "clear" && f.Truthy("stored")).ToList();
+    <button class="btn-sec" style="margin-bottom:12px" @onclick="() => _openUpload = null">← Back to all uploads</button>
+    <div class="card pf-kv" style="padding:16px 18px;margin-bottom:12px;display:flex;flex-wrap:wrap;gap:22px;align-items:center">
+        <div><div class="k">Upload ID</div><div style="font-family:var(--mono);font-size:18px;font-weight:800;color:var(--vmm-pink)">@g.UploadId</div></div>
+        <div><div class="k">Date &amp; time</div><div style="font-weight:700">@Fmt.When(g.At)</div></div>
+        <div><div class="k">By</div><div style="font-weight:700">@(string.IsNullOrEmpty(g.By) ? "—" : g.By)</div></div>
+        <div><div class="k">Type</div><div style="font-weight:700">@SrcLabel(g.Source)</div></div>
+        <div style="flex:1;min-width:200px"><div class="k">Source file(s)</div><div style="font-size:12px">@(g.SourceFiles.Count > 0 ? string.Join(", ", g.SourceFiles) : string.IsNullOrEmpty(g.Note) ? "—" : g.Note)</div></div>
+        <div style="display:flex;gap:8px">
+            @if (stored.Count > 0)
+            {
+                <button class="btn-pri" disabled="@_busy" @onclick="() => DownloadUploadAsync(g.UploadId)">⬇ All files (one Excel)</button>
+            }
+            @if (Session.IsStaff && stored.Count > 0 && g.Source != "restore")
+            {
+                <button class="btn-sec" disabled="@_busy" @onclick="() => RestoreUploadAsync(g.UploadId)">Make this upload current</button>
+            }
+        </div>
+    </div>
+    <PfTable Headers="FileHeaders" Count="g.Files.Count" Empty="No files in this upload.">
+        @foreach (var f in g.Files)
+        {
+            var key = f.Str("key");
+            var ver = f.Str("version");
+            var act = f.Str("action");
+            <tr>
+                <td>
+                    <strong>@Fmt.Label(key)</strong>
+                    @if (f.Truthy("current"))
+                    {
+                        <span style="font-size:9px;background:#DCFCE7;color:#14532D;border-radius:8px;padding:1px 7px;font-weight:700"> IN USE NOW</span>
+                    }
+                </td>
+                <td>
+                    @if (act == "clear")
+                    {
+                        <span style="color:#DC2626">cleared</span>
+                    }
+                    else if (act == "restore")
+                    {
+                        <span style="color:#7C3AED">made current again@(f.Truthy("restoredFrom") ? " (from " + f.Str("restoredFrom") + ")" : "")</span>
+                    }
+                    else
+                    {
+                        <span>uploaded</span>
+                    }
+                </td>
+                <td class="pf-mono">@(f.Num("rows") is { } rows && act != "clear" ? Fmt.N(rows) : "—")</td>
+                <td style="font-size:10.5px;color:var(--ink3)">@(f.Num("bytes") is { } b && b != 0 ? Fmt.Mb(b) : "")</td>
+                <td style="font-size:10.5px;color:var(--ink2);max-width:320px">@f.Str("label")</td>
+                <td class="pf-nowrap">@Fmt.When(f.Str("updatedAt"))</td>
+                <td class="pf-nowrap">
+                    @if (act != "clear" && f.Truthy("stored"))
+                    {
+                        <button class="btn-sec btn-sm" style="padding:5px 10px" disabled="@_busy" @onclick="() => DownloadVersionAsync(key, ver, g.UploadId)">⬇ Excel</button>
+                        @if (Session.IsStaff && !f.Truthy("current"))
+                        {
+                            <button class="btn-sec btn-sm" style="padding:5px 10px;margin-left:4px" disabled="@_busy" @onclick="() => RestoreAsync(key, ver)">Make current</button>
+                        }
+                    }
+                    else if (act != "clear")
+                    {
+                        <span style="font-size:10px;color:var(--ink3)">no longer stored</span>
+                    }
+                </td>
+            </tr>
+        }
+    </PfTable>
+}
+else
+{
+    var items = FilteredUploads;
+    <MudTextField T="string" @bind-Value="_upQ" Immediate="true" Placeholder="Search Upload ID, user or file name…" Variant="Variant.Outlined" Margin="Margin.Dense" Style="max-width:320px" Class="mb-2" />
+    <div class="pf-note">
+        Every upload gets its own <strong>Upload ID</strong>. Click one to see all files it contained, download them, or make them current again.
+        @items.Count upload(s), @RangeTxt@(_storage > 0 ? " · total history on server: " + Fmt.Mb(_storage) : "").
+        <span style="color:#00873E">Green</span> = file in use now.
+    </div>
+    <PfTable Headers="UploadHeaders" Count="items.Count" Empty="No uploads in this date range." MaxHeight="68vh">
+        @foreach (var u in items)
+        {
+            var total = u.Files.Sum(f => f.Str("action") == "clear" ? 0 : f.Num("rows") ?? 0);
+            var uid = u.UploadId;
+            <tr style="cursor:pointer" @onclick="() => ShowUpload(uid)">
+                <td><span class="pf-id">@uid</span></td>
+                <td class="pf-nowrap">@Fmt.When(u.At)</td>
+                <td>@(string.IsNullOrEmpty(u.By) ? "—" : u.By)</td>
+                <td class="pf-small">@SrcLabel(u.Source)</td>
+                <td style="font-size:11px;max-width:260px">
+                    @if (u.SourceFiles.Count > 0)
+                    {
+                        @(string.Join(", ", u.SourceFiles.Take(3)) + (u.SourceFiles.Count > 3 ? " +" + (u.SourceFiles.Count - 3) + " more" : ""))
+                    }
+                    else
+                    {
+                        <span style="color:var(--ink3)">@(string.IsNullOrEmpty(u.Note) ? "—" : u.Note)</span>
+                    }
+                </td>
+                <td>
+                    @foreach (var f in u.Files)
+                    {
+                        var col = f.Str("action") == "clear" ? "#DC2626" : f.Truthy("current") ? "#00873E" : "#6B7280";
+                        <span class="file-chip" style="border:1px solid @(col)55;color:@col;background:@(col)0D">@(Fmt.Label(f.Str("key")).Split(" — ")[0])@(f.Str("action") == "clear" ? " ✕" : "")</span>
+                    }
+                </td>
+                <td class="pf-mono">@Fmt.N(total)</td>
+                <td class="pf-nowrap"><span style="font-size:11px;color:var(--vmm-navy);font-weight:700">View files →</span></td>
+            </tr>
+        }
+    </PfTable>
+}
+
+<style>
+    .pf-back { padding: 8px 14px; border-radius: 8px; font-size: 12px; font-weight: 700; cursor: pointer; font-family: var(--font); }
+</style>
+
+@code {
+    private static readonly string[] RunHeaders = { "Run ID", "Run at", "By", "Lines", "Retain", "Reduce", "Cancel", "Watch", "Qty at risk", "₹ at risk", "Data used", "" };
+    private static readonly string[] ReqHeaders = { "Request ID", "Saved at", "By", "Generic Material", "Colour", "MC Desc", "MRP", "Del. Month", "Proposed", "Engine", "Decision", "Approved", "Reason" };
+    private static readonly string[] UploadHeaders = { "Upload ID", "Date & time", "By", "Type", "Source file(s)", "Files in this upload", "Rows", "" };
+    private static readonly string[] FileHeaders = { "File", "Action", "Rows", "Size", "Details", "Saved at", "" };
+    private static readonly (string Key, string Label)[] Presets = { ("0", "Today"), ("6", "Last 7 days"), ("29", "Last 30 days"), ("m", "This month"), ("89", "Last 90 days"), ("all", "All") };
+    private static readonly Dictionary<string, string> SrcLabels = new()
+    {
+        ["zip"] = "ZIP bundle", ["raw"] = "Raw import", ["files"] = "File upload", ["file"] = "File upload",
+        ["restore"] = "Made current again", ["clear"] = "Cleared", ["upload"] = "File upload"
+    };
+
+    private string _tab = "runs";
+    private string _from = "", _to = "";
+    private bool _loading = true, _busy;
+    private string? _error;
+    private List<JsonObject>? _requests, _runs;
+    private List<UploadHistoryGroup>? _uploads;
+    private long _storage;
+    private string _reqQ = "", _reqDec = "", _upQ = "", _runQ = "";
+    private string? _openReq, _openUpload;
+
+    private (string Key, string Label)[] Tabs => Session.IsStaff
+        ? new[] { ("runs", "📋 Tool 2 runs"), ("requests", "✏️ Tool 1 requests"), ("uploads", "📂 Data uploads") }
+        : new[] { ("requests", "✏️ Tool 1 requests") };
+
+    private string RangeTxt => _from.Length > 0 || _to.Length > 0 ? (_from.Length > 0 ? _from : "start") + " → " + (_to.Length > 0 ? _to : "today") : "all dates";
+
+    private static string SrcLabel(string? s) => string.IsNullOrEmpty(s) ? "—" : SrcLabels.TryGetValue(s, out var l) ? l : s;
+    private static string Cut(string s, int n) => s.Length > n ? s[..n] : s;
+
+    private int? CountOf(string tab) => tab switch
+    {
+        "runs" => _runs?.Count,
+        "requests" => _requests?.Count,
+        "uploads" => _uploads?.Count,
+        _ => null
+    };
+
+    private string BackStyle(string role, string colour)
+    {
+        var on = Session.View == role;
+        return $"border:1.5px solid {colour};background:{(on ? colour : "#fff")};color:{(on ? "#fff" : colour)}";
+    }
+
+    private void BackTo(string role)
+    {
+        if (Session.View != role) Session.SwitchView(role);
+        Nav.NavigateTo(role == "planner" ? "/planner/data" : "/category/request");
+    }
+
+    private List<JsonObject> FilteredRuns
+    {
+        get
+        {
+            var q = _runQ.ToLowerInvariant();
+            return (_runs ?? new()).Where(r => q.Length == 0 || (r.Str("runNo") + " " + r.Str("by")).ToLowerInvariant().Contains(q)).ToList();
+        }
+    }
+
+    private List<JsonObject> FilteredRequests
+    {
+        get
+        {
+            var q = _reqQ.ToLowerInvariant();
+            return (_requests ?? new()).Where(r =>
+            {
+                if (_reqDec.Length > 0 && r.Str("decision") != _reqDec) return false;
+                if (q.Length == 0) return true;
+                var i = r.Obj("info");
+                return string.Join(" ", r.Str("reqId"), r.Str("gm"), r.Str("colour"), r.Str("requestedBy"), i.Str("mcDesc"), i.Str("brand"), i.Str("div"))
+                    .ToLowerInvariant().Contains(q);
+            }).ToList();
+        }
+    }
+
+    private List<UploadHistoryGroup> FilteredUploads
+    {
+        get
+        {
+            var q = _upQ.ToLowerInvariant();
+            return (_uploads ?? new()).Where(g => q.Length == 0 || string.Join(" ", g.UploadId, g.By ?? "", string.Join(" ", g.SourceFiles),
+                string.Join(" ", g.Files.Select(f => Fmt.Label(f.Str("key")) + " " + f.Str("label")))).ToLowerInvariant().Contains(q)).ToList();
+        }
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        await Session.InitAsync();
+        var today = Fmt.NowIst.Date;
+        _to = Fmt.Ymd(today);
+        _from = Fmt.Ymd(today.AddDays(-29));
+        if (!Tabs.Any(t => t.Key == _tab)) _tab = Tabs[0].Key;
+        await LoadAsync();
+    }
+
+    private void SetTab(string t)
+    {
+        _tab = t;
+        _openUpload = null;
+    }
+
+    private async Task OnDate(ChangeEventArgs e, bool from)
+    {
+        if (from) _from = e.Value?.ToString() ?? ""; else _to = e.Value?.ToString() ?? "";
+        await LoadAsync();
+    }
+
+    private async Task PresetAsync(string p)
+    {
+        var t = Fmt.NowIst.Date;
+        if (p == "all") { _from = ""; _to = ""; }
+        else
+        {
+            var f = p == "m" ? new DateTime(t.Year, t.Month, 1) : t.AddDays(-int.Parse(p));
+            _from = Fmt.Ymd(f);
+            _to = Fmt.Ymd(t);
+        }
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        if (_from.Length > 0 && _to.Length > 0 && string.CompareOrdinal(_from, _to) > 0) { Snackbar.Toast("\"From\" date is after \"To\" date"); return; }
+        _loading = true;
+        StateHasChanged();
+        var staff = Session.IsStaff;
+        var reqTask = Api.GetRequestHistoryAsync(_from, _to);
+        var upTask = staff ? Api.GetUploadHistoryAsync(_from, _to) : null;
+        var runTask = staff ? Api.GetRunsAsync(_from, _to) : null;
+        var req = await reqTask;
+        var up = upTask != null ? await upTask : null;
+        var run = runTask != null ? await runTask : null;
+        _loading = false;
+        var failed = new[] { req.IsSuccess ? null : req.ResponseMessage, up == null || up.IsSuccess ? null : up.ResponseMessage, run == null || run.IsSuccess ? null : run.ResponseMessage }
+            .FirstOrDefault(x => x != null);
+        if (failed != null) { _error = failed; return; }
+        _error = null;
+        _requests = req.Data?.Items ?? new();
+        _uploads = staff ? up?.Data?.Items ?? new() : null;
+        _storage = staff ? up?.Data?.StorageBytes ?? 0 : 0;
+        _runs = staff ? run?.Data?.Items ?? new() : null;
+    }
+
+    private void ToggleReq(string id) => _openReq = _openReq == id ? null : id;
+
+    private void ShowUpload(string uid) => _openUpload = uid;
+
+    // ── Tool 2 runs ──
+    private void OpenRun(string id) => Nav.NavigateTo("/planner/assessment?run=" + Uri.EscapeDataString(id));
+
+    private async Task DeleteRunAsync(string id)
+    {
+        if (!await Dialogs.Confirm("Delete this saved run from history?")) return;
+        var res = await Api.DeleteRunAsync(id);
+        if (!res.IsSuccess) { Snackbar.Warn("Could not delete (HTTP " + res.ResponseCode + ")"); return; }
+        await LoadAsync();
+    }
+
+    // ── downloads (workbooks are built by POGovApi: api/v1/history/export/…) ──
+    private async Task SaveAsync(Task<Domain.Entities.Response.ApiResponse<Admin.Interfaces.DownloadedFile>> call)
+    {
+        _busy = true;
+        try
+        {
+            var res = await call;
+            if (!res.IsSuccess || res.Data == null) { Snackbar.Warn(res.ResponseMessage); return; }
+            await Files.SaveAsync(res.Data);
+        }
+        finally { _busy = false; }
+    }
+
+    private async Task ExportRequestsAsync()
+    {
+        if (FilteredRequests.Count == 0) { Snackbar.Toast("Nothing to export"); return; }
+        await SaveAsync(Api.ExportRequestsAsync(_from, _to, _reqQ, _reqDec));
+    }
+
+    private async Task DownloadUploadAsync(string uid)
+    {
+        Snackbar.Toast("Preparing " + uid + "…");
+        await SaveAsync(Api.ExportUploadAsync(uid));
+    }
+
+    private async Task DownloadVersionAsync(string key, string ver, string uid)
+    {
+        Snackbar.Toast("Preparing download…");
+        await SaveAsync(Api.ExportDataVersionAsync(key, ver, uid));
+    }
+
+    // ── make current ──
+    private async Task RestoreUploadAsync(string uid)
+    {
+        if (!await Dialogs.Confirm("Make every file from " + uid + " the CURRENT data for everyone?\n\nFiles not in this upload are left as they are. Newer versions stay in history.")) return;
+        _busy = true;
+        try
+        {
+            var res = await Api.RestoreUploadAsync(uid);
+            if (!res.IsSuccess || res.Data == null) { Snackbar.Warn(res.ResponseMessage); return; }
+            Snackbar.Toast("Done — recorded as " + res.Data.UploadId + ". Loading the data…");
+            await Status.RefreshAsync();
+            Status.MarkLoaded();
+        }
+        finally { _busy = false; }
+        _openUpload = null;
+        await LoadAsync();
+    }
+
+    private async Task RestoreAsync(string key, string ver)
+    {
+        if (!await Dialogs.Confirm("Make this older version of " + Fmt.Label(key) + " the CURRENT file for everyone?\n\nThe newer version stays in history.")) return;
+        _busy = true;
+        try
+        {
+            var res = await Api.RestoreVersionAsync(key, ver);
+            if (!res.IsSuccess) { Snackbar.Warn("Could not restore (HTTP " + res.ResponseCode + ")"); return; }
+            Snackbar.Toast("Restored — loading it now");
+            await Status.RefreshAsync();
+            Status.MarkLoaded();
+        }
+        finally { _busy = false; }
+        await LoadAsync();
+    }
+}

@@ -1,0 +1,194 @@
+@* VMM Assistant — port of index.html #ai-chat-fab / #ai-chat-panel (toggleAIChat, _aiChatRefreshView,
+   _aiChatRenderWelcome, _aiChatAppendMsg, sendAIChat). The server builds the grounded prompt; the portal keeps
+   the conversation (History from each response). Scope: Planner view → tool2, Category view → tool1.
+   Shown only when the server reports AI chat enabled (ServerStatusService.AiChat) unless ShowWhenDisabled. *@
+@inject IAPICallService Api
+@inject UserSessionState Session
+@inject ServerStatusService Status
+@inject IJSRuntime JS
+@implements IAsyncDisposable
+
+@if (Visible)
+{
+    <HeadContent><link rel="stylesheet" href="css/analytics.css" /></HeadContent>
+
+    <button id="ai-chat-fab" class="aic-fab" title="Ask about this session's data" @onclick="ToggleAsync">
+        <svg width="26" height="26" fill="none" stroke="#fff" stroke-width="2" viewBox="0 0 24 24"><path d="M21 11.5a8.38 8.38 0 01-.9 3.8 8.5 8.5 0 01-7.6 4.7 8.38 8.38 0 01-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 01-.9-3.8 8.5 8.5 0 014.7-7.6 8.38 8.38 0 013.8-.9h.5a8.48 8.48 0 018 8v.5z" /></svg>
+    </button>
+
+    @if (_open)
+    {
+        <div id="ai-chat-panel" class="aic-panel">
+            <div class="aic-hdr">
+                <div style="display:flex;align-items:center;gap:8px">
+                    <span class="ttl">VMM Assistant</span>
+                    <span id="ai-chat-scope-badge" class="aic-badge">@(_info?.ScopeBadge ?? (Scope == "tool2" ? "Planner · Tool 2" : "Category · Tool 1"))</span>
+                </div>
+                <button class="aic-x" title="Close" @onclick="ToggleAsync">
+                    <svg width="16" height="16" fill="none" stroke="#fff" stroke-width="2" viewBox="0 0 24 24"><path d="M18 6L6 18M6 6l12 12" /></svg>
+                </button>
+            </div>
+
+            @if (_infoError != null)
+            {
+                <div class="aic-off"><div class="t">VMM Assistant is not available</div><div class="m">@_infoError</div></div>
+            }
+            else if (_info == null)
+            {
+                <div class="aic-off">Loading…</div>
+            }
+            else if (!_info.Enabled)
+            {
+                <div id="ai-chat-keysetup" class="aic-off">
+                    <div class="t">@(_info.DisabledTitle ?? "AI chat is not enabled on this server")</div>
+                    <div class="m">@_info.DisabledMessage</div>
+                </div>
+            }
+            else
+            {
+                <div id="ai-chat-messages" class="aic-msgs" @ref="_msgsEl">
+                    @foreach (var m in _bubbles)
+                    {
+                        <div class="aic-row @m.Role"><div class="aic-b">@m.Text</div></div>
+                    }
+                </div>
+                <div id="ai-chat-inputrow" class="aic-in">
+                    <textarea id="ai-chat-input" rows="1" placeholder="Ask about this session's data..." @ref="_inputEl"
+                              @bind="_input" @bind:event="oninput"></textarea>
+                    <button id="ai-chat-send-btn" @ref="_sendEl" disabled="@_sending" @onclick="SendAsync">@(_sending ? "..." : "Send")</button>
+                </div>
+            }
+        </div>
+    }
+}
+
+@code {
+    /// <summary>Show the button even when the server has AI chat switched off (the panel then shows the disabled text).</summary>
+    [Parameter] public bool ShowWhenDisabled { get; set; }
+
+    private sealed record Bubble(string Role, string Text);
+
+    private bool _open, _sending, _needsAttach, _needsScroll;
+    private string _input = "";
+    private string? _scope, _infoError;
+    private AssistantChatInfoDto? _info;
+    private List<AiChatMessageDto> _history = new();
+    private readonly List<Bubble> _bubbles = new();
+    private ElementReference _msgsEl, _inputEl, _sendEl;
+    private IJSObjectReference? _module;
+
+    private bool Visible => Status.AiChat || ShowWhenDisabled;
+    private string Scope => Session.View == "planner" ? "tool2" : "tool1";
+
+    protected override async Task OnInitializedAsync()
+    {
+        await Session.InitAsync();
+        Session.Changed += OnChanged;
+        Status.Changed += OnChanged;
+    }
+
+    private void OnChanged() => InvokeAsync(async () =>
+    {
+        if (_open && _scope != Scope) await LoadInfoAsync();
+        StateHasChanged();
+    });
+
+    private async Task ToggleAsync()
+    {
+        _open = !_open;
+        if (_open)
+        {
+            if (_info == null || _scope != Scope) await LoadInfoAsync();
+            _needsAttach = true;
+            _needsScroll = true;
+        }
+    }
+
+    /// <summary>_aiChatRefreshView: header badge, enabled flag and the welcome bubble (a new scope starts a new conversation).</summary>
+    private async Task LoadInfoAsync()
+    {
+        var scope = Scope;
+        if (_scope != scope)
+        {
+            _history = new();
+            _bubbles.Clear();
+        }
+        _scope = scope;
+        _info = null;
+        _infoError = null;
+        var res = await Api.GetAsync<AssistantChatInfoDto>(AnQuery.Build("api/v1/assistant/chat/info", ("scope", scope)));
+        if (!res.IsSuccess || res.Data == null) { _infoError = res.ResponseMessage; return; }
+        _info = res.Data;
+        if (_info.Enabled && _bubbles.Count == 0 && !string.IsNullOrEmpty(_info.Welcome))
+            _bubbles.Add(new Bubble("assistant", _info.Welcome));
+        _needsAttach = true;
+    }
+
+    private async Task SendAsync()
+    {
+        var q = (_input ?? "").Trim();
+        if (q.Length == 0 || _sending || _info is not { Enabled: true }) return;
+        _bubbles.Add(new Bubble("user", q));
+        _input = "";
+        _sending = true;
+        var thinking = new Bubble("assistant", "Thinking…");
+        _bubbles.Add(thinking);
+        _needsScroll = true;
+        StateHasChanged();
+        try
+        {
+            var res = await Api.PostAsync<AssistantChatResponse>("api/v1/assistant/chat",
+                new AssistantChatRequest { Scope = _scope ?? Scope, Question = q, History = _history });
+            _bubbles.Remove(thinking);
+            if (!res.IsSuccess || res.Data == null)
+                _bubbles.Add(new Bubble("error", res.ResponseCode == 503 ? "Could not reach the portal server: " + res.ResponseMessage : "Error: " + res.ResponseMessage));
+            else if (res.Data.Ok)
+            {
+                _bubbles.Add(new Bubble("assistant", res.Data.Answer ?? "(no response text)"));
+                _history = res.Data.History ?? _history;
+            }
+            else
+            {
+                _bubbles.Add(new Bubble("error", res.Data.Error ?? "Error"));
+                if (res.Data.History is { Count: > 0 }) _history = res.Data.History;
+            }
+        }
+        finally
+        {
+            _sending = false;
+            _needsScroll = true;
+        }
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!_open || _info is not { Enabled: true } || (!_needsAttach && !_needsScroll)) return;
+        try
+        {
+            _module ??= await JS.InvokeAsync<IJSObjectReference>("import", "./Components/Shared/Analytics/AiChatPanel.razor.js");
+            if (_needsAttach)
+            {
+                _needsAttach = false;
+                await _module.InvokeVoidAsync("attach", _inputEl, _sendEl);
+                await _module.InvokeVoidAsync("focus", _inputEl);
+            }
+            if (_needsScroll)
+            {
+                _needsScroll = false;
+                await _module.InvokeVoidAsync("scrollToEnd", _msgsEl);
+            }
+        }
+        catch (JSDisconnectedException) { }
+        catch (JSException) { }
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        Session.Changed -= OnChanged;
+        Status.Changed -= OnChanged;
+        if (_module != null)
+        {
+            try { await _module.DisposeAsync(); } catch (JSDisconnectedException) { }
+        }
+    }
+}

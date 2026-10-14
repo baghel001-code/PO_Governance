@@ -1,0 +1,169 @@
+@page "/category/video"
+@* Category "🎬 How-to Video" — port of index.html view-cat-video (+ its script: speeds 1–2×, chapters from
+   video/chapters.json, chapter highlight). The video is not part of the repository: it is served from wwwroot at
+   Analytics:HowToVideoPath (default "video/how-to.mp4"; a .webm next to it is offered as a second source). *@
+@using System.Text.Json
+@inject IWebHostEnvironment Env
+@inject IConfiguration Config
+@inject IJSRuntime JS
+@inject ILogger<HowToVideo> Log
+@implements IAsyncDisposable
+
+<PageTitle>How-to Video · VMM PO Governance</PageTitle>
+<HeadContent><link rel="stylesheet" href="css/analytics.css" /></HeadContent>
+
+<div class="an-page" id="view-cat-video">
+    <div class="hv-page">
+        <div class="pg-title" style="margin-bottom:4px">▶ How to use the tool</div>
+        <div class="pg-sub" style="margin-bottom:14px">Topic by topic: single concept, multi concept (true repeat and BOBs), View Recommendation, category head approvals, and how the tool works today and with SAP. Click a topic to jump to it; change the speed below the video.</div>
+        <div class="hv-wrap">
+            <div>
+                @if (_installed)
+                {
+                    <video id="howto-video" class="hv-video" controls preload="metadata" @ref="_video">
+                        @if (_mp4 != null) { <source src="@_mp4" type="video/mp4" /> }
+                        @if (_webm != null) { <source src="@_webm" type="video/webm" /> }
+                    </video>
+                }
+                else
+                {
+                    <div class="hv-missing">
+                        <div class="i">🎬</div>
+                        <div class="t">Video not installed on this server</div>
+                        <div class="s">The how-to video (@_configured) has not been copied to this server yet. Ask your administrator to place it in the portal's <code>wwwroot/@Folder</code> folder — everything else in the portal works without it.</div>
+                    </div>
+                }
+                <div class="hv-bar">
+                    <span class="lbl">Speed</span>
+                    <span id="hv-speeds">
+                        @foreach (var s in Speeds)
+                        {
+                            <button class="hv-sp @(s == _speed ? "on" : "")" disabled="@(!_installed)" @onclick="() => SetSpeedAsync(s)">@(s.ToString(System.Globalization.CultureInfo.InvariantCulture))×</button>
+                            @(" ")
+                        }
+                    </span>
+                    <span class="fb">Questions or problems: 💬 Feedback at the top of the page.</span>
+                </div>
+            </div>
+            <div class="hv-topics">
+                <div class="h">Topics</div>
+                <div id="hv-chapters" style="font-size:12.5px;color:var(--ink3)" @ref="_chaptersEl">
+                    @for (var i = 0; i < _chapters.Count; i++)
+                    {
+                        var c = _chapters[i];
+                        <button class="hv-ch" disabled="@(!_installed)" @onclick="() => SeekAsync(c.T)"><span class="t">@FmtT(c.T)</span><span>@c.Title</span></button>
+                    }
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+@code {
+    private static readonly double[] Speeds = { 1, 1.25, 1.5, 1.75, 2 };
+
+    private sealed record Chapter(double T, string Title);
+
+    private string _configured = "video/how-to.mp4";
+    private string? _mp4, _webm;
+    private bool _installed;
+    private double _speed = 1;
+    private List<Chapter> _chapters = new();
+    private ElementReference _video, _chaptersEl;
+    private IJSObjectReference? _module;
+
+    private string Folder => Path.GetDirectoryName(_configured)?.Replace('\\', '/') is { Length: > 0 } d ? d + "/" : "";
+
+    protected override void OnInitialized()
+    {
+        _configured = (Config["Analytics:HowToVideoPath"] ?? "video/how-to.mp4").Trim().TrimStart('/');
+        var isUrl = Uri.TryCreate(_configured, UriKind.Absolute, out var u) && (u.Scheme == "http" || u.Scheme == "https");
+        var webmPath = Path.ChangeExtension(_configured, ".webm").Replace('\\', '/');
+        var mp4Path = Path.ChangeExtension(_configured, ".mp4").Replace('\\', '/');
+        if (isUrl)
+        {
+            _mp4 = _configured;
+            _installed = true;
+        }
+        else
+        {
+            if (Exists(mp4Path)) _mp4 = mp4Path;
+            if (Exists(webmPath)) _webm = webmPath;
+            if (_mp4 == null && _webm == null && Exists(_configured)) _mp4 = _configured;
+            _installed = _mp4 != null || _webm != null;
+            _chapters = ReadChapters(Folder + "chapters.json");
+        }
+    }
+
+    private bool Exists(string rel) => Env.WebRootFileProvider.GetFileInfo(rel).Exists;
+
+    /// <summary>video/chapters.json: [{ "t": seconds, "title": "…" }] (missing / invalid = no topics, as in v1.1.4).</summary>
+    private List<Chapter> ReadChapters(string rel)
+    {
+        try
+        {
+            var fi = Env.WebRootFileProvider.GetFileInfo(rel);
+            if (!fi.Exists) return new();
+            using var s = fi.CreateReadStream();
+            using var doc = JsonDocument.Parse(s);
+            if (doc.RootElement.ValueKind != JsonValueKind.Array) return new();
+            var list = new List<Chapter>();
+            foreach (var e in doc.RootElement.EnumerateArray())
+            {
+                if (e.ValueKind != JsonValueKind.Object) continue;
+                var t = e.TryGetProperty("t", out var tv) && tv.ValueKind == JsonValueKind.Number ? tv.GetDouble() : 0;
+                var title = e.TryGetProperty("title", out var ti) ? (ti.ValueKind == JsonValueKind.String ? ti.GetString() : ti.ToString()) : "";
+                list.Add(new Chapter(t, (title ?? "").Replace("<", "").Replace(">", "").Replace("&", "")));
+            }
+            return list;
+        }
+        catch (Exception ex)
+        {
+            Log.LogWarning(ex, "chapters.json could not be read");
+            return new();
+        }
+    }
+
+    private static string FmtT(double t)
+    {
+        var s = (int)Math.Floor(t);
+        return s / 60 + ":" + (s % 60).ToString("00");
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender || !_installed) return;
+        try
+        {
+            _module = await JS.InvokeAsync<IJSObjectReference>("import", "./Components/Pages/Analytics/HowToVideo.razor.js");
+            _speed = await _module.InvokeAsync<double>("init", _video, _chaptersEl, _chapters.Select(c => new { t = c.T, title = c.Title }).ToArray());
+            if (!Speeds.Contains(_speed)) _speed = 1;
+            StateHasChanged();
+        }
+        catch (JSDisconnectedException) { }
+        catch (JSException ex) { Log.LogDebug(ex, "video script"); }
+    }
+
+    private async Task SetSpeedAsync(double s)
+    {
+        _speed = s;
+        if (_module != null) await _module.InvokeVoidAsync("setSpeed", _video, s);
+    }
+
+    private async Task SeekAsync(double t)
+    {
+        if (_module != null) await _module.InvokeVoidAsync("seek", _video, t);
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        if (_module == null) return;
+        try
+        {
+            await _module.InvokeVoidAsync("pause", _video);
+            await _module.DisposeAsync();
+        }
+        catch (JSDisconnectedException) { }
+        catch (JSException) { }
+    }
+}

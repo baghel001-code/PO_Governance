@@ -1,0 +1,316 @@
+@page "/planner/attributes"
+@* Planner "🔎 Attribute Analysis" — port of index.html view-attranalysis (_aaRenderLevel1/2/3, _aaCrumb, _aaLegend).
+   Every figure, colour and text comes from api/v1/attribute-analysis (AaLevel1Dto / AaLevel2Dto / AaLevel3Dto). *@
+@attribute [Authorize(Roles = Roles.Staff)]
+@inject IAPICallService Api
+
+<PageTitle>Attribute Analysis · VMM PO Governance</PageTitle>
+<HeadContent><link rel="stylesheet" href="css/analytics.css" /></HeadContent>
+
+<div class="an-page">
+    <div class="an-head" style="margin-bottom:20px">
+        <div>
+            <div class="pg-title">🔎 Attribute Analysis</div>
+            <div class="an-accent"></div>
+            <div class="pg-sub">Brand → MC → MRP × Flag drill-down. Sales Mix / Stock Mix / Deviation for every attribute in Article Master, plus colour-level STR at bucket level. Independent of Attribute Relevance Master.</div>
+        </div>
+        <button class="an-btn-sec" @onclick="RefreshAsync">↻ Refresh</button>
+    </div>
+
+    <div class="card an-filters" style="margin-bottom:14px">
+        <AnFilterSelect Label="Brand" Id="aa-filter-brand" AllLabel="All Brands" Values="_brands" MinWidth="120"
+                        Value="@_brand" ValueChanged="OnBrandAsync" />
+        <div class="an-f">
+            <label>MC (code or desc)</label>
+            <input id="aa-filter-mc" placeholder="Search MC…" style="min-width:200px"
+                   @bind="_mc" @bind:event="oninput" @bind:after="LoadLevel1Async" />
+        </div>
+        <div class="an-f">
+            <label>Min Stock</label>
+            <input id="aa-filter-minstk" type="number" placeholder="0" style="min-width:100px"
+                   @bind="_minStock" @bind:event="oninput" @bind:after="LoadLevel1Async" />
+        </div>
+        <button class="an-btn-clear" @onclick="ClearAsync">Clear</button>
+    </div>
+
+    <div id="aa-content">
+        @if (_error != null)
+        {
+            <div class="card an-err">@_error</div>
+        }
+        else if (_level == 1)
+        {
+            @Level1()
+        }
+        else if (_level == 2 && _l2 != null)
+        {
+            @Level2(_l2)
+        }
+        else if (_level == 3 && _l3 != null)
+        {
+            @Level3(_l3)
+        }
+        else
+        {
+            <div class="an-msg">⏳ Loading…</div>
+        }
+    </div>
+</div>
+
+@code {
+    private int _level = 1;
+    private AaLevel1Dto? _l1;
+    private AaLevel2Dto? _l2;
+    private AaLevel3Dto? _l3;
+    private string? _error;
+    private int _seq;
+
+    private string _brand = "", _mc = "", _minStock = "";
+    private List<string> _brands = new();
+
+    // drill-down position (level 2 / 3)
+    private string _dBrand = "", _dMcKey = "";
+
+    protected override Task OnInitializedAsync() => LoadLevel1Async();
+
+    private Task RefreshAsync() => LoadLevel1Async();
+
+    private async Task OnBrandAsync(string v)
+    {
+        _brand = v;
+        await LoadLevel1Async();
+    }
+
+    private async Task ClearAsync()
+    {
+        _brand = _mc = _minStock = "";
+        await LoadLevel1Async();
+    }
+
+    private async Task LoadLevel1Async()
+    {
+        var seq = ++_seq;
+        var res = await Api.GetAsync<AaLevel1Dto>(AnQuery.Build("api/v1/attribute-analysis",
+            ("brand", _brand), ("mc", _mc), ("minStock", _minStock)));
+        if (seq != _seq) return;
+        _level = 1;
+        if (!res.IsSuccess || res.Data == null) { _error = res.ResponseMessage; return; }
+        _error = null;
+        _l1 = res.Data;
+        _brands = _l1.Brands;
+        // the browser kept the selection only while the brand still exists
+        if (_brand != "" && !_brands.Contains(_brand)) _brand = "";
+    }
+
+    private async Task GoLevel2Async(string brand, string mcKey)
+    {
+        var seq = ++_seq;
+        var res = await Api.GetAsync<AaLevel2Dto>(AnQuery.Build("api/v1/attribute-analysis/mc", ("brand", brand), ("mcKey", mcKey)));
+        if (seq != _seq) return;
+        if (!res.IsSuccess || res.Data == null) { _error = res.ResponseMessage; return; }
+        _error = null;
+        _dBrand = brand; _dMcKey = mcKey;
+        _l2 = res.Data;
+        _level = 2;
+    }
+
+    private async Task GoLevel3Async(string mrp, string flag)
+    {
+        var seq = ++_seq;
+        var res = await Api.GetAsync<AaLevel3Dto>(AnQuery.Build("api/v1/attribute-analysis/bucket",
+            ("brand", _dBrand), ("mcKey", _dMcKey), ("mrp", mrp), ("flag", flag)));
+        if (seq != _seq) return;
+        if (!res.IsSuccess || res.Data == null) { _error = res.ResponseMessage; return; }
+        _error = null;
+        _l3 = res.Data;
+        _level = 3;
+    }
+
+    private Task CrumbAsync(int level) => level == 1 ? LoadLevel1Async() : GoLevel2Async(_dBrand, _dMcKey);
+
+    private RenderFragment Crumb(IEnumerable<AaCrumbDto> parts) => __builder =>
+    {
+        var i = 0;
+        <div class="aa-crumb">
+            @foreach (var p in parts)
+            {
+                if (i++ > 0)
+                {
+                    <span class="sep">▸</span>
+                }
+                if (p.Level is int lv)
+                {
+                    <a @onclick="() => CrumbAsync(lv)">@p.Text</a>
+                }
+                else
+                {
+                    @p.Text
+                }
+            }
+        </div>
+    };
+
+    private static RenderFragment Legend(IEnumerable<AaLegendItemDto> items, string cls = "") => __builder =>
+    {
+        <div class="aa-legend @cls">
+            @foreach (var it in items)
+            {
+                <span><span class="aa-dot" style="background:@it.Color"></span>@it.Label</span>
+            }
+        </div>
+    };
+
+    private RenderFragment Level1() => __builder =>
+    {
+        if (_l1 == null)
+        {
+            <div class="an-msg">⏳ Loading…</div>
+            return;
+        }
+        if (_l1.State == "noData")
+        {
+            <div class="card" style="padding:40px 24px;text-align:center;color:var(--ink3)">
+                <div style="font-size:36px;margin-bottom:10px">📂</div>
+                <div style="font-size:13px;color:var(--ink2);margin-bottom:6px">@_l1.EmptyTitle</div>
+                <div style="font-size:12px">@_l1.EmptyMessage</div>
+            </div>
+            return;
+        }
+        @Crumb(_l1.Breadcrumb)
+        if (_l1.State == "noMatch" || _l1.Rows.Count == 0)
+        {
+            <div class="card" style="padding:24px;text-align:center;color:var(--ink3)">@(_l1.EmptyMessage ?? "No Brand/MC combinations match the current filters.")</div>
+            return;
+        }
+        @Legend(_l1.Legend)
+        <div class="an-scroll">
+            <table class="sum-tbl">
+                <thead><tr><th>Brand</th><th>MC CD</th><th>MC Desc</th><th class="r">Stock</th><th class="r">Sales (45d)</th><th class="r">MRP×Flag Buckets</th></tr></thead>
+                <tbody>
+                    @foreach (var r in _l1.Rows)
+                    {
+                        <tr class="click" style="border-left:3px solid @r.Status.Color" title="@r.Tooltip" @onclick="() => GoLevel2Async(r.Brand, r.McKey)">
+                            <td style="font-weight:600">@r.Brand</td>
+                            <td class="m">@r.McCd</td>
+                            <td>@r.McDesc</td>
+                            <td class="r m" style="color:@r.Status.Color;font-weight:700">@r.StockText</td>
+                            <td class="r m">@r.Sales45Text</td>
+                            <td class="r m">@r.Buckets</td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    };
+
+    private RenderFragment Level2(AaLevel2Dto d) => __builder =>
+    {
+        @Crumb(d.Breadcrumb)
+        @Legend(d.Legend)
+        <div class="an-scroll">
+            <table class="sum-tbl">
+                <thead><tr><th>MRP</th><th>Flag</th><th class="r">Stock</th><th class="r">Sales (45d)</th><th class="r"># Colours</th></tr></thead>
+                <tbody>
+                    @foreach (var r in d.Rows)
+                    {
+                        <tr class="click" style="border-left:3px solid @r.Status.Color" title="@r.Tooltip" @onclick="() => GoLevel3Async(r.Mrp, r.Flag)">
+                            <td>@r.MrpText</td>
+                            <td>@r.Flag</td>
+                            <td class="r m" style="color:@r.Status.Color;font-weight:700">@r.StockText</td>
+                            <td class="r m">@r.Sales45Text</td>
+                            <td class="r m">@r.Colours</td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    };
+
+    private RenderFragment Level3(AaLevel3Dto d) => __builder =>
+    {
+        @Crumb(d.Breadcrumb)
+        <div class="aa-kvs">
+            @foreach (var kv in d.Summary)
+            {
+                <div class="aa-kv"><div class="k">@kv.Label</div><div class="v">@kv.Value</div></div>
+            }
+        </div>
+        if (!string.IsNullOrEmpty(d.Note))
+        {
+            <div class="card @(d.NoteKind == "warning" ? "aa-note-warn" : "aa-note-info")">@d.Note</div>
+        }
+        if (d.DeviationLegend.Count > 0)
+        {
+            @Legend(d.DeviationLegend, "dev")
+        }
+        foreach (var t in d.AttributeTables)
+        {
+            <div class="aa-h">@t.Title</div>
+            <div class="an-scroll">
+                <table class="sum-tbl">
+                    <thead>
+                        <tr>
+                            <th>@t.Dimension</th><th class="r">Stock</th><th class="r">Stock Mix%</th>
+                            <th class="r">Sales (45d)</th><th class="r">Sales Mix%</th><th class="r">Deviation (Sales − Stock)</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var r in t.Rows)
+                        {
+                            <tr class="@(r.Unmapped ? "unmapped" : "")">
+                                <td>@r.Value</td>
+                                <td class="r m">@r.StockText</td>
+                                <td class="r m">@r.StockMixText</td>
+                                <td class="r m">@r.Sales45Text</td>
+                                <td class="r m">@r.SalesMixText</td>
+                                <td class="r m" style="font-weight:700;color:@r.DeviationColor">@r.DeviationText</td>
+                            </tr>
+                        }
+                        <tr class="tot">
+                            <td>@t.Total.Value</td>
+                            <td class="r m">@t.Total.StockText</td>
+                            <td class="r m">@t.Total.StockMixText</td>
+                            <td class="r m">@t.Total.Sales45Text</td>
+                            <td class="r m">@t.Total.SalesMixText</td>
+                            <td class="r m">@t.Total.DeviationText</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        }
+        <div class="aa-h col">@d.ColourTitle</div>
+        <div class="aa-bands">
+            @foreach (var b in d.Bands)
+            {
+                <div class="aa-band" style="border-left:4px solid @b.Color">
+                    <div class="l">@b.Label</div>
+                    <div class="c" style="color:@b.Color">@b.Count</div>
+                    <div class="s">@b.StockText</div>
+                </div>
+            }
+        </div>
+        <div class="an-scroll">
+            <table class="sum-tbl">
+                <thead>
+                    <tr>
+                        <th>Colour</th><th class="r">Stock</th><th class="r">Stock Mix%</th>
+                        <th class="r">Sales (45d)</th><th class="r">Sales Mix%</th><th class="r">STR (ROS)</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var r in d.ColourRows)
+                    {
+                        <tr style="border-left:3px solid @r.Status.Color">
+                            <td><span class="aa-colour">@r.Colour</span></td>
+                            <td class="r m">@r.StockText</td>
+                            <td class="r m">@r.StockMixText</td>
+                            <td class="r m">@r.Sales45Text</td>
+                            <td class="r m">@r.SalesMixText</td>
+                            <td class="r m" style="font-weight:700;color:@r.Status.Color">@r.StrText</td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    };
+}

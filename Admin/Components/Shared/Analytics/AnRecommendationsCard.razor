@@ -1,0 +1,21 @@
+@* "💡 Recommendations for the … Team": each line in a --sur2 box with a 3px pink left border (Html keeps the <strong> markup). *@
+@if (Recs != null)
+{
+    <div class="card" style="margin-bottom:4px">
+        <div class="rc-hdr">@Recs.Title</div>
+        <div class="an-recs">
+            @foreach (var r in Recs.Items)
+            {
+                <div class="an-rec">@((MarkupString)Safe(string.IsNullOrEmpty(r.Html) ? r.Text : r.Html))</div>
+            }
+        </div>
+    </div>
+}
+
+@code {
+    [Parameter] public RecommendationsCardDto? Recs { get; set; }
+
+    // The lines embed MC / GM / colour values from uploaded data: encode everything, then restore only <strong>.
+    private static string Safe(string html) =>
+        System.Net.WebUtility.HtmlEncode(html).Replace("&lt;strong&gt;", "<strong>").Replace("&lt;/strong&gt;", "</strong>");
+}

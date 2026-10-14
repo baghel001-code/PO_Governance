@@ -1,0 +1,30 @@
+@* v1.1.4 .empty block: chart icon, title, sub text and an optional pink action button. *@
+<div class="an-empty">
+    <div class="an-empty-icon">
+        @if (Icon != null)
+        {
+            @Icon
+        }
+        else
+        {
+            <svg width="48" height="48" fill="none" stroke="var(--vmm-navy-m)" stroke-width="1.5" viewBox="0 0 24 24"><path d="M3 3v18h18M7 15l4-6 3 4 5-8" /></svg>
+        }
+    </div>
+    <div class="an-empty-title">@Title</div>
+    @if (!string.IsNullOrEmpty(Message))
+    {
+        <div class="an-empty-sub">@Message</div>
+    }
+    @if (!string.IsNullOrEmpty(Action))
+    {
+        <button class="an-btn-pink" @onclick="OnAction">@Action</button>
+    }
+</div>
+
+@code {
+    [Parameter] public string? Title { get; set; }
+    [Parameter] public string? Message { get; set; }
+    [Parameter] public string? Action { get; set; }
+    [Parameter] public EventCallback OnAction { get; set; }
+    [Parameter] public RenderFragment? Icon { get; set; }
+}

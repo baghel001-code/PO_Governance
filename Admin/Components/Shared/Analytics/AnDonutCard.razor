@@ -1,0 +1,30 @@
+@* "📊 Decision Mix" card: SVG donut (viewBox 0 0 42 42, r 15.9155, rotated −90°) + legend. Arcs come ready from the server. *@
+@if (Mix != null)
+{
+    <div class="card" style="margin-bottom:16px">
+        <div class="rc-hdr">@Mix.Title</div>
+        <div class="an-donut-row">
+            <svg width="120" height="120" viewBox="0 0 42 42" style="flex-shrink:0;transform:rotate(-90deg)">
+                @foreach (var s in Mix.Segments)
+                {
+                    <circle cx="21" cy="21" r="15.9155" fill="transparent" stroke="@s.Color" stroke-width="6"
+                            stroke-dasharray="@($"{s.DashArray} {s.DashGap}")" stroke-dashoffset="@s.DashOffset"></circle>
+                }
+            </svg>
+            <div class="an-donut-legend">
+                @foreach (var s in Mix.Segments)
+                {
+                    <div class="an-donut-li">
+                        <span class="sw" style="background:@s.Color"></span>
+                        @s.Decision <strong style="font-family:var(--mono)">@s.Count</strong>
+                        <span style="color:var(--ink3)">(@(s.PctText)%)</span>
+                    </div>
+                }
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    [Parameter] public DecisionMixDto? Mix { get; set; }
+}

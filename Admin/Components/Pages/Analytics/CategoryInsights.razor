@@ -1,0 +1,173 @@
+@page "/category/insights"
+@* Category "📊 Insights" (Category Dashboard) — port of index.html view-cat-insights + renderCatInsights /
+   _catDashResetFilters. All figures, texts and colours come from GET api/v1/insights/category (CatInsightsDto). *@
+@inject IAPICallService Api
+@inject NavigationManager Nav
+
+<PageTitle>Insights · VMM PO Governance</PageTitle>
+<HeadContent><link rel="stylesheet" href="css/analytics.css" /></HeadContent>
+
+<div class="an-page">
+    <div class="an-head">
+        <div>
+            <div style="display:flex;align-items:center;gap:10px;margin-bottom:4px">
+                <svg width="20" height="20" fill="none" stroke="var(--vmm-pink)" stroke-width="2" viewBox="0 0 24 24"><path d="M3 3v18h18M7 15l4-6 3 4 5-8" /></svg>
+                <div class="pg-title">Category Dashboard</div>
+            </div>
+            <div class="an-accent" style="margin:4px 0 4px 30px"></div>
+            <div class="pg-sub" style="margin-left:30px">This portal exists to stop weak sell-through from turning into a PO — every number below traces back to that one goal: catch it before the buy, not after the markdown.</div>
+        </div>
+        <button class="an-btn-sec" @onclick="LoadAsync">↻ Refresh</button>
+    </div>
+
+    <div class="card an-filters">
+        <AnFilterSelect Label="Brand" Id="cd-f-brand" AllLabel="All Brands" Values="Opt.Brands" Value="@_q.Brand" ValueChanged="v => SetAsync(() => _q.Brand = v)" />
+        <AnFilterSelect Label="Division" Id="cd-f-div" AllLabel="All Divisions" Values="Opt.Divisions" Value="@_q.Division" ValueChanged="v => SetAsync(() => _q.Division = v)" />
+        <AnFilterSelect Label="MC Desc" Id="cd-f-mc" AllLabel="All MCs" Values="Opt.Mcs" MinWidth="160" Value="@_q.Mc" ValueChanged="v => SetAsync(() => _q.Mc = v)" />
+        <AnFilterSelect Label="Month" Id="cd-f-month" AllLabel="All Months" Values="Opt.Months" MinWidth="100" Value="@_q.Month" ValueChanged="v => SetAsync(() => _q.Month = v)" />
+        <AnFilterSelect Label="Engine" Id="cd-f-engine" Options="Engines" MinWidth="150" Value="@_q.Engine" ValueChanged="v => SetAsync(() => _q.Engine = v)" />
+        <AnFilterSelect Label="Decision" Id="cd-f-decision" Options="Decisions" MinWidth="130" Value="@_q.Decision" ValueChanged="v => SetAsync(() => _q.Decision = v)" />
+        <div class="an-f">
+            <label>From</label>
+            <input id="cd-f-from" type="date" value="@_q.From" @onchange="e => SetAsync(() => _q.From = e.Value?.ToString())" title="Request date from (empty = today)" />
+        </div>
+        <div class="an-f">
+            <label>To</label>
+            <input id="cd-f-to" type="date" value="@_q.To" @onchange="e => SetAsync(() => _q.To = e.Value?.ToString())" title="Request date to (empty = today)" />
+        </div>
+        <button class="an-btn-clear" @onclick="ResetAsync">Clear Filters</button>
+    </div>
+
+    <div id="cat-insights-body">
+        @if (_error != null)
+        {
+            <div class="card an-err">@_error</div>
+        }
+        else if (_dto == null)
+        {
+            <div class="an-msg">⏳ Loading…</div>
+        }
+        else if (_dto.State == "noRequests")
+        {
+            <AnEmptyState Title="@(_dto.EmptyTitle ?? "No insights yet")" Message="@_dto.EmptyMessage" Action="@(_dto.EmptyAction ?? "New Request →")"
+                          OnAction='() => Nav.NavigateTo("/category/request")' />
+        }
+        else if (_dto.State == "noMatch")
+        {
+            <AnEmptyState Title="@(_dto.EmptyTitle ?? "No requests match these filters")" Message="@_dto.EmptyMessage" Action="@(_dto.EmptyAction ?? "Clear Filters")"
+                          OnAction="ResetAsync" />
+        }
+        else
+        {
+            <AnKpiGrid Kpis="_dto.Kpis" />
+            <AnDonutCard Mix="_dto.DecisionMix" />
+            <AnDriversCard Drivers="_dto.Drivers" />
+            @if (_dto.McRisk != null)
+            {
+                <div class="sum-sec">
+                    <div class="sum-hdr"><div class="sum-hdr-t">@_dto.McRisk.Title</div></div>
+                    <div class="an-scroll">
+                        <table class="sum-tbl">
+                            <thead><tr><th>MC Desc</th><th>Requests</th><th>Qty</th><th>Auto Allow</th><th>Watch List</th><th>Block/Hold</th><th>Risk %</th></tr></thead>
+                            <tbody>
+                                @foreach (var m in _dto.McRisk.Rows)
+                                {
+                                    <tr>
+                                        <td>@m.Mc</td>
+                                        <td class="m">@m.Requests</td>
+                                        <td class="m">@m.QtyText</td>
+                                        <td class="m" style="color:#00873E">@m.Allow</td>
+                                        <td class="m" style="color:#B45309">@m.Watch</td>
+                                        <td class="m" style="color:#DC2626">@m.Block</td>
+                                        <td class="m" style="font-weight:700;color:@m.RiskColor">@(m.RiskPct)%</td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            }
+            @if (_dto.Flagged != null)
+            {
+                <div class="sum-sec">
+                    <div class="sum-hdr"><div class="sum-hdr-t">@_dto.Flagged.Title</div></div>
+                    <div class="an-scroll">
+                        <table class="sum-tbl">
+                            <thead><tr><th>#</th><th>Generic Material</th><th>Colour</th><th>MC Desc</th><th>Decision</th><th>Driver</th></tr></thead>
+                            <tbody>
+                                @foreach (var f in _dto.Flagged.Rows)
+                                {
+                                    <tr>
+                                        <td>@f.Id</td>
+                                        <td class="m" style="font-size:11px">@f.Gm</td>
+                                        <td>@f.Colour</td>
+                                        <td style="font-size:11px">@f.McDesc</td>
+                                        <td><span class="dpill @f.DecisionPill">@f.Decision</span></td>
+                                        <td style="font-size:10px;color:var(--ink3)">@f.Driver</td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            }
+            <AnRecommendationsCard Recs="_dto.Recommendations" />
+        }
+    </div>
+</div>
+
+@code {
+    private static readonly List<OptionDto> DefaultEngines = new()
+    { new("", "All Engines"), new("B", "Single Concept MRP"), new("A", "Multi Concept MRP"), new("NEW", "New Article") };
+    private static readonly List<OptionDto> DefaultDecisions = new()
+    {
+        new("", "All Decisions"), new("Auto Allow", "Auto Allow"), new("Allow", "Allow"), new("Watch List", "Watch List"),
+        new("Block", "Block"), new("Hold — Don't Raise", "Hold — Don't Raise"), new("Cannot Validate", "Cannot Validate")
+    };
+
+    private CatInsightsQuery _q = new();
+    private CatInsightsDto? _dto;
+    private string? _error;
+    private int _seq;
+
+    private CatInsightsFiltersDto Opt => _dto?.Options ?? new CatInsightsFiltersDto();
+    private List<OptionDto> Engines => Opt.Engines.Count > 0 ? Opt.Engines : DefaultEngines;
+    private List<OptionDto> Decisions => Opt.Decisions.Count > 0 ? Opt.Decisions : DefaultDecisions;
+
+    /// <summary>An open-ended range (From set, To empty) runs up to today.</summary>
+    private string? ToParam => string.IsNullOrEmpty(_q.To) && !string.IsNullOrEmpty(_q.From) ? DateTime.Today.ToString("yyyy-MM-dd") : _q.To;
+
+    protected override Task OnInitializedAsync() => LoadAsync();
+
+    private async Task SetAsync(Action set)
+    {
+        set();
+        await LoadAsync();
+    }
+
+    /// <summary>_catDashResetFilters: every filter back to "All" (the date range stays).</summary>
+    private async Task ResetAsync()
+    {
+        _q = new CatInsightsQuery { From = _q.From, To = _q.To };
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        var seq = ++_seq;
+        var res = await Api.GetAsync<CatInsightsDto>(AnQuery.Build("api/v1/insights/category",
+            ("brand", _q.Brand), ("division", _q.Division), ("mc", _q.Mc), ("month", _q.Month),
+            ("engine", _q.Engine), ("decision", _q.Decision), ("from", _q.From), ("to", ToParam)));
+        if (seq != _seq) return;
+        if (!res.IsSuccess || res.Data == null) { _error = res.ResponseMessage; return; }
+        _error = null;
+        _dto = res.Data;
+        // show the filters the server actually applied (a value that vanished from the options is dropped)
+        var a = _dto.Applied ?? new CatInsightsQuery();
+        _q = new CatInsightsQuery
+        {
+            Brand = a.Brand ?? "", Division = a.Division ?? "", Mc = a.Mc ?? "", Month = a.Month ?? "",
+            Engine = a.Engine ?? "", Decision = a.Decision ?? "", From = _q.From, To = _q.To
+        };
+    }
+}

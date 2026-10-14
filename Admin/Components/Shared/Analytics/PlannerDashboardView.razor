@@ -1,0 +1,127 @@
+@* Planner dashboard over a Tool 2 run — port of index.html renderPlannerDashboard / _plannerDashResetFilters
+   (v1.1.4 kept the function but had no markup; laid out like the Category dashboard). Data: GET api/v1/insights/planner. *@
+@inject IAPICallService Api
+
+<div class="an-head" style="margin-bottom:10px">
+    <div>
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:4px">
+            <svg width="20" height="20" fill="none" stroke="var(--vmm-pink)" stroke-width="2" viewBox="0 0 24 24"><path d="M3 3v18h18M7 15l4-6 3 4 5-8" /></svg>
+            <div class="pg-title" style="font-size:22px">Planner Dashboard</div>
+        </div>
+        <div class="an-accent" style="margin:4px 0 4px 30px"></div>
+        <div class="pg-sub" style="margin-left:30px">Is already-bought stock on track to sell, or heading for a markdown? Slice the latest Raised PO Assessment run by Brand / MC / MRP / Flag / Month / Engine / Decision.@(_dto?.RunId != null ? $" Run {_dto.RunId}." : "")</div>
+    </div>
+    <button class="an-btn-sec" @onclick="LoadAsync">↻ Refresh</button>
+</div>
+
+@if (_error != null)
+{
+    <div class="card an-err">@_error</div>
+}
+else if (_dto == null)
+{
+    <div class="an-msg">⏳ Loading…</div>
+}
+else if (_dto.State == "noRun")
+{
+    <div id="planner-dash-placeholder" class="card">
+        <AnEmptyState Title="@(_dto.EmptyTitle ?? "Run an assessment first")"
+                      Message="@(_dto.EmptyMessage ?? "Run the Raised PO Assessment in PO Assessment — the dashboard builds from that run's Retain / Watch List / Reduce Qty / Cancel lines.")" />
+    </div>
+}
+else
+{
+    var o = _dto.Options;
+    <div id="planner-dash-filters" class="card an-filters">
+        <AnFilterSelect Label="Brand" Id="pd-f-brand" AllLabel="All Brands" Values="o.Brands" Value="@_q.Brand" ValueChanged="v => SetAsync(() => _q.Brand = v)" />
+        <AnFilterSelect Label="Division" Id="pd-f-div" AllLabel="All Divisions" Values="o.Divisions" Value="@_q.Division" ValueChanged="v => SetAsync(() => _q.Division = v)" />
+        <AnFilterSelect Label="MC" Id="pd-f-mc" AllLabel="All MCs" Values="o.Mcs" MinWidth="160" Value="@_q.Mc" ValueChanged="v => SetAsync(() => _q.Mc = v)" />
+        <AnFilterSelect Label="MRP" Id="pd-f-mrp" AllLabel="All MRPs" Values="o.Mrps" MinWidth="90" Value="@_q.Mrp" ValueChanged="v => SetAsync(() => _q.Mrp = v)" />
+        <AnFilterSelect Label="Flag" Id="pd-f-flag" AllLabel="All Flags" Values="o.Flags" MinWidth="90" Value="@_q.Flag" ValueChanged="v => SetAsync(() => _q.Flag = v)" />
+        <AnFilterSelect Label="Delivery Month" Id="pd-f-dm" AllLabel="All Months" Values="o.DeliveryMonths" MinWidth="100" Value="@_q.DeliveryMonth" ValueChanged="v => SetAsync(() => _q.DeliveryMonth = v)" />
+        <AnFilterSelect Label="Engine" Id="pd-f-engine" Options="o.Engines" MinWidth="150" Value="@_q.Engine" ValueChanged="v => SetAsync(() => _q.Engine = v)" />
+        <AnFilterSelect Label="Decision" Id="pd-f-decision" Options="o.Decisions" MinWidth="130" Value="@_q.Decision" ValueChanged="v => SetAsync(() => _q.Decision = v)" />
+        <button class="an-btn-clear" @onclick="ResetAsync">Clear Filters</button>
+    </div>
+
+    <div id="planner-dash-body">
+        @if (_dto.State == "noMatch")
+        {
+            <AnEmptyState Title="@(_dto.EmptyTitle ?? "No lines match these filters")" Message="@_dto.EmptyMessage" Action="Clear Filters" OnAction="ResetAsync" />
+        }
+        else
+        {
+            <AnKpiGrid Kpis="_dto.Kpis" ValueSize="18" />
+            <AnDonutCard Mix="_dto.DecisionMix" />
+            <AnDriversCard Drivers="_dto.Drivers" />
+            @if (_dto.McRisk != null)
+            {
+                <div class="sum-sec">
+                    <div class="sum-hdr"><div class="sum-hdr-t">@_dto.McRisk.Title</div></div>
+                    <div class="an-scroll">
+                        <table class="sum-tbl">
+                            <thead><tr><th>MC Desc</th><th>Lines</th><th>Retain</th><th>Watch List</th><th>Reduce/Cancel</th><th>Value at Risk (₹)</th><th>Risk %</th></tr></thead>
+                            <tbody>
+                                @foreach (var m in _dto.McRisk.Rows)
+                                {
+                                    <tr>
+                                        <td>@m.Mc</td>
+                                        <td class="m">@m.Lines</td>
+                                        <td class="m" style="color:#00873E">@m.Retain</td>
+                                        <td class="m" style="color:#B45309">@m.Watch</td>
+                                        <td class="m" style="color:#DC2626">@m.Cut</td>
+                                        <td class="m">@m.ValueAtRiskText</td>
+                                        <td class="m" style="font-weight:700;color:@m.RiskColor">@(m.RiskPct)%</td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            }
+            <AnRecommendationsCard Recs="_dto.Recommendations" />
+        }
+    </div>
+}
+
+@code {
+    /// <summary>A saved Tool 2 run; null = the latest.</summary>
+    [Parameter] public string? RunId { get; set; }
+
+    private PlannerDashboardQuery _q = new();
+    private PlannerDashboardDto? _dto;
+    private string? _error;
+    private int _seq;
+
+    protected override Task OnInitializedAsync() => LoadAsync();
+
+    private async Task SetAsync(Action set)
+    {
+        set();
+        await LoadAsync();
+    }
+
+    private async Task ResetAsync()
+    {
+        _q = new PlannerDashboardQuery();
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        var seq = ++_seq;
+        var res = await Api.GetAsync<PlannerDashboardDto>(AnQuery.Build("api/v1/insights/planner",
+            ("runId", RunId), ("brand", _q.Brand), ("division", _q.Division), ("mc", _q.Mc), ("mrp", _q.Mrp), ("flag", _q.Flag),
+            ("deliveryMonth", _q.DeliveryMonth), ("engine", _q.Engine), ("decision", _q.Decision)));
+        if (seq != _seq) return;
+        if (!res.IsSuccess || res.Data == null) { _error = res.ResponseMessage; return; }
+        _error = null;
+        _dto = res.Data;
+        var a = _dto.Applied ?? new PlannerDashboardQuery();
+        _q = new PlannerDashboardQuery
+        {
+            Brand = a.Brand ?? "", Division = a.Division ?? "", Mc = a.Mc ?? "", Mrp = a.Mrp ?? "", Flag = a.Flag ?? "",
+            DeliveryMonth = a.DeliveryMonth ?? "", Engine = a.Engine ?? "", Decision = a.Decision ?? ""
+        };
+    }
+}

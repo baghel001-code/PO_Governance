@@ -36,6 +36,8 @@ builder.Services.AddIngestInfrastructure();
 builder.Services.AddTool1Services();
 builder.Services.AddSingleton(builder.Configuration.GetSection("Tool1").Get<Application.Services.V1.Tool1.Tool1Settings>()
     ?? new Application.Services.V1.Tool1.Tool1Settings());
+builder.Services.AddTool2Services();
+builder.Services.AddTool2Excel();
 builder.Services.AddAnalyticsServices();
 builder.Services.AddAnalyticsAdapters();
 builder.Services.AddAuthorization();

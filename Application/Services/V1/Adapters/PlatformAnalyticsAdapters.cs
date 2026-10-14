@@ -67,12 +67,3 @@ namespace Application.Services.V1.Adapters
     }
 }
 
-namespace Application.Services.V1.Adapters
-{
-    /// <summary>Placeholder until the Tool 2 assessment is wired: no saved Tool 2 rows.</summary>
-    public sealed class EmptyTool2ResultSource : ITool2ResultSource
-    {
-        public Task<Tool2RunRows?> GetLatestRowsAsync(AppUserContext user, CancellationToken ct = default) => Task.FromResult<Tool2RunRows?>(null);
-        public Task<Tool2RunRows?> GetRunRowsAsync(string runId, AppUserContext user, CancellationToken ct = default) => Task.FromResult<Tool2RunRows?>(null);
-    }
-}

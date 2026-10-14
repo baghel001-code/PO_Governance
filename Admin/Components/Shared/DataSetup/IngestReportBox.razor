@@ -1,0 +1,59 @@
+@* The mapping / import report under the ZIP and Raw Import slots (index.html #zip-mapping-report,
+   #raw-import-report). Lines come from the API (IngestReport.Lines) — headings end with ":". *@
+@using Application.DTOs.Ingest
+
+@if (Report != null && (Report.Lines.Count > 0 || Report.Warnings.Count > 0 || Report.Errors.Count > 0))
+{
+    <div class="ds-report @(Variant == "raw" ? "raw" : "zip")" id="@Id">
+        @foreach (var line in Report.Lines)
+        {
+            if (line.Length == 0)
+            {
+                <div class="r-gap"></div>
+            }
+            else if (line.StartsWith("⚠ Missing", StringComparison.Ordinal))
+            {
+                <div><strong class="r-red">@line</strong></div>
+            }
+            else if (line.StartsWith("Not recognized", StringComparison.Ordinal))
+            {
+                <div><strong class="r-red">@line</strong></div>
+            }
+            else if (line == "Skipped:")
+            {
+                <div><strong class="r-amb">@line</strong></div>
+            }
+            else if (line.EndsWith(':'))
+            {
+                <div><strong>@line</strong></div>
+            }
+            else
+            {
+                <div>@line</div>
+            }
+        }
+        @if (Report.Lines.Count == 0)
+        {
+            @foreach (var e in Report.Errors)
+            {
+                <div class="r-red">✗ @e</div>
+            }
+        }
+        @if (Report.Warnings.Count > 0)
+        {
+            <br />
+            <div><strong class="r-amb">Notes:</strong></div>
+            @foreach (var w in Report.Warnings)
+            {
+                <div>⚠ @w</div>
+            }
+        }
+    </div>
+}
+
+@code {
+    [Parameter] public IngestReport? Report { get; set; }
+    /// <summary>"zip" (blue box) or "raw" (green box).</summary>
+    [Parameter] public string Variant { get; set; } = "zip";
+    [Parameter] public string? Id { get; set; }
+}

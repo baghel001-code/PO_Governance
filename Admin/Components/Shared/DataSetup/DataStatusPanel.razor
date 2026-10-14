@@ -1,0 +1,63 @@
+@* "▸ Data Status" dots (index.html sb-assess / updateDots): green = on the server, red = required and
+   missing, amber = optional and missing. Fed by GET api/v1/status → datasets. *@
+@using Domain.Entities.Store
+
+<div class="ds-status-card">
+    <div class="sb-lbl">▸ Data Status</div>
+    @if (Datasets == null)
+    {
+        <div class="dot-row"><span class="ds-spin"></span> Loading…</div>
+    }
+    else
+    {
+        <div class="ds-dots">
+            @foreach (var k in DatasetKeys.Required)
+            {
+                @Row(k, false)
+            }
+            <div class="ds-dot-sep"></div>
+            @foreach (var k in DataSetupText.Optional)
+            {
+                @Row(k, true)
+            }
+            <div class="ds-dot-sep"></div>
+            @Row(DatasetKeys.Grc, true)
+        </div>
+        <div class="ds-req @(Missing.Count == 0 ? "ok" : "er")">
+            @if (Missing.Count == 0)
+            {
+                <span>✓ All @DatasetKeys.Required.Length required files are on the server.</span>
+            }
+            else
+            {
+                <span>⚠ Missing required files: @string.Join(", ", Missing.Select(DataSetupText.Label))</span>
+            }
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter] public IReadOnlyDictionary<string, DatasetEntry>? Datasets { get; set; }
+
+    private List<string> Missing => DatasetKeys.Required.Where(k => !Has(k)).ToList();
+
+    private bool Has(string k) => Datasets != null && Datasets.TryGetValue(k, out var e) && e != null;
+
+    private RenderFragment Row(string key, bool optional) => __builder =>
+    {
+        var has = Has(key);
+        var e = has ? Datasets![key] : null;
+        <div class="dot-row" id="dot-row-@key" title="@(e?.Label ?? "")">
+            <span class="dot @(has ? "dg" : optional ? "da" : "dr")" id="dot-@key"></span>
+            <span class="ds-dot-name">@DataSetupText.Label(key)</span>
+            @if (optional && !has)
+            {
+                <span class="ds-opt">(opt)</span>
+            }
+            @if (e != null)
+            {
+                <span class="ds-dot-meta">@Domain.Entities.Common.Js.GroupIN(e.Rows) rows · @DataSetupText.FmtTime(e.UpdatedAt)</span>
+            }
+        </div>
+    };
+}

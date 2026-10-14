@@ -1,0 +1,443 @@
+@page "/planner/data"
+@attribute [Authorize(Roles = "admin,planner")]
+@using System.Text.Json
+@using Application.DTOs.Ingest
+@using Application.DTOs.Platform
+@using Domain.Entities.Store
+@using Admin.Components.Shared.DataSetup
+@implements IDisposable
+@inject IAPICallService Api
+@inject ServerStatusService Status
+@inject ISnackbar Snackbar
+@inject IDialogService Dialogs
+@inject ILogger<DataSetup> Log
+
+<PageTitle>Data Setup · VMM PO Governance</PageTitle>
+<HeadContent>
+    <link rel="stylesheet" href="css/datasetup.css" />
+</HeadContent>
+
+<div class="ds-shell">
+    @* ── Data Setup sidebar (index.html #sb-data) ── *@
+    <aside class="ds-sidebar" id="sb-data">
+        <div class="sb-sec">
+            <div class="sb-lbl">Bulk Upload — All Files at Once</div>
+            <UploadSlot Id="zipbundle" Name="📦 Upload ZIP bundle" State="_zip" Accept=".zip" Disabled="_busy" OnFiles="OnZip"
+                        Style="border-style:dashed;border-width:2px"
+                        Description="Put ALL your files in one folder — raw system exports and already-formatted files together — zip it, upload the single .zip here. Already-formatted files are matched by filename (see naming rules below); anything else is auto-detected and converted per-sheet (PO Pending, Stock, Sales Trend, Article Master, multi-brand Best Seller workbooks). No need to separate the two — just zip everything." />
+            <IngestReportBox Report="_zipReport" Variant="zip" Id="zip-mapping-report" />
+            <details class="ds-rules">
+                <summary>Filename rules used for auto-matching</summary>
+                <div>
+                    F1 — Stock: filename starts with <code>F1_Stock</code><br>
+                    F2 — Pending PO: starts with <code>F2_Pending</code><br>
+                    F3 — Sales Trend: starts with <code>F3_Sales</code><br>
+                    F4 — Forecast: starts with <code>F4_Forecast</code><br>
+                    Universe Master: contains <code>UniverseMaster</code><br>
+                    Article Master: contains <code>ArticleMaster</code><br>
+                    Colour Master: contains <code>ColourMaster</code> / <code>ColorMaster</code><br>
+                    Attribute Relevance Master: contains <code>ATT_relevance</code> / <code>AttributeRelevance</code><br>
+                    CY BSR: contains <code>BSR</code> or <code>BEST_SELLER</code> and <code>SS26</code> (current season — update in code each cycle)<br>
+                    LY BSR (AW): contains <code>BSR</code> or <code>BEST_SELLER</code> and <code>AW25</code><br>
+                    LY BSR (SS): contains <code>BSR</code> or <code>BEST_SELLER</code> and <code>SS25</code><br>
+                    Multiple files can map to the same slot (e.g. per-division BSR files) — they get merged automatically, same as multi-selecting files in the individual slots below.<br>
+                    Anything that doesn't match a rule is skipped and listed after upload — use the individual slots below for those.
+                </div>
+            </details>
+        </div>
+
+        <div class="sb-sec">
+            <div class="sb-lbl">Raw Data Import — auto-convert</div>
+            <UploadSlot Id="rawimport" Name="🧩 Upload raw export files" State="_raw" Multiple="true" Disabled="_busy" OnFiles="OnRaw"
+                        Style="border-style:dashed;border-width:2px;border-color:#00873E"
+                        Description="Prefer the ZIP bundle above — put everything in one zip and it's handled automatically. Use this instead only if you'd rather not zip: select raw files individually and they're auto-detected/converted the same way (PO Pending, Stock, Sales Trend, Article Master, multi-brand Best Seller workbooks)." />
+            <IngestReportBox Report="_rawReport" Variant="raw" Id="raw-import-report" />
+        </div>
+
+        <div class="sb-sec">
+            <div class="sb-lbl">GRC — Actual Buying History (opt, for backtest)</div>
+            <UploadSlot Id="grc" Name="📦 Goods Received Qty by month" State="Slot(DatasetKeys.Grc)" Disabled="_busy" OnFiles="OnGrc"
+                        Clearable="Slot(DatasetKeys.Grc).Loaded" OnClear='() => ClearAsync(DatasetKeys.Grc)'
+                        Style="border-style:dashed;border-width:2px;border-color:#7C3AED"
+                        Description="Company-level purchase report — Brand × Generic Material × Colour, month columns of actual received quantity. Powers the &quot;GRC Impact&quot; backtest in the Analytics tab (Multi Concept MRP only) — see how the current peer-ranking rules would have judged past buying." />
+            @if (_grcPeriods is { Count: > 0 })
+            {
+                <div class="ds-grc-periods" id="grc-periods">
+                    @_grcPeriods.Count @(_grcPeriodType == "week" ? "weeks" : "months") found (@_grcPeriods[0] – @_grcPeriods[^1]).
+                    The cut-over picker in <a href="/planner/grc">📈 GRC Back Testing</a> starts at <strong>@_grcDefault</strong>.
+                </div>
+            }
+        </div>
+
+        <div class="sb-sec">
+            <div class="sb-lbl">Single Concept MRP Inputs</div>
+            @foreach (var s in DataSetupText.SingleConcept)
+            {
+                @FileSlot(s)
+            }
+        </div>
+
+        <div class="sb-sec">
+            <div class="sb-lbl">Multi Concept MRP Inputs</div>
+            @FileSlot(DataSetupText.Bsr)
+            <div class="uslot" style="cursor:default" id="sl-season-selection">
+                <div class="us-name">Season Selection</div>
+                <div class="us-desc" style="margin-bottom:10px">Reads every distinct Season value found in Article Master. Defaults to the latest season as Current and the next-latest as Fallback — rolls forward on its own as new seasons appear. Click a pill to add or remove it from a group; combine two seasons in Current during a transition, then drop back to one when it's over.</div>
+                <!-- SeasonSelection goes here -->
+                @* index.html renderSeasonPills() targets #season-pills-current / #season-pills-fallback here
+                   ("Current Season(s)" / "Fallback Season(s)") — the Shared/Seasons/SeasonSelection component
+                   is dropped in by the coordinator. *@
+            </div>
+        </div>
+
+        <div class="sb-sec">
+            <div class="sb-lbl">Master Files (Optional)</div>
+            @foreach (var s in DataSetupText.Masters)
+            {
+                @FileSlot(s)
+            }
+        </div>
+
+        <ParametersPanel />
+
+        <div class="sb-footer">VMM PO Governance · BRD v1.2</div>
+    </aside>
+
+    @* ── main view (index.html #view-data) ── *@
+    <section class="ds-main" id="view-data">
+        <div style="margin-bottom:20px">
+            <div class="ds-title">📂 Data Setup</div>
+            <div class="ds-accent"></div>
+            <div class="ds-sub">Upload all required data files using the sidebar on the left. Files are shared across PO Assessment.</div>
+        </div>
+
+        @if (_lastUploadId != null)
+        {
+            <div class="ds-saved" id="ds-saved">
+                <strong>Saved · @_lastUploadId</strong> — Everyone who opens this page now gets the data you uploaded. Find it in
+                <a href="/history">History → Data uploads</a>.
+            </div>
+        }
+
+        <div class="ds-grid">
+            <div class="plan-info-card">
+                <div style="font-size:36px;margin-bottom:12px">📂</div>
+                <div class="pic-title">Upload Files to Begin</div>
+                <div class="pic-sub">Use the sidebar to upload data files. For BSR files, hold <kbd>Ctrl</kbd> to select multiple files at once.</div>
+                <div class="pic-sub" style="margin-top:8px">Each upload gets an <strong>Upload ID</strong> with a timestamp and is saved to the server. Uploading a new <strong>SCR products</strong> file also creates logins for any new buyers or category heads in it.</div>
+            </div>
+            <DataStatusPanel Datasets="_datasets" />
+        </div>
+
+        <div class="ds-card">
+            <div class="ds-card-hdr">Required File Formats</div>
+            <table class="ds-tbl">
+                <thead><tr><th></th><th>File</th><th>Sheet</th><th>Key Columns</th></tr></thead>
+                <tbody>
+                    @foreach (var r in RequiredFormats)
+                    {
+                        <tr>
+                            <td style="width:18px"><span class="dot @(Has(r.Key) ? "dg" : "dr")" title="@(Has(r.Key) ? "On the server" : "Missing")"></span></td>
+                            <td><strong>@r.File</strong></td>
+                            <td>@r.Sheet</td>
+                            <td>@((MarkupString)r.Columns)</td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    </section>
+</div>
+
+@code {
+    private sealed record FormatRow(string Key, string File, string Sheet, string Columns);
+
+    private static readonly FormatRow[] RequiredFormats =
+    {
+        new("f1", "F1 — Stock", "STOCK", "KEY-3, OP STK, Generic Material (joins to Article Master for Multi Concept MRP attribute)"),
+        new("f2", "F2 — Pending PO", "F3_Released_PO", "PO Number, Generic Material, Color, Delivery Month (MM.YYYY), Pending Qty, <strong>PO Value</strong> (optional — ₹ total for the line; used for Value at Risk instead of MRP when provided)"),
+        new("f3", "F3 — Sales Trend", "SALES TREND", "KEY-2, KEY-3, COLOUR, Day 1...Day 45 cols, Generic Material (joins to Article Master for Multi Concept MRP attribute) — or legacy MM.YYYY months"),
+        new("f4", "F4 — Forecast", "FORCAST", "KEY-2, month cols (date headers)"),
+        new("um", "Universe Master", "Universe_Master", "Generic Material, Brand Type, Division, MC CD, MC DES, MRP, Flag"),
+        new("bsr", "BSR files (CY/LY)", "DETAIL / DETAIL SHEET", "Generic Material, Color, MC CD, MRP, WOF, AVG PERDAY SELL THRU%"),
+    };
+
+    private readonly Dictionary<string, SlotState> _slots = new();
+    private readonly SlotState _zip = new() { Status = "Click to upload .zip" };
+    private readonly SlotState _raw = new() { Status = "Click to upload raw files" };
+    private Dictionary<string, DatasetEntry>? _datasets;
+    private IngestReport? _zipReport, _rawReport;
+    private List<string>? _grcPeriods;
+    private string? _grcPeriodType, _grcDefault;
+    private string? _lastUploadId;
+    private bool _busy;
+    private bool _disposed;
+
+    private SlotState Slot(string key)
+    {
+        if (!_slots.TryGetValue(key, out var s))
+        {
+            var def = DataSetupText.AllFileSlots.FirstOrDefault(d => d.Key == key);
+            _slots[key] = s = new SlotState { Status = def?.Idle ?? "Click to upload" };
+        }
+        return s;
+    }
+
+    private static string IdleText(string key) => DataSetupText.AllFileSlots.FirstOrDefault(d => d.Key == key)?.Idle ?? "Click to upload";
+
+    private bool Has(string key) => _datasets != null && _datasets.ContainsKey(key);
+
+    private RenderFragment FileSlot(SlotDef s) => __builder =>
+    {
+        var st = Slot(s.Key);
+        <UploadSlot Id="@s.Key" Name="@s.Name" Description="@s.Description" State="st" Multiple="s.Multiple" Disabled="_busy"
+                    Clearable="s.Clearable || st.Loaded" OnClear="() => ClearAsync(s.Key)"
+                    OnFiles="e => OnSlotFiles(s.Key, e)" />
+    };
+
+    protected override async Task OnInitializedAsync()
+    {
+        Status.Changed += OnStatusChanged;
+        await LoadStatusAsync();
+    }
+
+    // ── server status → slot texts and dots (shared.js syncFromServer / markSlot) ──
+
+    private async Task LoadStatusAsync()
+    {
+        var res = await Api.GetAsync<StatusResponse>("api/v1/status");
+        if (res.IsSuccess && res.Data != null) ApplyDatasets(res.Data.Datasets);
+        else if (!res.IsSuccess) Snackbar.Add("⚠ " + res.ResponseMessage, Severity.Error);
+    }
+
+    private long _seenDataVersion;
+
+    private void OnStatusChanged()
+    {
+        if (_disposed || _busy || Status.Raw.ValueKind != JsonValueKind.Object || Status.DataVersion == _seenDataVersion) return;
+        _ = InvokeAsync(() =>
+        {
+            ApplyFromRaw();
+            StateHasChanged();
+        });
+    }
+
+    private void ApplyFromRaw()
+    {
+        try
+        {
+            var s = Status.Raw.Deserialize<StatusResponse>(APICallService.Json);
+            if (s != null) ApplyDatasets(s.Datasets);
+        }
+        catch (JsonException e) { Log.LogWarning(e, "Bad status payload"); }
+    }
+
+    private void ApplyDatasets(Dictionary<string, DatasetEntry>? ds)
+    {
+        _datasets = ds ?? new Dictionary<string, DatasetEntry>();
+        _seenDataVersion = Status.DataVersion;
+        foreach (var key in DataSetupText.AllFileSlots.Select(d => d.Key).Append(DatasetKeys.Grc))
+        {
+            var st = Slot(key);
+            if (st.Busy) continue;
+            if (_datasets.TryGetValue(key, out var e) && e != null) st.Ok(DataSetupText.SavedStatus(e), e.Label);
+            else if (!st.Error) st.Reset(IdleText(key));
+        }
+    }
+
+    // ── uploads ──
+
+    private Task OnSlotFiles(string key, InputFileChangeEventArgs e) =>
+        RunUploadAsync(Slot(key), "api/v1/ingest/file/" + key + (key == DatasetKeys.Bsr ? "?append=true" : ""), Files(e), key);
+
+    private Task OnZip(InputFileChangeEventArgs e) => RunUploadAsync(_zip, "api/v1/ingest/zip", Files(e).Take(1).ToList(), "zip");
+    private Task OnRaw(InputFileChangeEventArgs e) => RunUploadAsync(_raw, "api/v1/ingest/raw", Files(e), "raw");
+    private Task OnGrc(InputFileChangeEventArgs e) => RunUploadAsync(Slot(DatasetKeys.Grc), "api/v1/ingest/grc", Files(e).Take(1).ToList(), DatasetKeys.Grc);
+
+    private static List<IBrowserFile> Files(InputFileChangeEventArgs e) =>
+        e.FileCount == 0 ? new() : e.GetMultipleFiles(DataSetupText.MaxFiles).ToList();
+
+    private async Task RunUploadAsync(SlotState slot, string path, List<IBrowserFile> files, string kind)
+    {
+        if (files.Count == 0 || _busy) return;
+        var total = files.Sum(f => f.Size);
+        if (total > DataSetupText.MaxUploadBytes)
+        {
+            slot.Fail("✗ Upload is larger than max_upload_mb (400 MB) in config.json");
+            slot.InputKey++;
+            Snackbar.Add("Upload is larger than max_upload_mb (400 MB) in config.json", Severity.Error);
+            return;
+        }
+
+        _busy = true;
+        slot.Busy = true; slot.Error = false; slot.StatusClass = ""; slot.Title = null; slot.Progress = 0;
+        slot.Status = (kind == "zip" ? "⏳ Uploading zip… " : files.Count > 1 ? $"⏳ Uploading {files.Count} file(s)… " : "⏳ Uploading… ") + DataSetupText.FmtBytes(total);
+        StateHasChanged();
+
+        long sent = 0;
+        var lastPct = -1;
+        var streams = new List<Stream>();
+        var serverPhase = false;
+        void Progress(long n)
+        {
+            sent += n;
+            var pct = total > 0 ? (int)Math.Min(100, sent * 100 / total) : 100;
+            if (pct == lastPct) return;
+            lastPct = pct;
+            _ = InvokeAsync(() =>
+            {
+                slot.Progress = pct;
+                if (pct >= 100 && !serverPhase)
+                {
+                    serverPhase = true;
+                    slot.Progress = null;
+                    slot.Status = kind == "zip" ? "⏳ Reading zip…" : files.Count > 1 ? $"⏳ Reading {files.Count} file(s)…" : "⏳ Reading…";
+                }
+                StateHasChanged();
+            });
+        }
+
+        ApiResponse<IngestResponse> res;
+        try
+        {
+            var uploads = new List<UploadFile>();
+            foreach (var f in files)
+            {
+                var s = new ProgressStream(f.OpenReadStream(DataSetupText.MaxUploadBytes), Progress);
+                streams.Add(s);
+                uploads.Add(new UploadFile(f.Name, s, string.IsNullOrEmpty(f.ContentType) ? "application/octet-stream" : f.ContentType));
+            }
+            res = await Api.UploadAsync<IngestResponse>(path, uploads);
+        }
+        catch (Exception ex) when (ex is IOException or InvalidOperationException or JSException or TaskCanceledException)
+        {
+            Log.LogWarning(ex, "Upload to {Path} failed", path);
+            res = ApiResponse<IngestResponse>.Fail(500, ex.Message);
+        }
+        finally
+        {
+            foreach (var s in streams) await s.DisposeAsync();
+        }
+
+        slot.Busy = false;
+        slot.Progress = null;
+        slot.InputKey++;
+        await ApplyResultAsync(slot, kind, res);
+        _busy = false;
+        StateHasChanged();
+    }
+
+    private async Task ApplyResultAsync(SlotState slot, string kind, ApiResponse<IngestResponse> res)
+    {
+        var data = res.Data;
+        var rep = data?.Report;
+
+        // status line of the slot that was used
+        if (rep?.Status != null)
+        {
+            if (rep.StatusIsError) slot.Fail(rep.Status);
+            else slot.Ok(rep.Status);
+            // a zip with missing required files still loaded what it had — v1.1.4 kept the slot marked as an error
+        }
+        else if (!res.IsSuccess)
+        {
+            slot.Fail("✗ " + res.ResponseMessage);
+        }
+
+        if (kind == "zip") _zipReport = rep ?? (res.IsSuccess ? null : new IngestReport { Errors = { res.ResponseMessage } });
+        if (kind == "raw") _rawReport = rep ?? (res.IsSuccess ? null : new IngestReport { Errors = { res.ResponseMessage } });
+
+        // datasets saved → each slot shows what is on the server now (shared.js markSlot)
+        if (data != null)
+        {
+            foreach (var sv in data.Saved)
+            {
+                if (sv.Entry != null)
+                {
+                    _datasets ??= new();
+                    _datasets[sv.Key] = sv.Entry;
+                    Slot(sv.Key).Ok(DataSetupText.SavedStatus(sv.Entry), sv.Entry.Label ?? sv.Label);
+                }
+                if (sv.UsersError != null) Snackbar.Add("⚠ Logins from SCR file: " + sv.UsersError, Severity.Warning);
+                else if (sv.UsersSync is JsonElement u && u.ValueKind == JsonValueKind.Object) ToastUsers(u);
+            }
+            if (kind == DatasetKeys.Grc && rep?.Periods is { Count: > 0 } && res.IsSuccess)
+            {
+                _grcPeriods = rep.Periods;
+                _grcPeriodType = rep.GrcPeriodType;
+                _grcDefault = rep.DefaultPeriod;
+            }
+            if (data.UploadId != null) _lastUploadId = data.UploadId;
+        }
+
+        // toasts, in the order the page showed them
+        if (rep != null)
+            foreach (var t in rep.Toasts)
+                Snackbar.Add(t, t.StartsWith("Error", StringComparison.Ordinal) ? Severity.Error : t.StartsWith("Saved to server", StringComparison.Ordinal) ? Severity.Success : Severity.Normal);
+        if (!res.IsSuccess && (rep == null || rep.Toasts.Count == 0))
+            Snackbar.Add("⚠ Could not save to server: " + res.ResponseMessage, Severity.Error);
+        if (rep != null)
+            foreach (var w in rep.Warnings) Snackbar.Add("⚠ " + w, Severity.Warning);
+
+        if (data?.Saved.Count > 0)
+        {
+            await Status.RefreshAsync();
+            Status.MarkLoaded();
+            if (Status.Raw.ValueKind == JsonValueKind.Object) ApplyFromRaw();
+        }
+
+        // alert() boxes (zip: required files missing)
+        if (rep != null)
+            foreach (var a in rep.Alerts)
+                await Dialogs.ShowMessageBox("Data Setup", (MarkupString)("<div style=\"white-space:pre-line\">" + System.Net.WebUtility.HtmlEncode(a) + "</div>"), yesText: "OK");
+    }
+
+    private void ToastUsers(JsonElement u)
+    {
+        int Count(string n) => u.TryGetProperty(n, out var a) && a.ValueKind == JsonValueKind.Array ? a.GetArrayLength() : 0;
+        var added = Count("added");
+        var updated = Count("updated");
+        if (added + updated > 0)
+            Snackbar.Add($"SCR products: {added} new login(s) created, {updated} updated (Users tab)", Severity.Info);
+    }
+
+    // ── clear a slot (index.html clearFileSlot → shared.js DELETE data/{key}) ──
+
+    private async Task ClearAsync(string key)
+    {
+        if (_busy) return;
+        var ok = await Dialogs.ShowMessageBox("Clear " + DataSetupText.Label(key),
+            "This removes the current " + DataSetupText.Label(key) + " data from the server for everyone (History keeps every version).",
+            yesText: "Clear", cancelText: "Cancel");
+        if (ok != true) return;
+        _busy = true;
+        var st = Slot(key);
+        st.Busy = true; st.Status = "Removing " + DataSetupText.Label(key) + "…";
+        StateHasChanged();
+        var res = await Api.DeleteAsync<DataVersionResponse>("api/v1/data/" + key);
+        st.Busy = false;
+        if (res.IsSuccess)
+        {
+            _datasets?.Remove(key);
+            st.Reset(IdleText(key));
+            st.InputKey++;
+            if (key == DatasetKeys.Grc) _grcPeriods = null;
+            Snackbar.Add("Cleared — upload fresh files for this slot");
+            await Status.RefreshAsync();
+            Status.MarkLoaded();
+            if (Status.Raw.ValueKind == JsonValueKind.Object) ApplyFromRaw();
+        }
+        else
+        {
+            if (_datasets != null && _datasets.TryGetValue(key, out var e)) st.Ok(DataSetupText.SavedStatus(e), e.Label);
+            Snackbar.Add("⚠ Could not save to server: " + res.ResponseMessage, Severity.Error);
+        }
+        _busy = false;
+    }
+
+    public void Dispose()
+    {
+        _disposed = true;
+        Status.Changed -= OnStatusChanged;
+    }
+}

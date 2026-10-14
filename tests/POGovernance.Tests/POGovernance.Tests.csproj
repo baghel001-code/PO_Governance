@@ -28,4 +28,8 @@
     <ProjectReference Include="..\..\Domain\Domain.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <None Include="Recommendation\Fixtures\**" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
 </Project>

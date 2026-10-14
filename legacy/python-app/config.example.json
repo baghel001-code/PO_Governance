@@ -1,0 +1,35 @@
+{
+  "_readme": "Edit, save, then restart the service (see README). Keys starting with _ are ignored.",
+
+  "port": 8080,
+  "host": "0.0.0.0",
+
+  "_accounts": "Sign-in settings. admin_email is created automatically as Admin + Planner. Everyone starts with default_password and must change it at first sign-in.",
+  "admin_email": "kosaraju.srihari@vishalwholesale.co.in",
+  "default_password": "1234",
+  "password_min_length": 8,
+  "session_idle_hours": 12,
+  "max_failed_logins": 5,
+  "lockout_minutes": 15,
+  "_restrict_to_own_mcs": "true = buyers and category heads only see requests on their own MCs (from the SCR products file) plus their own requests.",
+  "restrict_to_own_mcs": true,
+  "_cookie_secure": "Set to true once the site is served over https:// (see README section 6).",
+  "cookie_secure": false,
+
+  "_backups": "Nightly copy of the data folder, after backup_hour (24h clock), kept backup_keep_days days.",
+  "backup_dir": "backups",
+  "backup_hour": 2,
+  "backup_keep_days": 30,
+
+  "data_dir": "data",
+  "max_upload_mb": 400,
+  "_history_retention_days": "0 = keep all history forever (every upload version, Tool 2 run and Tool 1 request). Set e.g. 365 to delete history older than a year (the current files are never deleted).",
+  "history_retention_days": 0,
+
+  "_ai": "One anthropic_api_key turns on BOTH the AI chat assistant and AI Insights. A groq_api_key is optional - if set, AI Insights uses Groq instead. The VM needs outbound HTTPS to api.anthropic.com (and api.groq.com if used), or set outbound_proxy, e.g. http://proxy.company.local:8080. After editing, run test-ai.bat, then restart-service.ps1.",
+  "anthropic_api_key": "",
+  "anthropic_model": "claude-sonnet-5",
+  "groq_api_key": "",
+  "groq_model": "openai/gpt-oss-120b",
+  "outbound_proxy": ""
+}

@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Sign in · VMM PO Governance</title>
+<link href="vendor/fonts/fonts.css" rel="stylesheet">
+<style>
+  :root{--pink:#E8006E;--navy:#1A4FAF;--ink:#0f1b3d;--ink2:#4b587a;--ink3:#8a94ad;--brd:#d6dcea;--bg:#eef2fa;--red:#DC2626;--grn:#00873E}
+  *{box-sizing:border-box}
+  body{margin:0;min-height:100vh;font-family:Inter,system-ui,sans-serif;color:var(--ink);
+       background:radial-gradient(1200px 600px at 10% -10%,#2b5fd0 0%,transparent 60%),linear-gradient(135deg,#0b1f5c,#1A4FAF 55%,#3b1a6b);
+       display:flex;align-items:center;justify-content:center;padding:16px}
+  .card{background:#fff;border-radius:18px;width:100%;max-width:420px;padding:34px 32px 26px;box-shadow:0 30px 80px rgba(0,0,0,.35)}
+  .logo{display:block;margin:0 auto 14px;height:48px}
+  h1{font-family:'Barlow Condensed',Inter,sans-serif;font-weight:800;font-size:26px;color:var(--navy);text-align:center;margin:0 0 2px}
+  .sub{font-size:12.5px;color:var(--ink3);text-align:center;margin-bottom:24px}
+  label{display:block;font-size:10.5px;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:var(--ink3);margin:0 0 6px}
+  .field{margin-bottom:16px;position:relative}
+  input{width:100%;padding:12px 13px;border:1.5px solid var(--brd);border-radius:10px;font-size:14px;font-family:inherit;color:var(--ink);background:#fff}
+  input:focus{outline:none;border-color:var(--pink);box-shadow:0 0 0 3px rgba(232,0,110,.12)}
+  .eye{position:absolute;right:10px;bottom:9px;border:none;background:none;cursor:pointer;font-size:12px;color:var(--ink3);padding:4px}
+  button.primary{width:100%;padding:13px;border:none;border-radius:10px;background:linear-gradient(135deg,#E8006E,#c2005c);color:#fff;font-size:14px;font-weight:700;cursor:pointer;font-family:inherit;box-shadow:0 6px 18px rgba(232,0,110,.35)}
+  button.primary:disabled{opacity:.6;cursor:wait}
+  .msg{display:none;margin-bottom:14px;padding:10px 12px;border-radius:9px;font-size:12.5px;line-height:1.5}
+  .msg.err{display:block;background:#FEF2F2;color:var(--red);border:1px solid #FECACA}
+  .msg.ok{display:block;background:#DCFCE7;color:#14532D;border:1px solid #86EFAC}
+  .msg.info{display:block;background:#EAF0FB;color:var(--navy);border:1px solid #C7D9F8}
+  .rules{font-size:11.5px;color:var(--ink2);margin:-6px 0 16px;padding-left:18px;line-height:1.7}
+  .rules li.ok{color:var(--grn)}
+  .foot{margin-top:18px;font-size:11px;color:var(--ink3);text-align:center;line-height:1.6}
+  .link{color:var(--navy);cursor:pointer;text-decoration:underline;background:none;border:none;font:inherit;padding:0}
+  .hidden{display:none}
+</style>
+</head>
+<body>
+<div class="card">
+  <img class="logo" src="logo.png" alt="Vishal Mega Mart">
+  <h1>PO Governance Platform</h1>
+  <div class="sub" id="sub">Sign in with your company email</div>
+
+  <!-- sign in -->
+  <form id="f-login" autocomplete="on">
+    <div class="msg" id="m-login"></div>
+    <div class="field"><label for="email">Email</label><input id="email" type="email" autocomplete="username" required placeholder="name@vishalwholesale.co.in"></div>
+    <div class="field"><label for="pw">Password</label><input id="pw" type="password" autocomplete="current-password" required><button type="button" class="eye" data-for="pw">Show</button></div>
+    <button class="primary" id="b-login" type="submit">Sign in</button>
+    <div class="foot">Forgot your password? Ask the administrator to reset it.<br>First time here? Your starting password was given to you by the administrator.</div>
+  </form>
+
+  <!-- change password -->
+  <form id="f-change" class="hidden" autocomplete="off">
+    <div class="msg info" id="m-change-info">For security, please set your own password before continuing.</div>
+    <div class="msg" id="m-change"></div>
+    <div class="field"><label for="old">Current password</label><input id="old" type="password" autocomplete="current-password" required><button type="button" class="eye" data-for="old">Show</button></div>
+    <div class="field"><label for="new1">New password</label><input id="new1" type="password" autocomplete="new-password" required><button type="button" class="eye" data-for="new1">Show</button></div>
+    <ul class="rules" id="rules">
+      <li data-r="len">At least <span id="minlen">8</span> characters</li>
+      <li data-r="mix">At least one letter and one number</li>
+      <li data-r="def">Not the default password</li>
+    </ul>
+    <div class="field"><label for="new2">Confirm new password</label><input id="new2" type="password" autocomplete="new-password" required></div>
+    <button class="primary" id="b-change" type="submit">Save password &amp; continue</button>
+    <div class="foot"><button type="button" class="link" id="b-signout">Sign out</button></div>
+  </form>
+</div>
+
+<script>
+(function () {
+  var $ = function (id) { return document.getElementById(id); };
+  var minLen = 8, forced = false;
+  function msg(id, kind, text) { var m = $(id); m.className = 'msg ' + kind; m.textContent = text; }
+  function post(path, body) {
+    return fetch('api/' + path, { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-VMM': '1' }, body: JSON.stringify(body || {}), credentials: 'same-origin' })
+      .then(function (r) { return r.json().catch(function () { return {}; }).then(function (d) { return { ok: r.ok, status: r.status, data: d }; }); });
+  }
+  function next() {
+    var n = new URLSearchParams(location.search).get('next');
+    location.replace(n && n.charAt(0) === '/' && n.charAt(1) !== '/' ? n : '/');
+  }
+  function showChange(isForced) {
+    forced = isForced;
+    $('f-login').classList.add('hidden');
+    $('f-change').classList.remove('hidden');
+    $('sub').textContent = isForced ? 'Set your own password' : 'Change your password';
+    $('m-change-info').style.display = isForced ? 'block' : 'none';
+    $('b-signout').textContent = isForced ? 'Sign out' : '← Back to the portal';
+    $('old').focus();
+  }
+  document.querySelectorAll('.eye').forEach(function (b) {
+    b.onclick = function () { var i = $(b.dataset.for); var show = i.type === 'password'; i.type = show ? 'text' : 'password'; b.textContent = show ? 'Hide' : 'Show'; };
+  });
+  function checkRules() {
+    var v = $('new1').value;
+    var ok = { len: v.length >= minLen, mix: /[A-Za-z]/.test(v) && /\d/.test(v), def: v.length > 0 && v !== '1234' };
+    document.querySelectorAll('#rules li').forEach(function (li) { li.className = ok[li.dataset.r] ? 'ok' : ''; li.textContent = (ok[li.dataset.r] ? '✓ ' : '') + li.textContent.replace(/^✓ /, ''); });
+    return ok.len && ok.mix && ok.def;
+  }
+  $('new1').oninput = checkRules;
+
+  // Already signed in? (e.g. user pressed Back) — or arrived to change password.
+  fetch('api/auth/me', { credentials: 'same-origin' }).then(function (r) { return r.ok ? r.json() : null; }).then(function (d) {
+    if (!d || !d.user) { $('email').focus(); return; }
+    minLen = d.passwordMinLength || 8; $('minlen').textContent = minLen;
+    var wantChange = new URLSearchParams(location.search).get('change');
+    if (d.user.mustChange) showChange(true);
+    else if (wantChange) showChange(false);
+    else next();
+  });
+
+  $('f-login').onsubmit = function (e) {
+    e.preventDefault();
+    var b = $('b-login'); b.disabled = true; b.textContent = 'Signing in…';
+    post('auth/login', { email: $('email').value.trim(), password: $('pw').value }).then(function (res) {
+      b.disabled = false; b.textContent = 'Sign in';
+      if (!res.ok) { msg('m-login', 'err', (res.data && res.data.error) || 'Sign in failed'); $('pw').select(); return; }
+      if (res.data.mustChange) { $('old').value = $('pw').value; showChange(true); $('new1').focus(); }
+      else next();
+    }).catch(function () { b.disabled = false; b.textContent = 'Sign in'; msg('m-login', 'err', 'Cannot reach the server. Check your network and try again.'); });
+  };
+  $('f-change').onsubmit = function (e) {
+    e.preventDefault();
+    if (!checkRules()) { msg('m-change', 'err', 'The new password does not meet the rules below.'); return; }
+    if ($('new1').value !== $('new2').value) { msg('m-change', 'err', 'The two new passwords do not match.'); return; }
+    var b = $('b-change'); b.disabled = true;
+    post('auth/change-password', { old: $('old').value, new: $('new1').value }).then(function (res) {
+      b.disabled = false;
+      if (!res.ok) { msg('m-change', 'err', (res.data && res.data.error) || 'Could not change password'); return; }
+      msg('m-change', 'ok', 'Password saved. Opening the portal…');
+      setTimeout(next, 700);
+    });
+  };
+  $('b-signout').onclick = function () {
+    if (!forced) { next(); return; }
+    post('auth/logout').then(function () { location.replace('login.html'); });
+  };
+})();
+</script>
+</body>
+</html>

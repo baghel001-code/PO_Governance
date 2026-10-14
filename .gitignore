@@ -1,0 +1,12 @@
+bin/
+obj/
+*.user
+.vs/
+.vscode/
+*.swp
+node_modules/
+POGovApi/Logs/
+Admin/Logs/
+POGovApi/appsettings.Production.json
+Admin/appsettings.Production.json
+tests/parity/out/

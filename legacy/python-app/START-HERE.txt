@@ -1,0 +1,11 @@
+VMM PO Governance - developer package (code v1.1.4, 13 Oct 2026)
+
+Read in this order:
+  1. docs/PO_Governance_Developer_Handover_Code_v1.1.4.pdf  (same text: DEVELOPER-HANDOVER.md)
+       - section 0: current stage and pending developments
+       - section 8: pending developments that will cause changes
+       - section 9: what you can start now / what to wait for
+  2. docs/PO_Governance_Developer_Brief_Stage1_2_3.pdf       (target design: BW, SAP R/3, AI)
+  3. docs/PO_Governance_SAP_API_Specification_v1.4.pdf + docs/po-governance-sap-api.yaml
+  4. docs/PO_Governance_Functional_Logic_Guide.pdf           (all decision rules)
+Then the code: server.py, accounts.py, storage.py, app/, build.py + orig.html (source of app/index.html).

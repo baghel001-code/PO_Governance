@@ -30,6 +30,7 @@
 
   <ItemGroup>
     <None Include="Recommendation\Fixtures\**" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="Tool1\Fixtures\**" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
 </Project>

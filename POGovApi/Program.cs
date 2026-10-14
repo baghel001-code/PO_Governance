@@ -30,6 +30,7 @@ builder.Services.AddRecommendationServices();
 builder.Services.AddRecommendationExcel();
 builder.Services.AddGrcAnalyticsServices();
 builder.Services.AddGrcExcelExport();
+builder.Services.AddHistoryExcelExport();
 builder.Services.AddIngestServices();
 builder.Services.AddIngestInfrastructure();
 builder.Services.AddAnalyticsServices();

@@ -65,6 +65,7 @@ namespace Infrastructure.Middleware
             {
                 if (x is PostgresException pe) return pe.SqlState is "57P01" or "57P02" or "57P03" or "53300";
                 if (x is NpgsqlException || x is SocketException) return true;
+                if (x is Microsoft.Data.SqlClient.SqlException && Repositories.SqlServerStore.IsConnectionError(x)) return true;
             }
             return false;
         }

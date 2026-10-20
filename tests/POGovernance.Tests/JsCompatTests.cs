@@ -1,4 +1,5 @@
-using Domain.Entities.Common;
+using DecisionEngine.Common;
+using DecisionEngine.Model;
 
 namespace POGovernance.Tests
 {

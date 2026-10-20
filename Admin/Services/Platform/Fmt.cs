@@ -1,8 +1,8 @@
 using System.Globalization;
 using System.Text.Json;
 using System.Text.Json.Nodes;
-using Domain.Constants;
-using Domain.Entities.Common;
+using DecisionEngine.Common;
+using DecisionEngine.Model;
 
 namespace Admin.Services.Platform
 {

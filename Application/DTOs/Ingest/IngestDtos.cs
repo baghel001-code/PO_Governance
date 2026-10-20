@@ -1,5 +1,5 @@
 using System.Text.Json.Serialization;
-using Domain.Entities.Engine;
+using DecisionEngine.Model;
 using Domain.Entities.Store;
 
 namespace Application.DTOs.Ingest

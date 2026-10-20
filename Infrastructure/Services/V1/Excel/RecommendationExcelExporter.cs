@@ -1,6 +1,6 @@
-using Application.DTOs.Recommendation;
 using Application.Interfaces.V1.Recommendation;
 using ClosedXML.Excel;
+using DecisionEngine.Results.Recommendation;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace Infrastructure.Services.V1.Excel

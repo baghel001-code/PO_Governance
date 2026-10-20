@@ -14,6 +14,7 @@ namespace Application.DIResolver
         /// </summary>
         public static IServiceCollection AddGrcAnalyticsServices(this IServiceCollection services)
         {
+            services.AddDecisionEngine();
             services.AddSingleton<ISeasonService, SeasonService>();
             services.AddSingleton<IGrcBacktestService, GrcBacktestService>();
             return services;

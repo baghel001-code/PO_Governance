@@ -2,8 +2,8 @@ using System.Text.Json;
 using System.Text.Json.Nodes;
 using Application.Interfaces.V1;
 using Application.Services.V1.Analytics.Grc;
-using Domain.Entities.Common;
-using Domain.Entities.Engine;
+using DecisionEngine.Grc;
+using DecisionEngine.Model;
 
 namespace POGovernance.Tests.Analytics.Grc
 {
@@ -82,7 +82,7 @@ namespace POGovernance.Tests.Analytics.Grc
     public static class GrcTestServices
     {
         public static readonly FixedClock Clock = new(new DateTimeOffset(2026, 10, 14, 10, 30, 0, TimeSpan.FromHours(5.5)));
-        public static SeasonService Seasons() => new(null!);
-        public static GrcBacktestService Grc() => new(null!, Clock, Seasons());
+        public static SeasonService Seasons() => new(null!, new SeasonSelectionEngine());
+        public static GrcBacktestService Grc() => new(null!, Clock, new GrcBacktester(new SeasonSelectionEngine()));
     }
 }

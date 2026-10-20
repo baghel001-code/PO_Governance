@@ -1,7 +1,9 @@
 using System.Text.Json.Nodes;
-using Application.DTOs.Tool1;
-using Application.Services.V1.Recommendation;
 using Application.Services.V1.Tool1;
+using DecisionEngine.Model;
+using DecisionEngine.Recommendation;
+using DecisionEngine.Results.Tool1;
+using DecisionEngine.Tool1;
 using Domain.Constants;
 using Domain.Exceptions;
 using Domain.Records;
@@ -25,9 +27,8 @@ namespace POGovernance.Tests.Tool1
                 Reqs = sc["ledger"]!.AsArray().Select(x => x!.AsObject()).Where(x => x["seq"]!.GetValue<int>() <= initial).Select(x => x.DeepClone().AsObject()).ToList(),
                 Seq = initial
             };
-            var b = new Tool1EngineB();
             var svc = new Tool1Service(new FakeDatasetCache { Data = Tool1Fixture.Data(Scenario) }, ledger, new FakeAppClock { TodayValue = "2026-10-03" },
-                new Tool1Flow(b, new Tool1EngineA(), new RecommendationEngine()), b, new Tool1FormOptions(), new Tool1Settings { ReducedLabel = reducedLabel });
+                new Tool1DecisionEngine(new RecommendationEngine()), new Tool1Settings { ReducedLabel = reducedLabel });
             return (svc, ledger);
         }
 
@@ -130,9 +131,8 @@ namespace POGovernance.Tests.Tool1
         [Fact]
         public async Task Save_refused_is_reported_like_shared_js()
         {
-            var b = new Tool1EngineB();
             var svc = new Tool1Service(new FakeDatasetCache { Data = Tool1Fixture.Data(Scenario) }, new ForbiddenLedger(), new FakeAppClock { TodayValue = "2026-10-03" },
-                new Tool1Flow(b, new Tool1EngineA(), new RecommendationEngine()), b, new Tool1FormOptions());
+                new Tool1DecisionEngine(new RecommendationEngine()));
             var s = await svc.SubmitAsync(In("ZZ0000001", "BLK", "11.2026", 10), Buyer);
             Assert.Equal("notSaved", s.Status);
             Assert.Equal(new[] { "⚠ This Brand / MC / MRP is not mapped to you in the SCR products file. Ask the administrator.", "⚠ Request decided but NOT saved to server (HTTP 403)" }, s.Toasts);
@@ -168,7 +168,7 @@ namespace POGovernance.Tests.Tool1
             Assert.Empty((await svc.GetTodayAsync(Planner, true)).Rows);
             var approver = new AppUserContext("ch@vmm.test", "Cat Head", new[] { Roles.CatHead }, false);
             Assert.Single((await svc.GetTodayAsync(approver, false)).Rows);
-            Assert.Equal("✓ Approved by Ann · 1,200", Tool1Service.Badge(new JsonObject { ["status"] = "approved", ["byName"] = "Ann", ["qty"] = 1200 })!.Text);
+            Assert.Equal("✓ Approved by Ann · 1,200", Tool1Requests.Badge(new JsonObject { ["status"] = "approved", ["byName"] = "Ann", ["qty"] = 1200 })!.Text);
         }
 
         [Theory]

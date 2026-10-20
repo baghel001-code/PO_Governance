@@ -4,7 +4,7 @@ using System.Text.Json;
 using Application.DTOs.Ingest;
 using Application.Services.V1.Ingest;
 using Application.Services.V1.Ingest.SheetJs;
-using Domain.Entities.Common;
+using DecisionEngine.Model;
 using Infrastructure.Services.V1.Excel;
 
 namespace POGovernance.Tests.Ingest

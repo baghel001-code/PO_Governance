@@ -1,8 +1,8 @@
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using Application.Interfaces.V1;
-using Domain.Entities.Common;
-using Domain.Entities.Engine;
+using DecisionEngine.Common;
+using DecisionEngine.Model;
 using Domain.Exceptions;
 using Domain.Records;
 

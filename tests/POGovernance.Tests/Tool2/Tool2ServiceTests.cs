@@ -1,12 +1,12 @@
 using System.IO.Compression;
 using System.Text.Json.Nodes;
-using Application.DTOs.Tool2;
 using Application.Interfaces.V1;
 using Application.Interfaces.V1.Tool2;
-using Application.Services.V1.Recommendation;
 using Application.Services.V1.Tool2;
 using ClosedXML.Excel;
-using Domain.Entities.Engine;
+using DecisionEngine.Model;
+using DecisionEngine.Results.Tool2;
+using DecisionEngine.Tool2;
 using Domain.Entities.Store;
 using Domain.Exceptions;
 using Domain.Records;
@@ -66,7 +66,7 @@ namespace POGovernance.Tests.Tool2
         private sealed class FakeManifest : IDatasetManifestReader
         {
             public Task<IReadOnlyDictionary<string, DatasetEntry>> GetCurrentDatasetsAsync(CancellationToken ct = default) =>
-                Task.FromResult<IReadOnlyDictionary<string, DatasetEntry>>(Domain.Constants.DatasetKeys.All.ToDictionary(k => k, k => new DatasetEntry { Version = "v-" + k, Rows = 1, UpdatedAt = "2026-10-01" }));
+                Task.FromResult<IReadOnlyDictionary<string, DatasetEntry>>(DecisionEngine.Model.DatasetKeys.All.ToDictionary(k => k, k => new DatasetEntry { Version = "v-" + k, Rows = 1, UpdatedAt = "2026-10-01" }));
         }
 
         private static (Tool2Service Svc, FakeCache Cache, FakeArchive Archive) Make(FakeArchive? archive = null)
@@ -76,7 +76,7 @@ namespace POGovernance.Tests.Tool2
             var ledger = new FakeLedger { Reqs = ctx.Requests.ToList() };
             var clock = new FakeClock { Now = Tool2Fixture.Now(Sc) };
             archive ??= new FakeArchive();
-            var svc = new Tool2Service(cache, ledger, clock, Tool2Fixture.Engine, archive, new FakeManifest(), new Tool2ExcelExporter(), new Tool2RunCache());
+            var svc = new Tool2Service(cache, ledger, clock, new Tool2AssessmentEngine(Tool2Fixture.Engine), archive, new FakeManifest(), new Tool2ExcelExporter(), new Tool2RunCache());
             return (svc, cache, archive);
         }
 

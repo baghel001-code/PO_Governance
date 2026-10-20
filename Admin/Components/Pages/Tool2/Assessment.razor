@@ -157,7 +157,7 @@
     private string StatusText =>
         _statusOverride ?? (_view != null ? _view.StatusText
             : _options is { HasF2: false } ? "Upload the F2 (Released PO) file in Data Setup first."
-            : _options != null ? $"{Domain.Entities.Common.Js.GroupIN(_options.AssessableLines)} F2 lines ready to assess." : "");
+            : _options != null ? $"{DecisionEngine.Common.Js.GroupIN(_options.AssessableLines)} F2 lines ready to assess." : "");
 
     // Data is loaded once the circuit is interactive (not during prerender) so large runs are fetched once.
     protected override async Task OnAfterRenderAsync(bool firstRender)

@@ -20,6 +20,7 @@ namespace Application.DIResolver
         /// </summary>
         public static IServiceCollection AddAnalyticsServices(this IServiceCollection services)
         {
+            services.AddDecisionEngine();
             services.AddSingleton<IAttributeAnalysisService, AttributeAnalysisService>();
             services.AddSingleton<IHelpContentService, HelpContentService>();
             services.AddScoped<ICategoryInsightsService, CategoryInsightsService>();

@@ -3,8 +3,7 @@ using System.Text.Json.Nodes;
 using System.Text.RegularExpressions;
 using Application.Interfaces.V1;
 using Application.Interfaces.V1.Analytics;
-using Domain.Entities.Common;
-using Domain.Entities.Engine;
+using DecisionEngine.Model;
 using Domain.Records;
 
 namespace POGovernance.Tests.Analytics.Screens

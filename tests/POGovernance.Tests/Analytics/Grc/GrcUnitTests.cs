@@ -1,7 +1,7 @@
-using Application.DTOs.Analytics.Grc;
-using Application.Services.V1.Analytics.Grc;
 using ClosedXML.Excel;
-using Domain.Entities.Common;
+using DecisionEngine.Common;
+using DecisionEngine.Grc;
+using DecisionEngine.Results.Analytics.Grc;
 using Infrastructure.Services.V1.Excel;
 
 namespace POGovernance.Tests.Analytics.Grc

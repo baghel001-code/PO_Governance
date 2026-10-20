@@ -1,6 +1,7 @@
 using System.Text.Json.Nodes;
 using Application.DTOs.Platform;
 using Application.Interfaces.V1;
+using DecisionEngine.Model;
 using Domain.Constants;
 using Domain.Entities.AppSettings;
 using Domain.Entities.Store;

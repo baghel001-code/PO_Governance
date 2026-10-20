@@ -14,6 +14,7 @@ namespace Application.DIResolver
         /// </summary>
         public static IServiceCollection AddTool2Services(this IServiceCollection services)
         {
+            services.AddDecisionEngine();
             services.AddSingleton<Tool2RunCache>();
             services.AddScoped<ITool2Service, Tool2Service>();
             return services;

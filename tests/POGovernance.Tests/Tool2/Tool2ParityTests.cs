@@ -1,8 +1,7 @@
-using System.Text.Json;
 using System.Text.Json.Nodes;
-using Application.DTOs.Tool2;
 using Application.Services.V1.Tool2;
-using Domain.Entities.Common;
+using DecisionEngine.Results.Tool2;
+using DecisionEngine.Tool2;
 
 namespace POGovernance.Tests.Tool2
 {
@@ -168,7 +167,7 @@ namespace POGovernance.Tests.Tool2
                 var what = sc + " [" + string.Join(",", sel) + "]";
                 if (x["sheets"] == null)
                 {
-                    var ex = Assert.Throws<Domain.Exceptions.AppValidationException>(() => ws.BuildWorkbook(sel, Tool2Fixture.Now(sc)));
+                    var ex = Assert.Throws<DecisionEngine.Common.EngineValidationException>(() => ws.BuildWorkbook(sel, Tool2Fixture.Now(sc)));
                     Assert.Equal(x["toast"]!.GetValue<string>(), ex.Message);
                     continue;
                 }

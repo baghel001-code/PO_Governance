@@ -401,7 +401,7 @@ namespace POGovernance.Tests.Platform
         public async Task Save_restore_and_clear_versions()
         {
             var p = new Platform();
-            var payload = new Domain.Entities.Engine.DatasetPayload();
+            var payload = new DecisionEngine.Model.DatasetPayload();
             payload.Rows.Add(Platform.Row(("GM", "G1"), ("Qty", 5.0)));
             var r1 = await p.Data.SaveVersionAsync("f1", payload, "a.xlsx", null, Platform.Admin);
             p.Clock.Now = p.Clock.Now.AddSeconds(5);

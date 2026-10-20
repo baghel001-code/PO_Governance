@@ -1,5 +1,5 @@
-using Application.DTOs.Recommendation;
-using Application.Services.V1.Recommendation;
+using DecisionEngine.Recommendation;
+using DecisionEngine.Results.Recommendation;
 
 namespace Application.Interfaces.V1.Recommendation
 {

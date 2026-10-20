@@ -19,7 +19,7 @@ three column-group toggles and the trace expanders are **client-only** state (no
 from its cache).
 
 Number formatting: `fmt(n)` everywhere below = `Math.round(n)` with en-IN grouping (`12,34,567`), i.e.
-`Domain.Entities.Common.Js.Fmt`. Plain numbers (mix %, dr, str) are shown as JS `String(number)`
+`DecisionEngine.Common.Js.Fmt`. Plain numbers (mix %, dr, str) are shown as JS `String(number)`
 (`Js.NumberToString`, e.g. `43.4`, `12.5`, `0`). v1.1.4 used `toLocaleString()` with the browser's default locale —
 on the business PCs that is en-IN; the server texts (`summary`, `tip`, `formula`, headers) use en-IN.
 

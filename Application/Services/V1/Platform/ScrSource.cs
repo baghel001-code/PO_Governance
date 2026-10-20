@@ -1,7 +1,5 @@
 using Application.Interfaces.V1;
-using Domain.Constants;
-using Domain.Entities.Common;
-using Domain.Entities.Engine;
+using DecisionEngine.Model;
 using Domain.Entities.Store;
 
 namespace Application.Services.V1.Platform

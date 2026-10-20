@@ -13,7 +13,7 @@ namespace Application.DIResolver
         /// </summary>
         public static IServiceCollection AddRecommendationServices(this IServiceCollection services)
         {
-            services.AddSingleton<IRecommendationEngine, RecommendationEngine>();
+            services.AddDecisionEngine();
             services.AddScoped<IRecommendationService, RecommendationService>();
             return services;
         }

@@ -1,6 +1,6 @@
 using System.Globalization;
 using System.Text.RegularExpressions;
-using Domain.Entities.Common;
+using DecisionEngine.Common;
 using Microsoft.AspNetCore.Components;
 
 namespace Admin.Components.Shared.Recommendation

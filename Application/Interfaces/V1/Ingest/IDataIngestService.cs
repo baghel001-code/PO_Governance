@@ -1,5 +1,5 @@
 using Application.DTOs.Ingest;
-using Domain.Entities.Common;
+using DecisionEngine.Model;
 using Domain.Records;
 
 namespace Application.Interfaces.V1.Ingest

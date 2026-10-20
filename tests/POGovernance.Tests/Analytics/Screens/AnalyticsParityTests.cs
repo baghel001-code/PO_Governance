@@ -1,20 +1,20 @@
 using System.Text.Json;
 using System.Text.Json.Nodes;
-using Application.DTOs.Analytics.Ai;
-using Application.DTOs.Analytics.AttrAnalysis;
-using Application.DTOs.Analytics.CatInsights;
-using Application.DTOs.Analytics.Common;
-using Application.DTOs.Analytics.PlannerDashboard;
 using Application.Interfaces.V1;
 using Application.Interfaces.V1.Analytics;
 using Application.Services.V1.Analytics.Ai;
-using Application.Services.V1.Analytics.AttrAnalysis;
-using Application.Services.V1.Analytics.CatInsights;
-using Application.Services.V1.Analytics.Common;
-using Application.Services.V1.Analytics.Help;
-using Application.Services.V1.Analytics.PlannerDashboard;
-using Domain.Entities.Common;
-using Domain.Entities.Engine;
+using DecisionEngine.Analytics.Ai;
+using DecisionEngine.Analytics.AttrAnalysis;
+using DecisionEngine.Analytics.Common;
+using DecisionEngine.Analytics.Help;
+using DecisionEngine.Analytics.Insights;
+using DecisionEngine.Common;
+using DecisionEngine.Model;
+using DecisionEngine.Results.Analytics.Ai;
+using DecisionEngine.Results.Analytics.AttrAnalysis;
+using DecisionEngine.Results.Analytics.CatInsights;
+using DecisionEngine.Results.Analytics.Common;
+using DecisionEngine.Results.Analytics.PlannerDashboard;
 using static POGovernance.Tests.Analytics.Screens.AnalyticsParity;
 
 namespace POGovernance.Tests.Analytics.Screens
@@ -68,7 +68,7 @@ namespace POGovernance.Tests.Analytics.Screens
         {
             var c = Case("attrAnalysis", index);
             var data = Data(Strings(c["drop"]));
-            var svc = new AttributeAnalysisService(new NoCache());
+            var svc = new AttributeAnalysisEngine();
             var f = c["filters"]!.AsObject();
             var q = new AttrAnalysisQuery { Brand = S(f["brand"]), Mc = S(f["mc"]), MinStock = S(f["minStk"]) };
             var l1 = svc.GetLevel1(data, q);
@@ -191,8 +191,8 @@ namespace POGovernance.Tests.Analytics.Screens
             var reqs = Requests(c["reqIdx"]);
             var f = Strings(c["filters"]);
             string? F(int i) => i < f.Count ? f[i] : null;
-            var svc = new CategoryInsightsService(new ListHistorySource(reqs), new FixedClock());
-            var dto = svc.Build(reqs, new CatInsightsQuery { Brand = F(0), Division = F(1), Mc = F(2), Month = F(3), Engine = F(4), Decision = F(5) });
+            var svc = new InsightsEngine();
+            var dto = svc.BuildCategoryInsights(reqs, new CatInsightsQuery { Brand = F(0), Division = F(1), Mc = F(2), Month = F(3), Engine = F(4), Decision = F(5) });
             var v = c["view"]!;
             if (dto.State == "noRequests")
             {
@@ -238,8 +238,8 @@ namespace POGovernance.Tests.Analytics.Screens
             var rows = Tool2Rows(c["rowIdx"]);
             var f = Strings(c["filters"]);
             string? F(int i) => i < f.Count ? f[i] : null;
-            var svc = new PlannerDashboardService(new ListRunSource(rows));
-            var dto = svc.Build(rows, new PlannerDashboardQuery { Brand = F(0), Division = F(1), Mc = F(2), Mrp = F(3), Flag = F(4), DeliveryMonth = F(5), Engine = F(6), Decision = F(7) });
+            var svc = new InsightsEngine();
+            var dto = svc.BuildPlannerDashboard(rows, new PlannerDashboardQuery { Brand = F(0), Division = F(1), Mc = F(2), Mrp = F(3), Flag = F(4), DeliveryMonth = F(5), Engine = F(6), Decision = F(7) });
             Eq(S(c["placeholder"]), dto.State == "noRun" ? "block" : "none", name + " placeholder");
             Eq(S(c["filtersBox"]), dto.State == "noRun" ? "none" : "block", name + " filters box");
             if (dto.State == "noRun") return;
@@ -287,7 +287,7 @@ namespace POGovernance.Tests.Analytics.Screens
             var reqs = Requests(c["reqIdx"]);
             var rows = Tool2Rows(c["rowIdx"]);
             var gw = new ScriptedGateway(HarnessChatResponse);
-            var svc = new AiAssistantService(gw, new ListHistorySource(reqs), new ListRunSource(rows), new FixedClock());
+            var svc = new AiAssistantService(gw, new ListHistorySource(reqs), new ListRunSource(rows), new FixedClock(), new AiAssistantEngine());
             var history = new List<AiChatMessageDto>();
             var turns = c["turns"]!.AsArray();
             for (var t = 0; t < turns.Count; t++)
@@ -355,7 +355,7 @@ namespace POGovernance.Tests.Analytics.Screens
 
             var resp = c["response"]!;
             var gw = new ScriptedGateway(insights: new AiGatewayResult(resp["status"]!.GetValue<int>(), resp["data"]?.DeepClone()));
-            var svc = new AiAssistantService(gw, new ListHistorySource(new()), new ListRunSource(rows), new FixedClock());
+            var svc = new AiAssistantService(gw, new ListHistorySource(new()), new ListRunSource(rows), new FixedClock(), new AiAssistantEngine());
             var dto = await svc.InsightsAsync(new AiInsightsRequest { Focus = focus }, Staff);
             EqList(Strings(c["toasts"]), dto.Toast == null ? new List<string>() : new List<string> { dto.Toast }, name + " toasts");
             if (summary == null) return;
@@ -384,7 +384,7 @@ namespace POGovernance.Tests.Analytics.Screens
         [Fact]
         public void HelpValues()
         {
-            var svc = new HelpContentService(new NoCache());
+            var svc = new HelpContentEngine();
             var cases = Expected["help"]!.AsArray();
             Assert.NotEmpty(cases);
             foreach (var c in cases)

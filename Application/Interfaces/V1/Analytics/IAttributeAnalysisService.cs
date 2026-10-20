@@ -1,12 +1,12 @@
-using Application.DTOs.Analytics.AttrAnalysis;
-using Domain.Entities.Engine;
+using DecisionEngine.Results.Analytics.AttrAnalysis;
 
 namespace Application.Interfaces.V1.Analytics
 {
     /// <summary>
     /// Planner "🔎 Attribute Analysis" screen (index.html view-attranalysis, functions _aaBuildTree …
     /// _aaRenderLevel3, lines 9516–9902): Brand → MC → MRP × Flag drill-down with Sales Mix / Stock Mix /
-    /// Deviation per Article Master attribute and colour-level STR. Read-only; staff only.
+    /// Deviation per Article Master attribute and colour-level STR. Read-only; staff only. The figures are
+    /// computed by <c>DecisionEngine.Analytics.AttrAnalysis.IAttributeAnalysisEngine</c> on the current snapshot.
     /// </summary>
     public interface IAttributeAnalysisService
     {
@@ -16,9 +16,5 @@ namespace Application.Interfaces.V1.Analytics
         Task<AaLevel2Dto> GetLevel2Async(string brand, string mcKey, CancellationToken ct = default);
         /// <summary>Level 3 — attribute tables + colour-level STR of one bucket (404 when unknown).</summary>
         Task<AaLevel3Dto> GetLevel3Async(string brand, string mcKey, string mrp, string flag, CancellationToken ct = default);
-
-        AaLevel1Dto GetLevel1(EngineData data, AttrAnalysisQuery? query);
-        AaLevel2Dto GetLevel2(EngineData data, string brand, string mcKey);
-        AaLevel3Dto GetLevel3(EngineData data, string brand, string mcKey, string mrp, string flag);
     }
 }

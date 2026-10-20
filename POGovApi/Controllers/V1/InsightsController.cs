@@ -1,6 +1,6 @@
-using Application.DTOs.Analytics.CatInsights;
-using Application.DTOs.Analytics.PlannerDashboard;
 using Application.Interfaces.V1.Analytics;
+using DecisionEngine.Results.Analytics.CatInsights;
+using DecisionEngine.Results.Analytics.PlannerDashboard;
 using Domain.Entities.Response;
 using Microsoft.AspNetCore.Mvc;
 

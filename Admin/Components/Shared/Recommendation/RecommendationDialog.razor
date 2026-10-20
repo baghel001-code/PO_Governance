@@ -2,7 +2,7 @@
    _paintRec / _traceRow / _toggleRecGrp / _exportEngineARecs). Every figure comes from
    POST api/v1/recommendation (RecommendationViewDto); this component only lays it out.
    Open it with RecommendationDialog.ShowAsync(DialogService, gm) or (…, new RecommendationRequestDto{…}). *@
-@using Application.DTOs.Recommendation
+@using DecisionEngine.Results.Recommendation
 @inject IAPICallService Api
 @inject FileDownloadService Files
 @inject ISnackbar Snackbar
@@ -574,7 +574,7 @@
                             <tr>
                                 <td style="font-weight:700">@md.Mon</td>
                                 <td class="r mono" style="font-weight:700;color:@qtyColor">@(noData ? "No data" : F(md.Rec))</td>
-                                <td class="r mono" style="color:#6B7280">@(noData ? "—" : N(Domain.Entities.Common.Js.Round(md.EffExact!.Value * 100) / 100) + "d")</td>
+                                <td class="r mono" style="color:#6B7280">@(noData ? "—" : N(DecisionEngine.Common.Js.Round(md.EffExact!.Value * 100) / 100) + "d")</td>
                                 <td class="r mono" style="color:#6B7280">@(noData ? "—" : N(md.Dr) + "/d")</td>
                                 <td class="r mono" style="color:#6B7280">@(noData ? "—" : F(md.WinStockStart))</td>
                                 <td class="mono" style="font-size:9.5px;color:#9CA3AF">@(md.Formula ?? "—")</td>

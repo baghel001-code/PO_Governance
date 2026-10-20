@@ -2,10 +2,10 @@ using System.IO.Compression;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
-using Application.DTOs.Recommendation;
-using Application.Services.V1.Engines.Common;
-using Domain.Entities.Common;
-using Domain.Entities.Engine;
+using DecisionEngine.Common;
+using DecisionEngine.Model;
+using DecisionEngine.Results.Recommendation;
+using DecisionEngine.Tool2;
 using Domain.Entities.Store;
 
 namespace Application.Services.V1.Tool2

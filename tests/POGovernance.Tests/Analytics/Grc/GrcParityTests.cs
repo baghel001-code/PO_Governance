@@ -1,7 +1,7 @@
 using System.Text.Json;
-using Application.DTOs.Analytics.Grc;
-using Application.Services.V1.Analytics.Grc;
-using Domain.Entities.Common;
+using DecisionEngine.Grc;
+using DecisionEngine.Model;
+using DecisionEngine.Results.Analytics.Grc;
 
 namespace POGovernance.Tests.Analytics.Grc
 {

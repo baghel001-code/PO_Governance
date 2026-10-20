@@ -7,14 +7,16 @@ ASP.NET Core 8 solution with clean architecture, following the layout of the QPS
 
 | Project | Kind | Holds |
 |---|---|---|
-| `Domain` | class library | Constants, Entities, Enums, Exceptions, Records, the JS-compatibility helpers (`Domain.Entities.Common.Js`, `SheetRow`) and the engine data model (`Domain.Entities.Engine`) |
-| `Application` | class library | Interfaces (`Interfaces/V1`), DTOs, AutoMapper profiles, and **all business logic**: decision engines, recommendation engine, Tool 2 assessment, analytics, accounts / requests / approvals services |
+| `Domain` | class library | Constants (roles, app constants), store entities, exceptions, records, settings |
+| `DecisionEngine` | class library, **BCL only** | **All verdict algorithms** (the core business-logic layer): `Model` (`EngineData`, `EngineParams`, `DatasetPayload`, `DatasetKeys`, `Decisions`, `SheetRow`), `Common` (`Js`, `JsObjectMap`, `JsOps`, `JsSort`, `MonthMath`, `PrevMonthCarry`, `LedgerHelpers`, `ResolveIndex`, `BsrPeerRank`), `Tool1`, `Tool2`, `Recommendation`, `Grc`, `Analytics/{AttrAnalysis,Insights,PlannerDashboard,Ai,Help}`, `Results/<Area>` (result models). Public façades: `ITool1DecisionEngine`, `ITool2AssessmentEngine`, `IRecommendationEngine`, `IGrcBacktestEngine`, `ISeasonSelectionEngine`, `IAttributeAnalysisEngine`, `IInsightsEngine`, `IAiAssistantEngine`, `IHelpContentEngine` — see `DecisionEngine/README.md` |
+| `Application` | class library | IO interfaces (`Interfaces/V1`: `IDatasetCache`, `IRequestLedger`, `IAppClock`, `IStore` …), Ingest / Platform DTOs, and the **use-case services** that load data and call the engines (Tool 1 / Tool 2 / recommendation / analytics), ingest, accounts / requests / approvals services, DI registration |
 | `Infrastructure` | class library | PostgreSQL store (Dapper + Npgsql), Excel / ZIP readers, AI client, backups, middleware, `ServicesConfiguration` (DI registration) |
 | `POGovApi` | ASP.NET Core Web API | `Controllers/V1/*` — every endpoint the portal uses (and later the SAP `/api/sap/v1/*` endpoints) |
 | `Admin` | Blazor Server (MudBlazor) | The portal. Talks to `POGovApi` over HTTP only (`APICallService`) — never to the database |
 | `tests/POGovernance.Tests` | xUnit | Unit + parity tests |
 
-Dependency direction: `Domain` ← `Application` ← `Infrastructure` ← `POGovApi`; `Admin` → `Application` (DTOs only) + `Domain`.
+Dependency direction: `Domain` and `DecisionEngine` are independent of each other and of everything else; `Domain` + `DecisionEngine` ← `Application` ← `Infrastructure` ← `POGovApi`; `Admin` → `DecisionEngine` (result models) + `Application` (Platform / Ingest DTOs) + `Domain`.
+`DecisionEngine` must never gain a `ProjectReference` / `PackageReference` (enforced by `tests/POGovernance.Tests/Architecture`).
 
 ## Rules for porting the decision logic
 
@@ -22,18 +24,21 @@ Dependency direction: `Domain` ← `Application` ← `Infrastructure` ← `POGov
    from `legacy/python-app/app/index.html` faithfully — same branching, same thresholds, same rounding,
    same reason texts. Keep the JS function name in an XML doc comment (`/// Port of index.html runEngineB (line 3847)`)
    so reviewers can compare side by side.
-2. Use the helpers in `Domain.Entities.Common.Js` for anything whose JS semantics differ from C#:
+2. Put the port in `DecisionEngine` (pure, synchronous; "today" / "now" are parameters, never a clock read; rule errors are
+   `EngineValidationException` / `EngineNotFoundException`, which the Application service translates). The Application
+   service only loads the data and calls the engine.
+3. Use the helpers in `DecisionEngine.Common.Js` for anything whose JS semantics differ from C#:
    `Js.ParseFloat`, `Js.Num` (the tool's `num()`), `Js.Sf` / `Js.N` (recommendation engine `_sf` / `_n`),
    `Js.Round` (JS `Math.round` — **never** use `Math.Round`, which is banker's rounding),
    `Js.ToFixed`, `Js.Fmt` (`Math.round(v).toLocaleString('en-IN')`), `Js.LocaleIN`, `Js.FmtCr`, `Js.NumberToString`.
-3. Rows of uploaded files are `SheetRow`; `row.Col("Generic Material", "GENERIC MATERIAL")` is the JS `col(row, ...)`.
-4. Engines read an immutable `EngineData` snapshot (`S.files` + `S.params`), obtained from `IDatasetCache`.
+4. Rows of uploaded files are `SheetRow`; `row.Col("Generic Material", "GENERIC MATERIAL")` is the JS `col(row, ...)`.
+5. Engines read an immutable `EngineData` snapshot (`S.files` + `S.params`), obtained from `IDatasetCache`.
    Per-data-version lookup maps (the JS `_idx` caches) go in `EngineData.GetOrBuild(name, builder)`.
-5. JS overrides: when `index.html` defines a function twice (e.g. `plannerTab`, `categoryTab`), the **later**
+6. JS overrides: when `index.html` defines a function twice (e.g. `plannerTab`, `categoryTab`), the **later**
    definition is the one that runs. `shared.js` also wraps some page functions — read it before porting a flow.
-6. Engines return typed result objects (DTOs) instead of HTML. The HTML a JS function built is reproduced in
+7. Engines return typed result objects (DTOs) instead of HTML. The HTML a JS function built is reproduced in
    the Blazor portal; texts (reasons, notes, labels) are produced on the server so both sides read the same.
-7. Parity: for each engine, `tests/parity/` holds a Node harness that runs the original JS functions on a
+8. Parity: for each engine, `tests/parity/` holds a Node harness that runs the original JS functions on a
    fixture dataset and writes the expected results; the xUnit tests assert the C# port returns the same.
 
 ## Storage

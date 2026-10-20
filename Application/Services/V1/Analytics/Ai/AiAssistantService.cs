@@ -1,8 +1,8 @@
 using System.Text.Json.Nodes;
-using Application.DTOs.Analytics.Ai;
 using Application.Interfaces.V1;
 using Application.Interfaces.V1.Analytics;
-using Application.Services.V1.Analytics.Common;
+using DecisionEngine.Analytics.Ai;
+using DecisionEngine.Results.Analytics.Ai;
 using Domain.Exceptions;
 using Domain.Records;
 
@@ -10,8 +10,9 @@ namespace Application.Services.V1.Analytics.Ai
 {
     /// <summary>
     /// Server side of the VMM Assistant chat (sendAIChat) and of AI Insights (renderAIInsights). The context,
-    /// prompts and parsing are the v1.1.4 ones; only the transport moved: the provider is called through
-    /// <see cref="IAiGateway"/> instead of the browser posting to /api/ai/*.
+    /// prompts and parsing are the v1.1.4 ones (<see cref="IAiAssistantEngine"/>, DecisionEngine); this service
+    /// loads the rows the user may see and calls the provider through <see cref="IAiGateway"/> instead of the
+    /// browser posting to /api/ai/*.
     /// </summary>
     public sealed class AiAssistantService : IAiAssistantService
     {
@@ -25,13 +26,15 @@ namespace Application.Services.V1.Analytics.Ai
         private readonly IRequestHistorySource _history;
         private readonly ITool2ResultSource _runs;
         private readonly IAppClock _clock;
+        private readonly IAiAssistantEngine _engine;
 
-        public AiAssistantService(IAiGateway ai, IRequestHistorySource history, ITool2ResultSource runs, IAppClock clock)
+        public AiAssistantService(IAiGateway ai, IRequestHistorySource history, ITool2ResultSource runs, IAppClock clock, IAiAssistantEngine engine)
         {
             _ai = ai;
             _history = history;
             _runs = runs;
             _clock = clock;
+            _engine = engine;
         }
 
         private static bool IsTool2(string? scope) =>
@@ -39,13 +42,11 @@ namespace Application.Services.V1.Analytics.Ai
 
         public AssistantChatInfoDto GetChatInfo(string? scope)
         {
-            var t2 = IsTool2(scope);
             var enabled = _ai.ChatEnabled;
-            return new AssistantChatInfoDto
-            {
-                Enabled = enabled, ScopeBadge = AiChatContext.ScopeBadge(t2), Welcome = AiChatContext.Welcome(t2),
-                DisabledTitle = enabled ? null : ChatDisabledTitle, DisabledMessage = enabled ? null : ChatDisabledMessage
-            };
+            var dto = _engine.ChatInfo(IsTool2(scope), enabled);
+            dto.DisabledTitle = enabled ? null : ChatDisabledTitle;
+            dto.DisabledMessage = enabled ? null : ChatDisabledMessage;
+            return dto;
         }
 
         private async Task<IReadOnlyList<JsonObject>> Tool2Rows(string? runId, AppUserContext user, CancellationToken ct)
@@ -63,25 +64,10 @@ namespace Application.Services.V1.Analytics.Ai
         {
             var t2 = IsTool2(request.Scope);
             if (t2 && !user.IsStaff) throw new ForbiddenException("Only planners and admins can do this");
-            var (summary, sample) = t2
-                ? AiChatContext.Tool2(await Tool2Rows(request.RunId, user, ct), request.Question)
-                : AiChatContext.Tool1(await _history.GetVisibleRequestsAsync(user, _clock.Today, _clock.Today, ct), request.Question);
-            return BuildContext(t2, summary, sample, request.History, request.Question);
-        }
-
-        /// <summary>System prompt + messages (last 8 history entries + the question).</summary>
-        public static AssistantChatContextDto BuildContext(bool tool2, JsonObject summary, JsonArray sample, IEnumerable<AiChatMessageDto>? history, string question)
-        {
-            var summaryJson = AnalyticsJs.Stringify(summary);
-            var sampleJson = AnalyticsJs.Stringify(sample);
-            var hist = (history ?? Enumerable.Empty<AiChatMessageDto>()).ToList();
-            var messages = hist.Skip(Math.Max(0, hist.Count - AiChatContext.HistoryTurns)).Select(m => new AiChatMessageDto(m.Role, m.Content)).ToList();
-            messages.Add(new AiChatMessageDto("user", question));
-            return new AssistantChatContextDto
-            {
-                SystemPrompt = AiChatContext.SystemPrompt(tool2, summaryJson, sampleJson),
-                SummaryJson = summaryJson, SampleJson = sampleJson, Messages = messages
-            };
+            var rows = t2
+                ? await Tool2Rows(request.RunId, user, ct)
+                : await _history.GetVisibleRequestsAsync(user, _clock.Today, _clock.Today, ct);
+            return _engine.BuildChatContext(t2, rows, request.Question, request.History);
         }
 
         public async Task<AssistantChatResponse> ChatAsync(AssistantChatRequest request, AppUserContext user, CancellationToken ct = default)
@@ -96,15 +82,15 @@ namespace Application.Services.V1.Analytics.Ai
             AiGatewayResult res;
             try
             {
-                res = await _ai.ChatAsync(system, ctx.Messages.Select(m => new AiChatMessage(m.Role, m.Content)).ToList(), AiChatContext.MaxTokens, ct);
+                res = await _ai.ChatAsync(system, ctx.Messages.Select(m => new AiChatMessage(m.Role, m.Content)).ToList(), _engine.ChatMaxTokens, ct);
             }
             catch (Exception e) when (e is not OperationCanceledException)
             {
                 return new AssistantChatResponse { Ok = false, Error = "Could not reach the portal server: " + e.Message, History = history };
             }
             if (!res.Ok)
-                return new AssistantChatResponse { Ok = false, Error = "Error: " + AiChatContext.ErrorText(res.Status, res.Data), History = history };
-            var answer = AiChatContext.AnswerText(res.Data);
+                return new AssistantChatResponse { Ok = false, Error = "Error: " + _engine.ChatErrorText(res.Status, res.Data), History = history };
+            var answer = _engine.ChatAnswerText(res.Data);
             history.Add(new AiChatMessageDto("user", q));
             history.Add(new AiChatMessageDto("assistant", answer));
             return new AssistantChatResponse { Ok = true, Answer = answer, History = history };
@@ -114,18 +100,18 @@ namespace Application.Services.V1.Analytics.Ai
         {
             var focus = string.IsNullOrEmpty(request.Focus) ? "risk" : request.Focus!;
             if (!_ai.InsightsEnabled) return new AiInsightsDto { State = "disabled", Focus = focus, Toast = InsightsDisabledToast };
-            var summary = AiInsightsBuilder.BuildSummary(await Tool2Rows(request.RunId, user, ct));
+            var summary = _engine.BuildInsightsSummary(await Tool2Rows(request.RunId, user, ct));
             if (summary == null) return new AiInsightsDto { State = "noRun", Focus = focus, Toast = "Run an assessment first — no batch results found" };
-            var prompt = AiInsightsBuilder.PromptFor(focus, summary);
+            var prompt = _engine.InsightsPrompt(focus, summary);
             if (prompt.Length > MaxPromptChars) prompt = prompt[..MaxPromptChars];
             try
             {
                 var res = await _ai.InsightsAsync(prompt, ct);
-                return AiInsightsBuilder.Render(focus, summary, res.Status, res.Data);
+                return _engine.RenderInsights(focus, summary, res.Status, res.Data);
             }
             catch (Exception e) when (e is not OperationCanceledException)
             {
-                var dto = AiInsightsBuilder.Render(focus, summary, 200, new JsonObject());
+                var dto = _engine.RenderInsights(focus, summary, 200, new JsonObject());
                 dto.State = "error";
                 dto.Meta = "";
                 dto.FallbackText = "Request failed: " + e.Message;

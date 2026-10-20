@@ -1,5 +1,5 @@
-using Application.DTOs.Analytics.Grc;
-using Domain.Entities.Engine;
+using DecisionEngine.Model;
+using DecisionEngine.Results.Analytics.Grc;
 
 namespace Application.Interfaces.V1.Analytics
 {

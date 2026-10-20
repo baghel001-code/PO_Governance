@@ -1,6 +1,6 @@
 using System.Globalization;
-using Domain.Constants;
-using Domain.Entities.Common;
+using DecisionEngine.Common;
+using DecisionEngine.Model;
 using Domain.Entities.Store;
 
 namespace Admin.Components.Shared.DataSetup

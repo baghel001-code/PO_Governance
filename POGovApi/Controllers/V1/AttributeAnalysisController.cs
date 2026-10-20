@@ -1,5 +1,5 @@
-using Application.DTOs.Analytics.AttrAnalysis;
 using Application.Interfaces.V1.Analytics;
+using DecisionEngine.Results.Analytics.AttrAnalysis;
 using Domain.Entities.Response;
 using Microsoft.AspNetCore.Mvc;
 

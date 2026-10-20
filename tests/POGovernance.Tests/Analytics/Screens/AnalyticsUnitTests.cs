@@ -1,7 +1,7 @@
 using System.Text.Json.Nodes;
-using Application.Services.V1.Analytics.Ai;
-using Application.Services.V1.Analytics.Common;
-using Application.Services.V1.Analytics.Help;
+using DecisionEngine.Analytics.Ai;
+using DecisionEngine.Analytics.Common;
+using DecisionEngine.Analytics.Help;
 
 namespace POGovernance.Tests.Analytics.Screens
 {
@@ -32,7 +32,7 @@ namespace POGovernance.Tests.Analytics.Screens
         [Fact]
         public void HelpDefaults()
         {
-            var t = HelpContentService.ComputeFor(75, 5);
+            var t = HelpContentEngine.ComputeFor(75, 5);
             Assert.Equal("78.75", t.EffT);
             Assert.Equal("78.75×379−87,265", t.Calc);
             Assert.Equal("MAX(0, −57,419) = 0", t.Result);

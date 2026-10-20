@@ -1,7 +1,7 @@
 using System.IO.Compression;
-using Application.DTOs.Tool2;
 using Application.Interfaces.V1.Tool2;
 using ClosedXML.Excel;
+using DecisionEngine.Results.Tool2;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace Infrastructure.Services.V1.Excel

@@ -1,4 +1,4 @@
-using Domain.Entities.Engine;
+using DecisionEngine.Model;
 
 namespace Application.Interfaces.V1
 {

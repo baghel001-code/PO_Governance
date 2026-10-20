@@ -1,8 +1,7 @@
 using System.Net.Http.Headers;
-using System.Net.Http.Json;
 using Admin.Interfaces;
 using Admin.Services;
-using Application.DTOs.Tool2;
+using DecisionEngine.Results.Tool2;
 using Domain.Constants;
 using Domain.Entities.Response;
 using Microsoft.AspNetCore.Components.Authorization;

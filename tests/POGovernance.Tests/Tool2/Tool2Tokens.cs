@@ -1,6 +1,6 @@
-using Application.DTOs.Recommendation;
-using Application.DTOs.Tool2;
-using Domain.Entities.Common;
+using DecisionEngine.Common;
+using DecisionEngine.Results.Recommendation;
+using DecisionEngine.Results.Tool2;
 
 namespace POGovernance.Tests.Tool2
 {

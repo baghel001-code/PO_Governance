@@ -1,8 +1,7 @@
 using System.Text.Json.Nodes;
-using Application.DTOs.Recommendation;
-using Application.Services.V1.Engines.Common;
-using Application.Services.V1.Recommendation;
-using Domain.Exceptions;
+using DecisionEngine.Common;
+using DecisionEngine.Recommendation;
+using DecisionEngine.Results.Recommendation;
 
 namespace POGovernance.Tests.Recommendation
 {
@@ -124,7 +123,7 @@ namespace POGovernance.Tests.Recommendation
                 Months = a["months"]?.AsArray().Select(x => x!.GetValue<string>()).ToList(),
                 DimOverride = a["dim"]?.GetValue<string>()
             };
-            var view = RecommendationService.Build(Engine, ctx, req);
+            var view = RecommendationView.Build(Engine, ctx, req);
             Assert.Equal(exp["engine"]!.GetValue<string>(), view.Engine);
             var alert = exp["alert"]?.GetValue<string>();
             Assert.Equal(alert, view.Error);
@@ -167,7 +166,7 @@ namespace POGovernance.Tests.Recommendation
                 {
                     Assert.Equal("No recommendation rows to export", toast);
                     if (view.A != null && view.A.Err == null && view.A.DimMode == null)
-                        Assert.Throws<AppValidationException>(() => Engine.BuildExport(ctx, view.A, ctx.Today));
+                        Assert.Throws<EngineValidationException>(() => Engine.BuildExport(ctx, view.A, ctx.Today));
                     return;
                 }
                 var file = ex["file"]!.GetValue<string>();

@@ -1,7 +1,8 @@
 using System.Text.Json.Nodes;
-using Application.DTOs.Tool1;
-using Application.Services.V1.Recommendation;
 using Application.Services.V1.Tool1;
+using DecisionEngine.Recommendation;
+using DecisionEngine.Results.Tool1;
+using DecisionEngine.Tool1;
 using Domain.Exceptions;
 using Domain.Records;
 using POGovernance.Tests.Recommendation;
@@ -28,9 +29,8 @@ namespace POGovernance.Tests.Tool1
             var sc = Tool1Fixture.Scenario(scenario);
             var today = sc["today"]!.GetValue<string>();
             var ledger = new FakeRequestLedger { Today = today, SavedAt = Tool1Fixture.Expected["savedAt"]!.GetValue<string>() };
-            var engB = new Tool1EngineB();
             var svc = new Tool1Service(new FakeDatasetCache { Data = Tool1Fixture.Data(scenario) }, ledger, new FakeAppClock { TodayValue = today },
-                new Tool1Flow(engB, new Tool1EngineA(), new RecommendationEngine()), engB, new Tool1FormOptions(), new Tool1Settings { ReducedLabel = reducedLabel });
+                new Tool1DecisionEngine(new RecommendationEngine()), new Tool1Settings { ReducedLabel = reducedLabel });
             return (svc, ledger);
         }
 
@@ -182,7 +182,7 @@ namespace POGovernance.Tests.Tool1
             if (e["aStep3"] != null)
             {
                 var q = c.A!.Step3!;
-                Assert.Equal(Strs(e["aStep3"]), new List<string> { q.Heading, q.PoolText, q.RankText, Domain.Entities.Common.Js.NumberToString(q.Position) });
+                Assert.Equal(Strs(e["aStep3"]), new List<string> { q.Heading, q.PoolText, q.RankText, DecisionEngine.Common.Js.NumberToString(q.Position) });
             }
             else Assert.Null(c.A?.Step3);
             if (e["aStep4"] != null) Assert.Equal(Strs(e["aStep4"]), c.A!.Step4!.Lines.Concat(new[] { c.A.Step4.Verdict }).ToList());
@@ -200,7 +200,7 @@ namespace POGovernance.Tests.Tool1
             var data = Tool1Fixture.Data(scenario);
             var info = saved["info"] is JsonObject i ? System.Text.Json.JsonSerializer.Deserialize<Tool1InfoDto>(i.ToJsonString()) : null;
             var r = new Tool1EngineA().Run(data, saved["gm"]!.GetValue<string>(), saved["colour"]!.GetValue<string>(), saved["optionType"]!.GetValue<string>(), info);
-            string Id(Domain.Entities.Common.SheetRow x) => x.Str("Generic Material") + "|" + x.Str("Color");
+            string Id(DecisionEngine.Model.SheetRow x) => x.Str("Generic Material") + "|" + x.Str("Color");
             Assert.Equal(Strs(e["peerPool"]), r.PeerPool.Select(Id).ToList());
             Assert.Equal(Strs(e["cleanPool"]), r.CleanPool.Select(Id).ToList());
             Assert.Equal(Strs(e["siblings"]), r.Siblings.Select(Id).ToList());

@@ -1,5 +1,5 @@
-using Application.DTOs.Analytics.Grc;
 using Application.Interfaces.V1.Analytics;
+using DecisionEngine.Results.Analytics.Grc;
 using Domain.Entities.Response;
 using Microsoft.AspNetCore.Mvc;
 

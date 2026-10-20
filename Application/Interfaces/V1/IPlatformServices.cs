@@ -1,6 +1,6 @@
 using System.Text.Json.Nodes;
 using Application.DTOs.Platform;
-using Domain.Entities.Common;
+using DecisionEngine.Model;
 using Domain.Entities.Store;
 using Domain.Records;
 

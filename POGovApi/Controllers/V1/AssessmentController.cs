@@ -1,5 +1,5 @@
-using Application.DTOs.Tool2;
 using Application.Interfaces.V1.Tool2;
+using DecisionEngine.Results.Tool2;
 using Domain.Entities.Response;
 using Microsoft.AspNetCore.Mvc;
 

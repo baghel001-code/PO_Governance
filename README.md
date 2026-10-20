@@ -3,7 +3,7 @@
 This is the .NET rebuild of the VMM PO Governance tool (Python + browser version v1.1.4, kept unchanged in
 `legacy/python-app/` for reference). It follows the clean-architecture layout of the QPS solution:
 **two web applications** — the portal (`Admin`, Blazor Server) and the API (`POGovApi`) — on top of
-`Domain`, `Application` and `Infrastructure` class libraries.
+`Domain`, `DecisionEngine`, `Application` and `Infrastructure` class libraries.
 
 The main change from v1.1.4: **the decision rules now run on the server**, not in each user's browser.
 They were ported function by function, and the C# results are checked against the original JavaScript (see Testing).
@@ -12,11 +12,12 @@ They were ported function by function, and the C# results are checked against th
 
 | Project | What it holds |
 |---|---|
-| `Domain` | Constants (roles, dataset keys, decision labels), entities, exceptions, `Js` helpers that reproduce JavaScript number semantics, `SheetRow` (an uploaded file row), `EngineData` (snapshot of all current data files + parameters) |
-| `Application` | Interfaces (`Interfaces/V1`), DTOs and all business logic in `Services/V1`: `Tool1` (New Request decisions), `Tool2` (PO Assessment), `Recommendation`, `Analytics` (GRC back-testing, attribute analysis, insights, AI assistant, help), `Ingest` (Excel / ZIP / raw-export import), `Platform` (accounts, requests ledger, approvals, history, runs, params, feedback, audit, backups) |
+| `Domain` | Constants (roles, app constants), store entities, exceptions, records, settings — no business rules |
+| `DecisionEngine` | **The core business-logic layer, BCL only (no project / package references).** Every verdict algorithm as synchronous, side-effect-free engines: `Tool1` (New Request decisions), `Tool2` (PO Assessment), `Recommendation`, `Grc` (back-testing, season selection), `Analytics` (attribute analysis, insights dashboards, AI prompt context, help values); the data model (`Model`: `EngineData`, `EngineParams`, `SheetRow`, dataset keys, decision labels), JS-semantics helpers (`Common`: `Js`, `JsObjectMap` …) and the result models (`Results`). See `DecisionEngine/README.md` |
+| `Application` | Interfaces for IO (`Interfaces/V1`: dataset cache, request ledger, clock, store …), the use-case services in `Services/V1` that load data and call the engines (`Tool1`, `Tool2`, `Recommendation`, `Analytics`), `Ingest` (Excel / ZIP / raw-export import), `Platform` (accounts, requests ledger, approvals, history, runs, params, feedback, audit, backups), DI registration (`DIResolver`) |
 | `Infrastructure` | PostgreSQL store (Dapper + Npgsql), dataset cache, password hashing, Excel reader / writers, AI client, backups, middleware, DI registration |
 | `POGovApi` | REST API, `Controllers/V1/*`, routes `api/v1/...` (Swagger at `/swagger` in Development) |
-| `Admin` | The portal (MudBlazor). Talks only to the API |
+| `Admin` | The portal (MudBlazor). Talks only to the API (uses the `DecisionEngine.Results` models as its view models) |
 | `tests/POGovernance.Tests` | xUnit unit + parity tests; `tests/parity/*` are the Node harnesses that run the original JavaScript |
 
 ## Screens
@@ -85,8 +86,9 @@ dotnet test
 
 Most tests are **parity tests**: a Node script in `tests/parity/<area>/` runs the original functions extracted
 from `legacy/python-app/app/index.html` on a fixture dataset and writes the expected results; the xUnit tests check that the C# port
-returns the same decisions, quantities, reasons, texts and Excel output. To regenerate the expected results after a deliberate rule change, run the
-harness again (each harness has the command in its header comment).
+(the `DecisionEngine` layer) returns the same decisions, quantities, reasons, texts and Excel output. To regenerate the expected results after a deliberate rule change, run the
+harness again (each harness has the command in its header comment). `tests/POGovernance.Tests/Architecture` checks that
+`DecisionEngine` stays dependency-free.
 
 ## Documents
 

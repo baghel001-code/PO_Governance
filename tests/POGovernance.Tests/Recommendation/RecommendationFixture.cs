@@ -1,9 +1,7 @@
 using System.Text.Json;
 using System.Text.Json.Nodes;
-using Application.Services.V1.Recommendation;
-using Domain.Constants;
-using Domain.Entities.Common;
-using Domain.Entities.Engine;
+using DecisionEngine.Model;
+using DecisionEngine.Recommendation;
 
 namespace POGovernance.Tests.Recommendation
 {

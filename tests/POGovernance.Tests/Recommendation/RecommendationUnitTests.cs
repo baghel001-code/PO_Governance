@@ -1,10 +1,11 @@
 using System.Text.Json.Nodes;
-using Application.DTOs.Recommendation;
 using Application.Interfaces.V1;
-using Application.Services.V1.Engines.Common;
 using Application.Services.V1.Recommendation;
 using ClosedXML.Excel;
-using Domain.Entities.Engine;
+using DecisionEngine.Common;
+using DecisionEngine.Model;
+using DecisionEngine.Recommendation;
+using DecisionEngine.Results.Recommendation;
 using Infrastructure.Services.V1.Excel;
 
 namespace POGovernance.Tests.Recommendation
@@ -64,7 +65,7 @@ namespace POGovernance.Tests.Recommendation
         {
             var ctx = RecommendationFixture.Context("S3-year-end");
             var engine = new RecommendationEngine();
-            var view = RecommendationService.Build(engine, ctx, new RecommendationRequestDto { Gm = "2203000201" });
+            var view = RecommendationView.Build(engine, ctx, new RecommendationRequestDto { Gm = "2203000201" });
             Assert.True(view.A!.Recs!.Count > 0);
             var export = engine.BuildExport(ctx, view.A, "2026-12-02");
             var bytes = new RecommendationExcelExporter().Write(export);
@@ -110,7 +111,7 @@ namespace POGovernance.Tests.Recommendation
             var view = await svc.GetAsync(new RecommendationRequestDto { Gm = "1101000101" });
             Assert.Equal("2026-10-14", ledger.AskedDate);
             Assert.Equal("B", view.RenderEngine);
-            var direct = RecommendationService.Build(new RecommendationEngine(), fixtureCtx, new RecommendationRequestDto { Gm = "1101000101" });
+            var direct = RecommendationView.Build(new RecommendationEngine(), fixtureCtx, new RecommendationRequestDto { Gm = "1101000101" });
             JsonParity.Check(JsonParity.ToNode(direct.B), view.B, "service");
 
             var months = await svc.GetMonthsAsync(new RecommendationRequestDto { Brand = "NON-PL", McCd = "2203", Mrp = "599", Flag = "BOGO" });

@@ -1,7 +1,7 @@
 using System.Text.RegularExpressions;
 using Application.DTOs.Ingest;
 using Application.Services.V1.Ingest.SheetJs;
-using Domain.Entities.Common;
+using DecisionEngine.Model;
 
 namespace Application.Services.V1.Ingest
 {

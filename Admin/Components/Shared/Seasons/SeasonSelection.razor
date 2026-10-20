@@ -2,7 +2,7 @@
    Pills come from GET api/v1/seasons; a click goes through POST api/v1/seasons/toggle (toggle +
    re-validation on the server), then seasonCurrent / seasonFallback are saved into the planner params. *@
 @using System.Text.Json.Nodes
-@using Application.DTOs.Analytics.Grc
+@using DecisionEngine.Results.Analytics.Grc
 @inject IAPICallService Api
 @inject ISnackbar Snackbar
 

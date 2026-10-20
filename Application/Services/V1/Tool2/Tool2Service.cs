@@ -2,13 +2,12 @@ using System.Collections.Concurrent;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
-using Application.DTOs.Tool2;
 using Application.Interfaces.V1;
-using Application.Interfaces.V1.Recommendation;
 using Application.Interfaces.V1.Tool2;
-using Application.Services.V1.Recommendation;
-using Domain.Constants;
-using Domain.Entities.Engine;
+using DecisionEngine.Model;
+using DecisionEngine.Recommendation;
+using DecisionEngine.Results.Tool2;
+using DecisionEngine.Tool2;
 using Domain.Entities.Store;
 using Domain.Exceptions;
 using Domain.Records;
@@ -43,19 +42,23 @@ namespace Application.Services.V1.Tool2
         public void Remove(string id) => _items.TryRemove(id, out _);
     }
 
-    /// <summary>See <see cref="ITool2Service"/>.</summary>
+    /// <summary>
+    /// See <see cref="ITool2Service"/>. Orchestration only: loads the snapshot (<see cref="IDatasetCache"/>), today's
+    /// ledger (<see cref="IRequestLedger"/>) and saved runs (<see cref="IRunArchive"/>); the assessment, views and
+    /// export model come from <see cref="ITool2AssessmentEngine"/> (DecisionEngine).
+    /// </summary>
     public sealed class Tool2Service : ITool2Service
     {
         private readonly IDatasetCache _cache;
         private readonly IRequestLedger _ledger;
         private readonly IAppClock _clock;
-        private readonly IRecommendationEngine _engine;
+        private readonly ITool2AssessmentEngine _engine;
         private readonly IRunArchive _archive;
         private readonly IDatasetManifestReader _manifest;
         private readonly ITool2ExcelExporter _excel;
         private readonly Tool2RunCache _runs;
 
-        public Tool2Service(IDatasetCache cache, IRequestLedger ledger, IAppClock clock, IRecommendationEngine engine, IRunArchive archive,
+        public Tool2Service(IDatasetCache cache, IRequestLedger ledger, IAppClock clock, ITool2AssessmentEngine engine, IRunArchive archive,
                             IDatasetManifestReader manifest, ITool2ExcelExporter excel, Tool2RunCache runs)
         {
             _cache = cache; _ledger = ledger; _clock = clock; _engine = engine; _archive = archive; _manifest = manifest; _excel = excel; _runs = runs;
@@ -68,23 +71,9 @@ namespace Application.Services.V1.Tool2
             return new RecommendationContext(data, requests, today);
         }
 
-        /// <summary>shared.js <c>runSummary(list)</c>: decision counts, qty and ₹ at risk.</summary>
-        public static (JsonObject Counts, double AtRisk, double ValueAtRisk) RunSummary(IReadOnlyList<Tool2LineResult> list)
-        {
-            var counts = new JsonObject();
-            double atRisk = 0, value = 0;
-            foreach (var r in list)
-            {
-                counts[r.Decision] = (counts[r.Decision]?.GetValue<int>() ?? 0) + 1;
-                if (r.Decision != Decisions.Retain && r.Decision != Decisions.CannotValidate)
-                {
-                    var cut = r.ExcessQty;
-                    atRisk += cut;
-                    value += Tool2Workspace.ValueAtRisk(r, cut);
-                }
-            }
-            return (counts, Domain.Entities.Common.Js.Round(atRisk), Domain.Entities.Common.Js.Round(value));
-        }
+        /// <summary>shared.js <c>runSummary(list)</c>: decision counts, qty and ₹ at risk (see <see cref="Tool2AssessmentEngine.RunSummary"/>).</summary>
+        public static (JsonObject Counts, double AtRisk, double ValueAtRisk) RunSummary(IReadOnlyList<Tool2LineResult> list) =>
+            Tool2AssessmentEngine.RunSummary(list);
 
         /// <summary>Builds the saved-run payload + X-Run-Meta exactly as <c>Shared.saveRun</c> did.</summary>
         public static (Tool2RunPayload Payload, JsonObject Meta) BuildRunDocument(IReadOnlyList<Tool2LineResult> results, EngineData data,
@@ -113,8 +102,8 @@ namespace Application.Services.V1.Tool2
         {
             var data = await _cache.GetCurrentAsync(ct);
             var ctx = await ContextAsync(data, ct);
-            var results = Tool2Engine.Run(ctx, _engine);
-            var ws = new Tool2Workspace(results, ctx, _engine);
+            var results = EngineErrors.Run(() => _engine.Assess(ctx));
+            var ws = _engine.Workspace(results, ctx);
             var view = ws.BuildView();
             view.Toast = "Assessment complete — " + results.Count + " lines processed";
             var datasets = await _manifest.GetCurrentDatasetsAsync(ct);
@@ -152,7 +141,7 @@ namespace Application.Services.V1.Tool2
             var missing = versions.Keys.Where(k => data.Get(k) == null)
                                   .Select(k => DatasetKeys.Labels.TryGetValue(k, out var l) ? l : k).ToList();
             var ctx = await ContextAsync(data, ct);
-            var ws = new Tool2Workspace(payload.Results, ctx, _engine);
+            var ws = _engine.Workspace(payload.Results, ctx);
             var meta = await _archive.GetRunMetaAsync(runId, ct);
             return (ws, null, missing, meta);
         }
@@ -192,8 +181,8 @@ namespace Application.Services.V1.Tool2
             }
             var data = await _cache.GetCurrentAsync(ct);
             var ctx = new RecommendationContext(data, null, _clock.Today);
-            var empty = new Tool2Workspace(Array.Empty<Tool2LineResult>(), ctx, _engine);
-            return new Tool2OptionsDto { Params = empty.ParamsDto(), HasF2 = data.Has(DatasetKeys.F2), AssessableLines = Tool2Engine.AssessableRows(data).Count };
+            var empty = _engine.Workspace(Array.Empty<Tool2LineResult>(), ctx);
+            return new Tool2OptionsDto { Params = empty.ParamsDto(), HasF2 = data.Has(DatasetKeys.F2), AssessableLines = _engine.AssessableLines(data) };
         }
 
         public async Task<Tool2FileDto> ExportAsync(Tool2ExportRequestDto request, CancellationToken ct = default)
@@ -202,8 +191,11 @@ namespace Application.Services.V1.Tool2
             return Export(ws, request, _clock.Now, _excel);
         }
 
-        /// <summary>The export of a workspace (public for tests).</summary>
-        public static Tool2FileDto Export(Tool2Workspace ws, Tool2ExportRequestDto request, DateTimeOffset now, ITool2ExcelExporter excel)
+        /// <summary>The export of a workspace (public for tests). Engine rule errors become <see cref="AppValidationException"/>.</summary>
+        public static Tool2FileDto Export(Tool2Workspace ws, Tool2ExportRequestDto request, DateTimeOffset now, ITool2ExcelExporter excel) =>
+            EngineErrors.Run(() => ExportFiles(ws, request, now, excel));
+
+        private static Tool2FileDto ExportFiles(Tool2Workspace ws, Tool2ExportRequestDto request, DateTimeOffset now, ITool2ExcelExporter excel)
         {
             var date = Tool2Workspace.FileDate(now);
             if (string.Equals(request.Format, "csv", StringComparison.OrdinalIgnoreCase))

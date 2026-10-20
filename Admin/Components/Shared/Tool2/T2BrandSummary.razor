@@ -102,7 +102,7 @@
                 <div class="c-red @(n.Reduce > 0 ? "b" : "")">@(n.Reduce > 0 ? n.Reduce : "—")</div>
                 <div class="c-can @(n.Cancel > 0 ? "b" : "")">@(n.Cancel > 0 ? n.Cancel : "—")</div>
                 <div class="c-wat @(n.Watch > 0 ? "b" : "")">@(n.Watch > 0 ? n.Watch : "—")</div>
-                <div class="c-pct" style="color:@n.PctColor">@(Domain.Entities.Common.Js.NumberToString(n.Pct))%</div>
+                <div class="c-pct" style="color:@n.PctColor">@(DecisionEngine.Common.Js.NumberToString(n.Pct))%</div>
                 <div class="c-risk">@n.AtRiskText</div>
                 <div class="t2-arrow">►</div>
             </div>

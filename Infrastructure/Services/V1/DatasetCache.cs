@@ -2,9 +2,8 @@ using System.Text.Json;
 using System.Text.Json.Nodes;
 using Application.Interfaces.V1;
 using Application.Services.V1.Platform;
-using Domain.Constants;
-using Domain.Entities.Common;
-using Domain.Entities.Engine;
+using DecisionEngine.Common;
+using DecisionEngine.Model;
 using Domain.Entities.Store;
 using Microsoft.Extensions.Logging;
 

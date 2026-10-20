@@ -1,7 +1,7 @@
 using Application.DTOs.Ingest;
 using Application.Interfaces.V1;
 using Application.Services.V1.Ingest;
-using Domain.Entities.Engine;
+using DecisionEngine.Model;
 using Domain.Entities.Store;
 using Domain.Exceptions;
 using Domain.Records;

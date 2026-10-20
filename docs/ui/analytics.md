@@ -2,7 +2,7 @@
 
 Ports of the remaining v1.1.4 analytics views of `legacy/python-app/app/index.html`. All figures, texts
 and colours are produced on the server; the portal lays out the DTO fields named below (all in
-`Application.DTOs.Analytics.*`). Colours are hex values unless noted; CSS variables refer to the portal
+`DecisionEngine.Results.Analytics.*`). Colours are hex values unless noted; CSS variables refer to the portal
 theme (`--vmm-pink`, `--vmm-cyan`, `--vmm-navy`, `--ink2/3`, `--sur2/3`, `--brd`, `--grn`, `--grnl`). Number
 texts are already formatted (Indian grouping). Responses are wrapped in `ApiResponse<T>`.
 

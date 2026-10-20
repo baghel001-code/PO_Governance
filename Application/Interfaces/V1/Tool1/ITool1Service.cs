@@ -1,4 +1,4 @@
-using Application.DTOs.Tool1;
+using DecisionEngine.Results.Tool1;
 using Domain.Records;
 
 namespace Application.Interfaces.V1.Tool1

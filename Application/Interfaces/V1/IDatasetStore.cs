@@ -1,4 +1,4 @@
-using Domain.Entities.Engine;
+using DecisionEngine.Model;
 using Domain.Entities.Store;
 using Domain.Records;
 

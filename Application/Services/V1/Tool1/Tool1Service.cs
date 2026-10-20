@@ -1,22 +1,17 @@
 using System.Globalization;
 using System.Text.Json;
 using System.Text.Json.Nodes;
-using Application.DTOs.Tool1;
 using Application.Interfaces.V1;
 using Application.Interfaces.V1.Tool1;
-using Application.Services.V1.Engines.Common;
-using Domain.Constants;
-using Domain.Entities.Common;
+using DecisionEngine.Common;
+using DecisionEngine.Model;
+using DecisionEngine.Results.Tool1;
+using DecisionEngine.Tool1;
 using Domain.Exceptions;
 using Domain.Records;
 
 namespace Application.Services.V1.Tool1
 {
-    /// <summary>
-    /// Tool 1 use cases. Validate = formSubmit's decision against today's ledger (after
-    /// <c>Shared.refreshRequests</c>); Submit = the decision again with the confirmed quantity plus
-    /// <c>Shared.saveRequest</c> (shared.js line 444) with its 409 re-check / force flow.
-    /// </summary>
     /// <summary>Tool 1 behaviour switches.</summary>
     public sealed class Tool1Settings
     {
@@ -29,53 +24,51 @@ namespace Application.Services.V1.Tool1
         public bool ReducedLabel { get; set; }
     }
 
+    /// <summary>
+    /// Tool 1 use cases. Validate = formSubmit's decision against today's ledger (after
+    /// <c>Shared.refreshRequests</c>); Submit = the decision again with the confirmed quantity plus
+    /// <c>Shared.saveRequest</c> (shared.js line 444) with its 409 re-check / force flow. The decisions are made by
+    /// <see cref="ITool1DecisionEngine"/> (DecisionEngine); this service loads the snapshot (<see cref="IDatasetCache"/>)
+    /// and today's ledger (<see cref="IRequestLedger"/>), reads the clock and saves the request.
+    /// </summary>
     public sealed class Tool1Service : ITool1Service
     {
-        /// <summary>shared.js REQ_DROP: request fields that hold whole BSR row sets, never stored.</summary>
-        public static readonly string[] ReqDrop = { "peerPool", "cleanPool", "siblings", "qualSibs", "sibRanked", "repSibling" };
-
         private readonly IDatasetCache _cache;
         private readonly IRequestLedger _ledger;
         private readonly IAppClock _clock;
-        private readonly Tool1Flow _flow;
-        private readonly Tool1EngineB _engineB;
-        private readonly Tool1FormOptions _options;
-
+        private readonly ITool1DecisionEngine _engine;
         private readonly Tool1Settings _settings;
 
-        public Tool1Service(IDatasetCache cache, IRequestLedger ledger, IAppClock clock, Tool1Flow flow, Tool1EngineB engineB, Tool1FormOptions options,
-                            Tool1Settings? settings = null)
+        public Tool1Service(IDatasetCache cache, IRequestLedger ledger, IAppClock clock, ITool1DecisionEngine engine, Tool1Settings? settings = null)
         {
-            _cache = cache; _ledger = ledger; _clock = clock; _flow = flow; _engineB = engineB; _options = options;
+            _cache = cache; _ledger = ledger; _clock = clock; _engine = engine;
             _settings = settings ?? new Tool1Settings();
-        }
-
-        private void Relabel(Tool1Outcome o)
-        {
-            if (_settings.ReducedLabel) Tool1Flow.ApplyReducedLabel(o);
         }
 
         public async Task<Tool1FormOptionsDto> GetFormOptionsAsync(string? gm, CancellationToken ct = default)
         {
             var data = await _cache.GetCurrentAsync(ct);
-            return _options.Build(data, gm, _clock.Today);
+            return _engine.FormOptions(data, gm, _clock.Today);
         }
 
         public async Task<Tool1ResultDto> ValidateAsync(Tool1RequestInputDto input, AppUserContext user, CancellationToken ct = default)
         {
             var data = await _cache.GetCurrentAsync(ct);
-            var (gm, colour, month, qty) = Tool1Flow.CheckInput(data, input);
+            var (gm, colour, month, qty) = EngineErrors.Run(() => _engine.CheckInput(data, input));
             var today = _clock.Today;
             var (reqs, seq) = await _ledger.GetDayAsync(today, ct);
-            var o = _flow.Decide(data, reqs, today, NextId(reqs), gm, colour, month, qty, null);
-            Relabel(o);
+            var o = Decide(data, reqs, today, Tool1Requests.NextId(reqs), gm, colour, month, qty, null);
             return ToResult(o, data.Params, today, seq, o.NeedsConfirmation ? "needsConfirmation" : "decided", null);
         }
+
+        private Tool1Outcome Decide(EngineData data, IReadOnlyList<JsonObject> reqs, string today, int id,
+                                    string gm, string colour, string month, double qty, Tool1Confirmation? confirmation) =>
+            EngineErrors.Run(() => _engine.Decide(data, reqs, today, id, gm, colour, month, qty, confirmation, _settings.ReducedLabel));
 
         public async Task<Tool1ResultDto> SubmitAsync(Tool1SubmitInputDto input, AppUserContext user, CancellationToken ct = default)
         {
             var data = await _cache.GetCurrentAsync(ct);
-            var (gm, colour, month, qty) = Tool1Flow.CheckInput(data, input);
+            var (gm, colour, month, qty) = EngineErrors.Run(() => _engine.CheckInput(data, input));
             var today = _clock.Today;
             var (reqs, seq) = await _ledger.GetDayAsync(today, ct);
 
@@ -83,24 +76,22 @@ namespace Application.Services.V1.Tool1
             var seenSeq = input.SeenSeq;
             if (input.ConfirmedQty == null && !input.Declined)
             {
-                o = _flow.Decide(data, reqs, today, NextId(reqs), gm, colour, month, qty, null);
-                Relabel(o);
+                o = Decide(data, reqs, today, Tool1Requests.NextId(reqs), gm, colour, month, qty, null);
                 if (o.NeedsConfirmation) return ToResult(o, data.Params, today, seq, "needsConfirmation", null);
             }
             else
             {
                 // Decide against the ledger the user confirmed against (requests up to SeenSeq); anything
                 // approved for this colour since then is caught by the save's 409 check, as in v1.1.4.
-                var seen = reqs.Where(r => SeqOf(r) <= seenSeq).ToList();
-                o = _flow.Decide(data, seen, today, NextId(seen), gm, colour, month, qty, new Tool1Confirmation(input.ConfirmedQty, input.Declined));
-                Relabel(o);
+                var seen = reqs.Where(r => Tool1Requests.SeqOf(r) <= seenSeq).ToList();
+                o = Decide(data, seen, today, Tool1Requests.NextId(seen), gm, colour, month, qty, new Tool1Confirmation(input.ConfirmedQty, input.Declined));
             }
 
             var toasts = new List<string>();
             var r = o.Result;
             r["requestedBy"] = user.Name;
             r["createdAt"] = _clock.Now.UtcDateTime.ToString("yyyy-MM-dd'T'HH:mm:ss.fff'Z'", CultureInfo.InvariantCulture);
-            r["colourKey"] = ColourKey(r);
+            r["colourKey"] = Tool1Requests.ColourKey(r);
             JsonObject? saved = null;
             string? conflictBy = null;
             var headroomChanged = false;
@@ -108,7 +99,7 @@ namespace Application.Services.V1.Tool1
             {
                 try
                 {
-                    saved = await _ledger.SaveAsync(Slim(r), seenSeq, input.Force, user, ct);
+                    saved = await _ledger.SaveAsync(Tool1Requests.Slim(r), seenSeq, input.Force, user, ct);
                 }
                 catch (ConflictException ex)
                 {
@@ -117,7 +108,7 @@ namespace Application.Services.V1.Tool1
                     var want = LedgerHelpers.ApprovedQtyFor(r);
                     if (o.Engine == "B" && JsOps.Or(want ?? 0, 0) > 0)
                     {
-                        var chk = _engineB.Run(data, fresh, today, gm, colour, month, want!.Value, o.Info);
+                        var chk = _engine.RunEngineB(data, fresh, today, gm, colour, month, want!.Value, o.Info);
                         var chkMax = JsOps.Or(chk.MaxPermQty ?? 0, 0);
                         if (chkMax < want)
                         {
@@ -135,7 +126,7 @@ namespace Application.Services.V1.Tool1
                         }
                     }
                     seenSeq = freshSeq;
-                    saved = await _ledger.SaveAsync(Slim(r), freshSeq, true, user, ct);
+                    saved = await _ledger.SaveAsync(Tool1Requests.Slim(r), freshSeq, true, user, ct);
                 }
             }
             catch (AppException ex) when (ex is not ConflictException)
@@ -151,13 +142,13 @@ namespace Application.Services.V1.Tool1
                 if (LedgerHelpers.Get(saved, "id") is double idv) o.Id = (int)idv;
                 if (saved["approval"] is JsonObject ap)
                 {
-                    var who = ap["approverNames"] is JsonArray names ? string.Join(", ", names.Select(n => Js.ToJsString(NodeValue(n)))) : "";
+                    var who = ap["approverNames"] is JsonArray names ? string.Join(", ", names.Select(n => Js.ToJsString(Tool1Requests.NodeValue(n)))) : "";
                     toasts.Add("Watch List — sent to " + (who.Length > 0 ? who : "the admin (no category head mapped)") + " for approval");
                 }
             }
 
             var res = ToResult(o, data.Params, today, saved != null ? (int)LedgerHelpers.ToNumber(LedgerHelpers.Get(saved, "seq")) : seenSeq,
-                               saved != null ? "saved" : "notSaved", Slim(r));
+                               saved != null ? "saved" : "notSaved", Tool1Requests.Slim(r));
             res.Toasts.InsertRange(0, toasts);
             res.HeadroomChanged = headroomChanged;
             res.ConflictByOthers = conflictBy;
@@ -188,61 +179,27 @@ namespace Application.Services.V1.Tool1
             {
                 var (reqs, s) = await _ledger.GetDayAsync(today, ct);
                 visible = user.IsStaff ? reqs
-                    : reqs.Where(r => Equals(LedgerHelpers.Get(r, "requestedByEmail"), user.Email) || IsApprover(r, user.Email)).ToList();
+                    : reqs.Where(r => Equals(LedgerHelpers.Get(r, "requestedByEmail"), user.Email) || Tool1Requests.IsApprover(r, user.Email)).ToList();
                 seq = s;
             }
             var list = visible.Where(r => LedgerHelpers.IsToday(r, today)).ToList();
             if (onlyMine) list = list.Where(r => Equals(LedgerHelpers.Get(r, "requestedByEmail"), user.Email)).ToList();
-            return new Tool1TodayDto { Rows = HistoryRows(list), Seq = seq, Count = visible.Count };
+            return new Tool1TodayDto { Rows = Tool1Requests.HistoryRows(list), Seq = seq, Count = visible.Count };
         }
-
-        private static bool IsApprover(JsonObject r, string email) =>
-            r["approval"] is JsonObject a && a["approvers"] is JsonArray ap && ap.Any(x => Equals(NodeValue(x), email));
 
         // ── helpers ──────────────────────────────────────────────────────────
 
-        /// <summary>The JS value of any JSON node (JsonElement- or CLR-backed).</summary>
-        private static object? NodeValue(JsonNode? n) => LedgerHelpers.Get(new JsonObject { ["v"] = n?.DeepClone() }, "v");
-
-        private static Tool1ResultDto ToResult(Tool1Outcome o, Domain.Entities.Engine.EngineParams p, string today, int seq, string status, JsonObject? request)
+        private Tool1ResultDto ToResult(Tool1Outcome o, EngineParams p, string today, int seq, string status, JsonObject? request)
         {
             var res = new Tool1ResultDto
             {
                 Status = status, NeedsConfirmation = o.NeedsConfirmation, SeenSeq = seq, Engine = o.Engine, OptionType = o.OptionType,
                 Decision = o.Decision, DecisionReason = o.DecisionReason, FinalApprovedQty = o.FinalApprovedQty,
-                ApprovedQty = LedgerHelpers.ApprovedQtyFor(o.Result), Card = Tool1CardBuilder.Build(o, p, today),
-                Request = request ?? Slim(o.Result)
+                ApprovedQty = LedgerHelpers.ApprovedQtyFor(o.Result), Card = _engine.BuildCard(o, p, today),
+                Request = request ?? Tool1Requests.Slim(o.Result)
             };
             if (o.NeedsConfirmation) { res.ProposedQty = o.Qty; res.MaxPermissibleQty = o.ConfirmMax; }
             return res;
-        }
-
-        /// <summary>S.reqCount after refreshRequests (max id) + 1.</summary>
-        public static int NextId(IEnumerable<JsonObject> reqs) =>
-            (int)reqs.Select(r => JsOps.Or(LedgerHelpers.ToNumber(LedgerHelpers.Get(r, "id")), 0)).DefaultIfEmpty(0).Max() + 1;
-
-        private static double SeqOf(JsonObject r) => JsOps.Or(LedgerHelpers.ToNumber(LedgerHelpers.Get(r, "seq")), 0);
-
-        /// <summary>shared.js <c>colourKey(r)</c>: brand|mcCd|mrp|flag|colour, normalised.</summary>
-        public static string ColourKey(JsonObject r)
-        {
-            var i = LedgerHelpers.Info(r) ?? new JsonObject();
-            return string.Join("|", Js.N(LedgerHelpers.Get(i, "brand")), Js.N(LedgerHelpers.Get(i, "mcCd")), Js.N(LedgerHelpers.Get(i, "mrp")),
-                               Js.N(LedgerHelpers.Get(i, "flag")), Js.N(LedgerHelpers.Get(r, "colour")));
-        }
-
-        /// <summary>shared.js <c>slimRequest(r)</c>: drops REQ_DROP fields and any object larger than 60,000 JSON characters.</summary>
-        public static JsonObject Slim(JsonObject r)
-        {
-            var o = new JsonObject();
-            foreach (var kv in r)
-            {
-                if (ReqDrop.Contains(kv.Key)) continue;
-                if (kv.Value is JsonObject or JsonArray && kv.Value.ToJsonString(Tool1Json.Options).Length > 60000) continue;
-                o[kv.Key] = kv.Value?.DeepClone();
-            }
-            // re-parse so every value is a plain JSON value (numbers readable as double by any consumer)
-            return JsonNode.Parse(o.ToJsonString(Tool1Json.Options))!.AsObject();
         }
 
         private static string? PayloadString(object? payload, string key)
@@ -254,59 +211,6 @@ namespace Application.Services.V1.Tool1
                 return n is JsonObject o && o[key] is JsonValue v && v.TryGetValue<string>(out var s) ? s : null;
             }
             catch (NotSupportedException) { return null; }
-        }
-
-        /// <summary>Port of <c>renderCatHistory</c> rows (newest first) with shared.js <c>approvalBadge</c>.</summary>
-        public static List<Tool1HistoryRowDto> HistoryRows(IEnumerable<JsonObject> todayReqs)
-        {
-            var rows = new List<Tool1HistoryRowDto>();
-            foreach (var r in todayReqs.Reverse())
-            {
-                object? G(string k) => LedgerHelpers.Get(r, k);
-                var info = LedgerHelpers.Info(r);
-                var engine = Js.ToJsString(G("engine"));
-                var approved = LedgerHelpers.ApprovedQtyFor(r);
-                var decision = Js.ToJsString(G("decision"));
-                var mcDesc = info != null ? LedgerHelpers.Get(info, "mcDesc") : null;
-                var mrp = info != null ? LedgerHelpers.Get(info, "mrp") : null;
-                rows.Add(new Tool1HistoryRowDto
-                {
-                    RequestId = Js.ToJsString(Js.Truthy(G("reqId")) ? G("reqId") : G("id")),
-                    Gm = Tpl(r, "gm"), Colour = Tpl(r, "colour"),
-                    McDesc = Js.Truthy(mcDesc) ? Js.ToJsString(mcDesc) : "—",
-                    Mrp = "₹" + (Js.Truthy(mrp) ? Js.ToJsString(mrp) : "—"),
-                    Month = Tpl(r, "month"), Qty = Js.Fmt(LedgerHelpers.ToNumber(G("qty"))),
-                    EngineTag = "Eng " + engine, EngineClass = engine == "B" ? "et-b" : engine == "A" ? "et-a" : "et-new",
-                    OptionType = Tpl(r, "optionType"), Decision = decision, DecisionClass = Tool1CardBuilder.PillClass(decision),
-                    ApprovalBadge = Badge(r["approval"] as JsonObject),
-                    ApprovedQty = approved != null ? Js.Fmt(approved.Value) : "—",
-                    By = (Js.Truthy(G("requestedBy")) ? Js.ToJsString(G("requestedBy")) : "—").Replace("<", "").Replace(">", "").Replace("&", ""),
-                    RequestedByEmail = G("requestedByEmail") as string
-                });
-            }
-            return rows;
-        }
-
-        /// <summary>A field interpolated into a JS template string: missing → "undefined", null → "null".</summary>
-        private static string Tpl(JsonObject r, string key) =>
-            !r.TryGetPropertyValue(key, out var n) ? "undefined" : n == null ? "null" : Js.ToJsString(LedgerHelpers.Get(r, key));
-
-        /// <summary>shared.js <c>Shared.approvalBadge(r)</c>.</summary>
-        public static Tool1BadgeDto? Badge(JsonObject? a)
-        {
-            if (a == null) return null;
-            string S(string k) => Js.ToJsString(LedgerHelpers.Get(a, k));
-            var by = Js.Truthy(LedgerHelpers.Get(a, "byName")) ? S("byName") : Js.Truthy(LedgerHelpers.Get(a, "by")) ? S("by") : "?";
-            var names = a["approverNames"] is JsonArray n ? string.Join(", ", n.Select(x => Js.ToJsString(NodeValue(x)))) : "";
-            var (c, bg, text) = S("status") switch
-            {
-                "pending" => ("#B45309", "#FFF7ED", "⏳ Awaiting " + (names.Length > 0 ? names : "admin")),
-                "approved" => ("#00873E", "#DCFCE7", "✓ Approved by " + by + (LedgerHelpers.HasValue(a, "qty") ? " · " + Js.Fmt(LedgerHelpers.ToNumber(LedgerHelpers.Get(a, "qty"))) : "")),
-                "rejected" => ("#DC2626", "#FEF2F2", "✕ Rejected by " + by),
-                "cleared" => ("#6B7280", "#F3F4F6", "⊘ Cleared by admin – no longer waiting"),
-                _ => ("#6B7280", "#F3F4F6", S("status"))
-            };
-            return new Tool1BadgeDto { Text = text, Colour = c, Background = bg, Title = Js.Truthy(LedgerHelpers.Get(a, "comment")) ? S("comment") : "" };
         }
     }
 }

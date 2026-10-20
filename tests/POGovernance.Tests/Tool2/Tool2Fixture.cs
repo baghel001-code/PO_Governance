@@ -1,11 +1,9 @@
 using System.Text.Json;
 using System.Text.Json.Nodes;
-using Application.DTOs.Recommendation;
-using Application.DTOs.Tool2;
-using Application.Services.V1.Recommendation;
 using Application.Services.V1.Tool2;
-using Domain.Entities.Common;
-using Domain.Entities.Engine;
+using DecisionEngine.Model;
+using DecisionEngine.Recommendation;
+using DecisionEngine.Tool2;
 
 namespace POGovernance.Tests.Tool2
 {

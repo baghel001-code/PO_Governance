@@ -1,4 +1,4 @@
-using Application.DTOs.Analytics.Ai;
+using DecisionEngine.Results.Analytics.Ai;
 using Domain.Records;
 
 namespace Application.Interfaces.V1.Analytics

@@ -1,4 +1,4 @@
-using Application.DTOs.Analytics.Grc;
+using DecisionEngine.Results.Analytics.Grc;
 
 namespace Application.Interfaces.V1.Analytics
 {

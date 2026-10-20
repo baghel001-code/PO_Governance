@@ -1,7 +1,7 @@
 @page "/dev/recommendation"
 @* Temporary test page for the Recommendation modal (staff only) — until the Tool 1 card / Tool 2 table open it. *@
 @attribute [Authorize(Roles = Roles.Staff)]
-@using Application.DTOs.Recommendation
+@using DecisionEngine.Results.Recommendation
 @inject IDialogService DialogService
 
 <PageTitle>Recommendation (dev) · VMM PO Governance</PageTitle>

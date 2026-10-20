@@ -1,4 +1,4 @@
-using Domain.Entities.Common;
+using DecisionEngine.Model;
 
 namespace Application.Services.V1.Ingest.SheetJs
 {

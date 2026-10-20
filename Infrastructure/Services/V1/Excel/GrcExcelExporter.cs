@@ -1,6 +1,6 @@
-using Application.DTOs.Analytics.Grc;
 using Application.Interfaces.V1.Analytics;
 using ClosedXML.Excel;
+using DecisionEngine.Results.Analytics.Grc;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace Infrastructure.Services.V1.Excel
@@ -32,7 +32,7 @@ namespace Infrastructure.Services.V1.Excel
                         case long l: cell.Value = l; break;
                         case bool b: cell.Value = b; break;
                         case string s: cell.Value = s; break;
-                        default: cell.Value = Domain.Entities.Common.Js.ToJsString(row[c]); break;
+                        default: cell.Value = DecisionEngine.Common.Js.ToJsString(row[c]); break;
                     }
                 }
                 r++;

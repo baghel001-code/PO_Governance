@@ -1,5 +1,5 @@
-using Application.DTOs.Recommendation;
 using Application.Interfaces.V1.Recommendation;
+using DecisionEngine.Results.Recommendation;
 using Domain.Entities.Response;
 using Microsoft.AspNetCore.Mvc;
 

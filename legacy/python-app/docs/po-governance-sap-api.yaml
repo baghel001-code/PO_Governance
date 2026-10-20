@@ -1,0 +1,596 @@
+openapi: 3.0.3
+info:
+  title: VMM PO Governance – SAP R/3 Integration API
+  version: 1.4.0
+  description: |
+    Interface between SAP R/3 (ECC / IS-Retail on HANA) and the VMM PO Governance server.
+
+    * **Stage 2 – SAP → tool, asynchronous:** `POST /events` – PO and goods-movement events pushed from
+      BAdIs through an ordered bgRFC queue. Also carries governance outcomes (buyer accepted,
+      exception approved/rejected).
+    * **Stage 2 – SAP → tool, synchronous:** `POST /decisions` – called by the "PO Governance check"
+      background step of the PO release workflow, after SAP's OTB check has passed. SAP sends
+      its own current figures with the request, so the tool never needs to log in to SAP.
+    * **Utility:** `GET /ping` (SM59 connection test, and the health check used by SAP's automatic
+      switch-off: checked every minute, 3 failures in a row switch the governance step off so SAP runs
+      the previous process), `GET /reason-codes` (exception reasons).
+
+    `/events` and `/decisions` share one live-position database on the server (SAP sends no stock
+    figures with a decision request): events are applied
+    in a single transaction and confirmed only after commit, so a confirmed event is always visible to
+    the next decision. Stage 1 (BW files) loads the daily base into the same database. Stage 3 (AI
+    layer) uses the decision log and GOV_OUTCOME events and needs no further SAP interface.
+
+    Rules that apply to every call:
+    * HTTPS only, UTF-8 JSON, field names in snake_case.
+    * Timestamps ISO 8601 with offset, e.g. `2026-10-01T11:42:07+05:30`. Dates `YYYY-MM-DD`.
+    * Quantities are JSON numbers in the base unit of measure (normally PCS); amounts in document currency.
+    * Article numbers (`article`, `generic_article`) are sent in SAP internal format (leading zeros
+      kept); the tool normalises them.
+    * OTB is never sent and never checked by the tool – it stays in SAP.
+servers:
+  - url: https://vmm-pogov.example.local:8443/api/sap/v1
+    description: Production (replace host with the VM's DNS name)
+  - url: https://vmm-pogov-test.example.local:8443/api/sap/v1
+    description: Test copy of the tool (connected to SAP QA)
+security:
+  - basicAuth: []
+tags:
+  - name: Utility
+  - name: Events
+  - name: Decisions
+paths:
+  /ping:
+    get:
+      tags: [Utility]
+      summary: Connection test (used by SM59 "Connection Test")
+      operationId: ping
+      responses:
+        '200':
+          description: Server reachable and credentials valid
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PingResponse' }
+              example:
+                status: ok
+                server_time: '2026-10-01T14:30:00+05:30'
+                api_version: 1.0.0
+                environment: PRODUCTION
+                source_system_recognised: ECP
+        '401': { $ref: '#/components/responses/Unauthorized' }
+  /reason-codes:
+    get:
+      tags: [Utility]
+      summary: Valid exception reason codes (for the SAP approver dropdown)
+      operationId: getReasonCodes
+      responses:
+        '200':
+          description: List of reason codes
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  version: { type: string }
+                  reason_codes:
+                    type: array
+                    items: { $ref: '#/components/schemas/ReasonCode' }
+              example:
+                version: '2026-10-01'
+                reason_codes:
+                  - { code: NEWL, text: New launch – no sales history, active: true }
+                  - { code: FEST, text: Festive / event build-up, active: true }
+                  - { code: VMOQ, text: Vendor minimum order quantity, active: true }
+                  - { code: PRCA, text: Price advantage / one-time buy, active: true }
+                  - { code: REPL, text: Store replenishment gap, active: true }
+                  - { code: OTHR, text: Other (note mandatory), active: true }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+  /events:
+    post:
+      tags: [Events]
+      summary: Push a batch of SAP events (from the ordered bgRFC queue)
+      operationId: postEvents
+      description: |
+        Called from a bgRFC unit **after commit**. One call carries 1–500 events, in the order they
+        occurred (ascending `seq`). The tool stores every event before answering.
+
+        **Delivery contract**
+        * `200` = every event in the batch is safely stored (as accepted, duplicate or parked).
+          SAP must treat this as success and remove the unit from the queue.
+        * Any other status, or no answer within 10 s = SAP must **retry the same batch** (bgRFC retry).
+          Resending is always safe: events are de-duplicated by `msg_id`.
+        * An individual event that fails validation is **parked** on the tool side (listed in
+          `parked`, alerted to IT) and never blocks the queue.
+
+        **PO events carry the full current state of the PO** (header + all items), not only what
+        changed. This keeps the tool self-correcting even if an event was missed.
+
+        **Cut-off rule (link with Stage 1):** the tool's base for the day is BW's closing-stock
+        snapshot, whose control file states the exact cut-off time. The tool applies only events with
+        `occurred_at` after that cut-off on top of the base; earlier events are already in the snapshot.
+        Each morning the previous day's adjustments are cleared (they are inside the new snapshot).
+
+        **Scope of events:** vendor POs and goods movements against vendor POs only (receipts 101/102,
+        returns 122/161). Internal stock transfers (STO) between DCs and stores are not sent: the tool
+        works at company level, where transfers do not change stock.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/EventBatch' }
+            examples:
+              goodsReceipt:
+                summary: Goods receipt against a PO
+                value:
+                  source_system: ECP
+                  client: '300'
+                  queue: ZPOGOV_EVENTS
+                  sent_at: '2026-10-01T11:42:08+05:30'
+                  events:
+                    - msg_id: ECP300-GR-5000123456-2026-0001
+                      seq: 45121
+                      event_type: GR_POSTED
+                      occurred_at: '2026-10-01T11:42:07+05:30'
+                      sap_user: DCUSER01
+                      goods_movement:
+                        material_doc: '5000123456'
+                        doc_year: 2026
+                        doc_item: 1
+                        movement_type: '101'
+                        debit_credit: S
+                        posting_date: '2026-10-01'
+                        article: '000000000100234567'
+                        generic_article: '000000000100234500'
+                        colour: NAVY
+                        site: DC01
+                        storage_location: '0001'
+                        quantity: 240
+                        uom: PC
+                        po_number: '4500098765'
+                        po_item: 10
+                        reversal_of: null
+              poReleased:
+                summary: PO released (full state)
+                value:
+                  source_system: ECP
+                  client: '300'
+                  queue: ZPOGOV_EVENTS
+                  sent_at: '2026-10-01T10:15:03+05:30'
+                  events:
+                    - msg_id: ECP300-PO-4500098765-20261001101502-01
+                      seq: 45098
+                      event_type: PO_RELEASED
+                      occurred_at: '2026-10-01T10:15:02+05:30'
+                      sap_user: BUYER07
+                      purchase_order:
+                        po_number: '4500098765'
+                        doc_type: NB
+                        vendor: '0000201345'
+                        purch_org: '1000'
+                        purch_group: B07
+                        created_on: '2026-09-28'
+                        created_by: BUYER07
+                        release_status: RELEASED
+                        release_indicator: R
+                        currency: INR
+                        deleted: false
+                        items:
+                          - po_item: 10
+                            article: '000000000100234567'
+                            generic_article: '000000000100234500'
+                            colour: NAVY
+                            merch_category: MC1021
+                            site: DC01
+                            order_qty: 600
+                            received_qty: 0
+                            returned_qty: 0
+                            open_qty: 600
+                            uom: PC
+                            net_price: 349.00
+                            price_unit: 1
+                            delivery_date: '2026-10-10'
+                            deletion_flag: false
+                            delivery_completed: false
+      responses:
+        '200':
+          description: Batch stored
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/EventBatchResult' }
+              example:
+                received_at: '2026-10-01T11:42:08+05:30'
+                accepted: [ECP300-GR-5000123456-2026-0001]
+                duplicates: []
+                parked: []
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '413':
+          description: Batch larger than 500 events or 5 MB – split and resend
+        '503': { $ref: '#/components/responses/Unavailable' }
+  /decisions:
+    post:
+      tags: [Decisions]
+      summary: Get the governance verdict for a PO (synchronous, from the release workflow)
+      operationId: postDecision
+      description: |
+        Called by the workflow background step "PO Governance check", **after SAP's OTB check and
+        depth plan check have passed**. SAP sends only the PO; the tool uses its own live position
+        (BW closing stock + real-time PO / GRC / GRT events). If the event feed is behind by more than the
+        agreed limit, the response has `data_delayed = true` and SAP continues the PO as today.
+
+        **Depth plan bypass:** when the verdict is REDUCE, SAP stores `decision_id` and `max_qty` on the
+        PO item. If the buyer (or an approver) reduces the quantity to `max_qty` or less, SAP's depth
+        plan check is skipped for that item (same PO, item and day, decision ID still on the item).
+
+        **Timing contract:** the tool answers within 1 s (target). SAP waits at most **3 s**.
+        On timeout, network error or any 5xx, SAP continues the workflow exactly as today and marks
+        the PO `NOT_CHECKED`. The tool can never stop SAP.
+
+        **Idempotency:** `request_id` identifies one check (e.g. workflow work-item ID + PO + version).
+        Repeating the same `request_id` with the same body returns the same decision.
+
+        **Mode:** `SHADOW` – the tool decides and records; SAP must not route on the verdict.
+        `LIVE` – SAP routes on `route_to`. The mode is controlled in SAP (switch `ZPOGOV_ACTIVE`
+        per division) and sent in each request.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/DecisionRequest' }
+            example:
+              request_id: WI000004711-4500099001-V1
+              mode: SHADOW
+              source_system: ECP
+              client: '300'
+              otb_check: PASSED
+              depth_check: PASSED
+              requested_at: '2026-10-01T11:50:00+05:30'
+              purchase_order:
+                po_number: '4500099001'
+                doc_type: NB
+                vendor: '0000201345'
+                purch_org: '1000'
+                purch_group: B07
+                buyer_user: BUYER07
+                buyer_email: ravi.k@vishalwholesale.co.in
+                division: MENS
+                currency: INR
+                items:
+                  - po_item: 10
+                    article: '000000000100234567'
+                    generic_article: '000000000100234500'
+                    colour: NAVY
+                    merch_category: MC1021
+                    season: AW26
+                    order_qty: 1200
+                    uom: PC
+                    net_value: 418800.00
+                    delivery_date: '2026-10-20'
+      responses:
+        '200':
+          description: Verdict
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/DecisionResponse' }
+              example:
+                decision_id: D-20261001-000457
+                request_id: WI000004711-4500099001-V1
+                mode: SHADOW
+                overall_verdict: REDUCE
+                verdict_code: R
+                route_to: BUYER
+                bm_head_required: false
+                summary_text: 'Item 10: reduce to 500 – stock + pending already cover 75% of next month''s plan'
+                rules_version: R-2026-10-01
+                data_delayed: false
+                data_as_of:
+                  bw_snapshot: '2026-09-30T23:59:00+05:30'
+                  events_lag_seconds: 2
+                decided_at: '2026-10-01T11:50:00+05:30'
+                items:
+                  - po_item: 10
+                    verdict: REDUCE
+                    verdict_code: R
+                    max_qty: 500
+                    reason_code: COVER_ABOVE_NORM
+                    reason_text: Stock + pending already cover 75% of next month's plan
+                    rule_id: COVER-01
+                    metrics:
+                      plan_qty: 2000
+                      stock_qty: 1140
+                      open_po_qty: 360
+                      headroom_qty: 500
+                      cover_days: 41
+                      sell_through_pct: 62.5
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '409':
+          description: Same request_id already used with a different body
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '422':
+          description: Request valid but cannot be decided (e.g. article unknown to the tool). SAP treats as NOT_CHECKED.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '503': { $ref: '#/components/responses/Unavailable' }
+components:
+  securitySchemes:
+    basicAuth:
+      type: http
+      scheme: basic
+      description: |
+        One technical account per SAP system (e.g. `sap_ecq` for QA, `sap_ecp` for production),
+        stored in the SM59 destination (Logon & Security → Basic Authentication). Combined with
+        HTTPS and an IP allow-list of SAP application servers on the tool side.
+  responses:
+    BadRequest:
+      description: Whole request malformed (invalid JSON or missing mandatory header fields). Do not retry unchanged.
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    Unauthorized:
+      description: Missing or wrong credentials, or caller IP not allowed
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    Unavailable:
+      description: Tool temporarily unavailable. Events – retry; Decisions – continue as NOT_CHECKED.
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+  schemas:
+    Error:
+      type: object
+      required: [error_code, message]
+      properties:
+        error_code: { type: string, example: VALIDATION_FAILED }
+        message: { type: string, example: 'purchase_order.items[0].order_qty must be > 0' }
+        trace_id: { type: string, example: T-7f3a9c }
+    PingResponse:
+      type: object
+      properties:
+        status: { type: string, enum: [ok] }
+        server_time: { type: string, format: date-time }
+        api_version: { type: string }
+        environment: { type: string, enum: [PRODUCTION, TEST] }
+        source_system_recognised: { type: string }
+    ReasonCode:
+      type: object
+      required: [code, text, active]
+      properties:
+        code: { type: string, maxLength: 4 }
+        text: { type: string, maxLength: 60 }
+        active: { type: boolean }
+    EventBatch:
+      type: object
+      required: [source_system, client, events]
+      properties:
+        source_system: { type: string, description: 'SAP system ID (SY-SYSID), example: ECP' }
+        client: { type: string, description: 'SAP client (SY-MANDT), example: ''300''' }
+        queue: { type: string, description: 'bgRFC queue name, example: ZPOGOV_EVENTS' }
+        sent_at: { type: string, format: date-time }
+        events:
+          type: array
+          minItems: 1
+          maxItems: 500
+          items: { $ref: '#/components/schemas/Event' }
+    Event:
+      type: object
+      required: [msg_id, seq, event_type, occurred_at]
+      description: Exactly one of purchase_order, goods_movement or governance_outcome is filled, depending on event_type.
+      properties:
+        msg_id:
+          type: string
+          maxLength: 80
+          description: Globally unique message ID, built by SAP (system + client + object + timestamp/counter). Used for de-duplication.
+        seq:
+          type: integer
+          format: int64
+          description: Ascending number per queue, assigned by SAP when the event is written
+        event_type:
+          type: string
+          enum: [PO_CREATED, PO_CHANGED, PO_RELEASED, PO_RELEASE_REVOKED, PO_CLOSED, PO_DELETED,
+                 GR_POSTED, GR_REVERSED, RETURN_POSTED, RETURN_REVERSED,
+                 GOV_OUTCOME]
+        occurred_at: { type: string, format: date-time, description: 'When the document was saved in SAP' }
+        sap_user: { type: string, description: 'SY-UNAME of the user who saved the document' }
+        purchase_order: { $ref: '#/components/schemas/PurchaseOrderState' }
+        goods_movement: { $ref: '#/components/schemas/GoodsMovement' }
+        governance_outcome: { $ref: '#/components/schemas/GovernanceOutcome' }
+    PurchaseOrderState:
+      type: object
+      description: Full current state of the PO after the save (EKKO / EKPO / EKET / release status).
+      required: [po_number, items]
+      properties:
+        po_number: { type: string, description: 'EKKO-EBELN' }
+        doc_type: { type: string, description: 'EKKO-BSART' }
+        vendor: { type: string, description: 'EKKO-LIFNR' }
+        purch_org: { type: string, description: 'EKKO-EKORG' }
+        purch_group: { type: string, description: 'EKKO-EKGRP (buyer group)' }
+        created_on: { type: string, format: date, description: 'EKKO-AEDAT / BEDAT' }
+        created_by: { type: string, description: 'EKKO-ERNAM' }
+        release_status:
+          type: string
+          enum: [NOT_RELEASED, IN_RELEASE, RELEASED, REFUSED]
+          description: Derived from EKKO-FRGKE / FRGZU
+        release_indicator: { type: string, description: 'EKKO-FRGKE' }
+        currency: { type: string, description: 'EKKO-WAERS' }
+        deleted: { type: boolean, description: 'true if the whole PO is deleted/cancelled' }
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/PurchaseOrderItem' }
+    PurchaseOrderItem:
+      type: object
+      required: [po_item, article, order_qty, uom]
+      properties:
+        po_item: { type: integer, description: 'EKPO-EBELP' }
+        article: { type: string, description: 'EKPO-MATNR (variant / single article)' }
+        generic_article: { type: string, description: 'MARA-SATNR (generic article)', nullable: true }
+        colour: { type: string, description: 'Colour characteristic value of the variant', nullable: true }
+        merch_category: { type: string, description: 'EKPO-MATKL' }
+        site: { type: string, description: 'EKPO-WERKS (informational; the tool aggregates to company level)' }
+        order_qty: { type: number, description: 'EKPO-MENGE' }
+        received_qty: { type: number, description: 'Sum of GR for this item (EKBE)' }
+        returned_qty: { type: number, description: 'Sum of returns to vendor for this item' }
+        open_qty: { type: number, description: 'order_qty − received_qty + returned_qty, 0 if delivery completed or deleted' }
+        uom: { type: string, description: 'EKPO-MEINS' }
+        net_price: { type: number, description: 'EKPO-NETPR' }
+        price_unit: { type: number, description: 'EKPO-PEINH' }
+        delivery_date: { type: string, format: date, description: 'First schedule line EKET-EINDT' }
+        deletion_flag: { type: boolean, description: 'EKPO-LOEKZ set' }
+        delivery_completed: { type: boolean, description: 'EKPO-ELIKZ set' }
+    GoodsMovement:
+      type: object
+      description: One material-document line (MSEG / MATDOC).
+      required: [material_doc, doc_year, doc_item, movement_type, article, quantity, uom]
+      properties:
+        material_doc: { type: string, description: 'MBLNR' }
+        doc_year: { type: integer, description: 'MJAHR' }
+        doc_item: { type: integer, description: 'ZEILE' }
+        movement_type: { type: string, description: 'BWART, e.g. 101, 102, 122, 161, 351, 641' }
+        debit_credit: { type: string, enum: [S, H], description: 'SHKZG' }
+        posting_date: { type: string, format: date, description: 'BUDAT' }
+        article: { type: string, description: 'MATNR' }
+        generic_article: { type: string, nullable: true }
+        colour: { type: string, nullable: true }
+        site: { type: string, description: 'WERKS (informational; the tool aggregates to company level)' }
+        storage_location: { type: string, description: 'LGORT' }
+        quantity: { type: number, description: 'MENGE in base unit, always positive; direction from debit_credit' }
+        uom: { type: string }
+        po_number: { type: string, nullable: true, description: 'EBELN if movement refers to a PO' }
+        po_item: { type: integer, nullable: true, description: 'EBELP' }
+        reversal_of: { type: string, nullable: true, description: 'Original material document if this is a reversal (SMBLN)' }
+    GovernanceOutcome:
+      type: object
+      description: What happened after a verdict – feeds the audit trail and the AI layer.
+      required: [decision_id, po_number, outcome, by_user, at]
+      properties:
+        decision_id: { type: string }
+        po_number: { type: string }
+        po_item: { type: integer, nullable: true }
+        outcome:
+          type: string
+          enum: [BUYER_ACCEPTED_REDUCTION, EXCEPTION_REQUESTED, EXCEPTION_APPROVED,
+                 EXCEPTION_REJECTED, PO_RELEASED, PO_WITHDRAWN, NOT_CHECKED_TIMEOUT]
+        by_user: { type: string }
+        by_role: { type: string, enum: [BUYER, CATHEAD, BMHEAD, SYSTEM] }
+        at: { type: string, format: date-time }
+        new_qty: { type: number, nullable: true }
+        reason_code: { type: string, nullable: true, description: 'Code from GET /reason-codes' }
+        note: { type: string, maxLength: 500, nullable: true }
+    EventBatchResult:
+      type: object
+      properties:
+        received_at: { type: string, format: date-time }
+        accepted: { type: array, items: { type: string } }
+        duplicates: { type: array, items: { type: string } }
+        parked:
+          type: array
+          items:
+            type: object
+            properties:
+              msg_id: { type: string }
+              error_code: { type: string }
+              message: { type: string }
+    DecisionRequest:
+      type: object
+      required: [request_id, mode, source_system, otb_check, depth_check, purchase_order]
+      properties:
+        request_id: { type: string, maxLength: 80 }
+        mode: { type: string, enum: [SHADOW, LIVE] }
+        source_system: { type: string }
+        client: { type: string }
+        otb_check:
+          type: string
+          enum: [PASSED]
+          description: Assertion that SAP's OTB check has passed. The tool is only called after it.
+        depth_check:
+          type: string
+          enum: [PASSED, BYPASSED]
+          description: SAP's depth plan check result. BYPASSED only for a quantity reduced under a previous REDUCE decision.
+        previous_decision_id:
+          type: string
+          nullable: true
+          description: When the PO is resubmitted after a REDUCE, the decision ID it was reduced under.
+        requested_at: { type: string, format: date-time }
+        purchase_order:
+          type: object
+          required: [po_number, buyer_user, items]
+          properties:
+            po_number: { type: string }
+            doc_type: { type: string }
+            vendor: { type: string }
+            purch_org: { type: string }
+            purch_group: { type: string }
+            buyer_user: { type: string }
+            buyer_email: { type: string, nullable: true }
+            division: { type: string, description: 'Used for per-division rules and routing' }
+            currency: { type: string }
+            items:
+              type: array
+              minItems: 1
+              items:
+                type: object
+                required: [po_item, article, order_qty, uom]
+                properties:
+                  po_item: { type: integer }
+                  article: { type: string }
+                  generic_article: { type: string, nullable: true }
+                  colour: { type: string, nullable: true }
+                  merch_category: { type: string }
+                  season: { type: string, nullable: true }
+                  site: { type: string, nullable: true, description: 'Delivery site (informational)' }
+                  order_qty: { type: number }
+                  uom: { type: string }
+                  net_value: { type: number }
+                  delivery_date: { type: string, format: date }
+    DecisionResponse:
+      type: object
+      required: [decision_id, request_id, mode, overall_verdict, verdict_code, route_to, items]
+      properties:
+        decision_id: { type: string, description: 'Store on the PO / workflow container for audit' }
+        request_id: { type: string }
+        mode: { type: string, enum: [SHADOW, LIVE] }
+        overall_verdict:
+          type: string
+          enum: [ALLOW, REDUCE, WATCH, HOLD]
+          description: The most severe item verdict (HOLD > WATCH > REDUCE > ALLOW)
+        verdict_code: { type: string, enum: [A, R, W, H], description: 'One-character code for SAP domain values' }
+        route_to:
+          type: string
+          enum: [NONE, BUYER, CATHEAD, BMHEAD]
+          description: 'NONE = continue normal approvals; ignored by SAP in SHADOW mode. The actual approver is determined by the SAP release workflow.'
+        bm_head_required: { type: boolean }
+        summary_text: { type: string, maxLength: 255, description: 'Short text for the work item / PO header note' }
+        rules_version: { type: string }
+        data_delayed: { type: boolean, description: 'true if the event feed was behind the agreed limit; SAP then continues the PO as today (NOT_CHECKED)' }
+        data_as_of:
+          type: object
+          properties:
+            bw_snapshot: { type: string, format: date-time }
+            events_lag_seconds: { type: integer }
+        decided_at: { type: string, format: date-time }
+        items:
+          type: array
+          items:
+            type: object
+            required: [po_item, verdict, verdict_code, reason_text]
+            properties:
+              po_item: { type: integer }
+              verdict: { type: string, enum: [ALLOW, REDUCE, WATCH, HOLD] }
+              verdict_code: { type: string, enum: [A, R, W, H] }
+              max_qty: { type: number, nullable: true, description: 'Maximum allowed qty when verdict is REDUCE' }
+              reason_code: { type: string }
+              reason_text: { type: string, maxLength: 132 }
+              rule_id: { type: string }
+              metrics:
+                type: object
+                properties:
+                  plan_qty: { type: number, description: 'Next month planned sales' }
+                  stock_qty: { type: number }
+                  open_po_qty: { type: number }
+                  headroom_qty: { type: number }
+                  cover_days: { type: number }
+                  sell_through_pct: { type: number }

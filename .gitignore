@@ -11,3 +11,4 @@ POGovApi/appsettings.Production.json
 Admin/appsettings.Production.json
 tests/parity/out/
 .claude/worktrees/
+POGovApi/backups/

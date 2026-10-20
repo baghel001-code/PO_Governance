@@ -49,6 +49,14 @@ export PortalSettings__ApiBaseUrl=http://localhost:5080/
 dotnet run --project Admin --urls http://localhost:5090
 ```
 
+**In Visual Studio:** right-click the solution → *Configure Startup Projects…* → *Multiple startup projects* →
+set **POGovApi** and **Admin** to *Start*. Both launch profiles use fixed ports: the API on `http://localhost:5080`
+(`https://localhost:7080`, Swagger at `/swagger`) and the portal on `http://localhost:5090` (`https://localhost:7090`).
+The portal finds the API through `PortalSettings:ApiBaseUrl` in `Admin/appsettings.json` (default `http://localhost:5080/`);
+if the API runs anywhere else, change that value. "Cannot reach the server (…)" on the sign-in page means the portal got
+no answer from that address — the API isn't running, or the URL is wrong. If the API is running but the database isn't
+reachable, the message is "The database is not reachable right now" instead: check `ConnectionStrings:PoGov`.
+
 First sign-in: the `AdminEmail` in `POGovApi/appsettings.json` (`PoGovSettings`) with the default password `1234`; you are asked to choose
 a new password. Then upload the data files on **Data Setup**. Uploading the SCR products file creates logins for buyers and category heads, as before.
 

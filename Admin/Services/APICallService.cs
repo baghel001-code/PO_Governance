@@ -86,7 +86,7 @@ namespace Admin.Services
             catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException)
             {
                 _log.LogWarning(ex, "API download {Path} failed", path);
-                return ApiResponse<DownloadedFile>.Fail(503, "Cannot reach the server. Check your network and try again.");
+                return ApiResponse<DownloadedFile>.Fail(503, Unreachable());
             }
         }
 
@@ -103,13 +103,24 @@ namespace Admin.Services
             catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException && !ct.IsCancellationRequested)
             {
                 _log.LogWarning(ex, "API call {Method} {Path} failed", req.Method, req.RequestUri);
-                return ApiResponse<T>.Fail(503, "Cannot reach the server. Check your network and try again.");
+                return ApiResponse<T>.Fail(503, Unreachable());
             }
             catch (JsonException ex)
             {
                 _log.LogWarning(ex, "API call {Method} {Path} returned unexpected content", req.Method, req.RequestUri);
                 return ApiResponse<T>.Fail(500, "The server returned an unexpected response.");
             }
+        }
+
+        /// <summary>
+        /// The API did not answer at all (not started, wrong PortalSettings:ApiBaseUrl, firewall). Names the address so
+        /// the cause is visible on the sign-in page.
+        /// </summary>
+        private string Unreachable()
+        {
+            var api = _factory.CreateClient(AppConstants.ApiClientName).BaseAddress?.ToString() ?? "(PortalSettings:ApiBaseUrl not set)";
+            _log.LogError("POGovApi is not reachable at {ApiBaseUrl}. Start POGovApi or correct PortalSettings:ApiBaseUrl.", api);
+            return $"Cannot reach the server ({api}). Check that POGovApi is running and PortalSettings:ApiBaseUrl points to it.";
         }
 
         private static async Task<ApiResponse<T>> ErrorFromAsync<T>(HttpResponseMessage res, CancellationToken ct)

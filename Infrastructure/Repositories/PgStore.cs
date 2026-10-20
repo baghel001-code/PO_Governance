@@ -411,6 +411,18 @@ namespace Infrastructure.Repositories
         public async Task<long> StorageBytesAsync(CancellationToken ct = default) =>
             (await Query<long>("SELECT pg_database_size(current_database())", null, ct))[0];
 
+        /// <summary>storage.py truncate_all (migration tool --reverse --force).</summary>
+        public async Task TruncateAllAsync(CancellationToken ct = default)
+        {
+            await Tx(new List<(string, object?)>
+            {
+                ("TRUNCATE app_settings, app_users, app_sessions, doc_stamps, upload_log, upload_batches, run_index, " +
+                 "request_events, audit_log, dataset_versions, run_files, feedback_log", null)
+            }, ct);
+            await _mapGate.WaitAsync(ct);
+            try { _mapCache.Clear(); } finally { _mapGate.Release(); }
+        }
+
         public async Task<bool> IsEmptyAsync(CancellationToken ct = default) =>
             (await Query<long>("SELECT (SELECT count(*) FROM app_settings) + (SELECT count(*) FROM app_users) + " +
                                "(SELECT count(*) FROM dataset_versions) + (SELECT count(*) FROM request_events) + " +

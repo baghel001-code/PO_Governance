@@ -1,6 +1,16 @@
-# Database (PostgreSQL, schema v2)
+# Database
 
-The .NET API (`POGovApi`) uses **the same PostgreSQL schema v2 as v1.1.4** (`legacy/python-app/storage.py`,
+**Default: SQL Server with stored procedures** (QPS style) — see **[`sqlserver/README.md`](sqlserver/README.md)**:
+scripts `sqlserver/00_create_database.sql` … `03_seed.sql`, configuration (`ConnectionStrings:DefaultConnection`,
+encoded password, `PoGovSettings:Storage = sqlserver`), the migration from the .37 PostgreSQL with
+`tools/PgToSqlServer` (copy + verify) and the rollback.
+
+The SQL Server schema has the same tables and columns as the PostgreSQL schema v2 below, and the same JSON
+text, so the two stores are interchangeable (`PoGovSettings:Storage`), and data can be copied both ways.
+
+# PostgreSQL (schema v2) — fallback and migration source
+
+With `PoGovSettings:Storage = postgres` the .NET API (`POGovApi`) uses **the same PostgreSQL schema v2 as v1.1.4** (`legacy/python-app/storage.py`,
 `PgStore`). Tables, columns, document and log-record JSON are unchanged, so:
 
 * the existing database on **.37** (`localhost:5433`, database `pogov`, user `vmm_app`) works as is;
@@ -16,12 +26,12 @@ at start-up (`CREATE ... IF NOT EXISTS`, `PgStore.InitializeAsync`), exactly lik
    same time** — each keeps users/sessions in memory and serialises writes with an in-process lock.
 2. Take a backup (v1.1.4 *Admin → Backups → Back up now*, or `pg_dump -p 5433 -U vmm_app pogov > pogov.sql`).
 3. Put the connection in `POGovApi/appsettings.Production.json` (git-ignored) or in an environment
-   variable `ConnectionStrings__PoGov`:
+   variable `ConnectionStrings__PoGov`, and select the PostgreSQL store:
 
    ```json
    {
      "ConnectionStrings": { "PoGov": "Host=127.0.0.1;Port=5433;Database=pogov;Username=vmm_app;Password=<from config.json db.password>" },
-     "PoGovSettings": { "AdminEmail": "kosaraju.srihari@vishalwholesale.co.in", "BackupDir": "D:\\vmm\\backups" }
+     "PoGovSettings": { "Storage": "postgres", "AdminEmail": "kosaraju.srihari@vishalwholesale.co.in", "BackupDir": "D:\\vmm\\backups" }
    }
    ```
 
@@ -68,3 +78,5 @@ so a backup can be restored with the old tools (`migrate_to_db.py`) or used as a
 | `run_index`, `run_files` | saved Tool 2 runs (`RUN-yyyyMMdd-0001`), deleted runs are only flagged |
 | `audit_log`, `feedback_log` | audit trail; feedback (`FB-yyyyMMdd-0001`) and status changes |
 | `schema_info` | `version = 2` |
+
+The SQL Server tables are the same (see `sqlserver/README.md` for the type mapping).

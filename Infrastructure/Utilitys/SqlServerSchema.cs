@@ -1,0 +1,93 @@
+using System.Text.RegularExpressions;
+using Dapper;
+using Microsoft.Data.SqlClient;
+
+namespace Infrastructure.Utilitys
+{
+    /// <summary>
+    /// Runs the SQL Server scripts of database/sqlserver (embedded in this assembly) the way sqlcmd does:
+    /// split on "GO" lines, one batch at a time. 01_tables.sql, 02_procedures.sql, 03_seed.sql are idempotent.
+    /// Used by the tests, the migration tool (--create-schema) and, when PoGovSettings:SqlServerCreateSchema
+    /// is true, by the API at start-up.
+    /// </summary>
+    public static class SqlServerSchema
+    {
+        /// <summary>Scripts run in the application database, in order (00_create_database.sql runs in master).</summary>
+        public static readonly string[] DatabaseScripts = { "01_tables.sql", "02_procedures.sql", "03_seed.sql" };
+
+        public const string ExpectedVersion = "2";
+
+        private static readonly Regex GoLine = new(@"^\s*GO\s*(?:--.*)?$", RegexOptions.Multiline | RegexOptions.IgnoreCase | RegexOptions.Compiled);
+
+        public static string ReadScript(string fileName)
+        {
+            var asm = typeof(SqlServerSchema).Assembly;
+            using var s = asm.GetManifestResourceStream("POGov.SqlServer." + fileName)
+                          ?? throw new InvalidOperationException("Embedded script missing: " + fileName);
+            using var r = new StreamReader(s);
+            return r.ReadToEnd();
+        }
+
+        /// <summary>The batches of a script (text between GO lines), empty ones dropped.</summary>
+        public static List<string> SplitBatches(string script) =>
+            GoLine.Split(script).Select(b => b.Trim()).Where(b => b.Length > 0 && !IsOnlyComments(b)).ToList();
+
+        private static bool IsOnlyComments(string batch)
+        {
+            var noBlock = Regex.Replace(batch, @"/\*.*?\*/", "", RegexOptions.Singleline);
+            var noLine = Regex.Replace(noBlock, @"--[^\n]*", "");
+            return noLine.Trim().Length == 0;
+        }
+
+        /// <summary>Runs 01..03 against the database of <paramref name="connectionString"/>.</summary>
+        public static async Task ApplyAsync(string connectionString, Action<string>? say = null, CancellationToken ct = default)
+        {
+            await using var c = new SqlConnection(connectionString);
+            await c.OpenAsync(ct);
+            foreach (var file in DatabaseScripts)
+            {
+                var batches = SplitBatches(ReadScript(file));
+                foreach (var b in batches)
+                    await c.ExecuteAsync(new CommandDefinition(b, commandTimeout: 300, cancellationToken: ct));
+                say?.Invoke($"  {file}: {batches.Count} batches");
+            }
+        }
+
+        /// <summary>
+        /// CREATE DATABASE (when missing) + READ_COMMITTED_SNAPSHOT, through the master database of the same
+        /// server — what 00_create_database.sql does, for any database name.
+        /// </summary>
+        public static async Task CreateDatabaseAsync(string connectionString, CancellationToken ct = default)
+        {
+            var b = new SqlConnectionStringBuilder(connectionString);
+            var db = b.InitialCatalog;
+            if (string.IsNullOrWhiteSpace(db)) throw new ArgumentException("The connection string names no database (Initial Catalog / Database).");
+            b.InitialCatalog = "master";
+            b.Pooling = false;
+            await using var c = new SqlConnection(b.ConnectionString);
+            await c.OpenAsync(ct);
+            await c.ExecuteAsync(new CommandDefinition(
+                "DECLARE @s NVARCHAR(MAX); " +
+                "IF DB_ID(@db) IS NULL BEGIN SET @s = N'CREATE DATABASE ' + QUOTENAME(@db); EXEC(@s); END; " +
+                "IF EXISTS (SELECT 1 FROM sys.databases WHERE name = @db AND is_read_committed_snapshot_on = 0) " +
+                "BEGIN SET @s = N'ALTER DATABASE ' + QUOTENAME(@db) + N' SET READ_COMMITTED_SNAPSHOT ON WITH ROLLBACK IMMEDIATE'; EXEC(@s); END;",
+                new { db }, commandTimeout: 300, cancellationToken: ct));
+        }
+
+        /// <summary>DROP DATABASE (tests only).</summary>
+        public static async Task DropDatabaseAsync(string connectionString, CancellationToken ct = default)
+        {
+            var b = new SqlConnectionStringBuilder(connectionString);
+            var db = b.InitialCatalog;
+            SqlConnection.ClearAllPools();
+            b.InitialCatalog = "master";
+            b.Pooling = false;
+            await using var c = new SqlConnection(b.ConnectionString);
+            await c.OpenAsync(ct);
+            await c.ExecuteAsync(new CommandDefinition(
+                "DECLARE @s NVARCHAR(MAX); " +
+                "IF DB_ID(@db) IS NOT NULL BEGIN SET @s = N'ALTER DATABASE ' + QUOTENAME(@db) + N' SET SINGLE_USER WITH ROLLBACK IMMEDIATE'; EXEC(@s); " +
+                "SET @s = N'DROP DATABASE ' + QUOTENAME(@db); EXEC(@s); END", new { db }, commandTimeout: 300, cancellationToken: ct));
+        }
+    }
+}

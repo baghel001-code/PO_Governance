@@ -37,11 +37,17 @@ Roles are the same as v1.1.4: admin, planner, cathead, buyer. The API enforces t
 
 ## Running it
 
-Requirements: .NET 8 SDK (runtime only on the server) and PostgreSQL (the existing v1.1.4 database on .37 works as is — see `database/README.md`).
+Requirements: .NET 8 SDK (runtime only on the server) and **SQL Server** (default; tables + `PRO_POGOV_*` stored
+procedures from `database/sqlserver/*.sql`, QPS style — see `database/sqlserver/README.md`). PostgreSQL (the v1.1.4
+database on .37) still works with `PoGovSettings:Storage = postgres`; `tools/PgToSqlServer` migrates it to SQL Server.
 
 ```bash
+# 0. Database (once): database/sqlserver/00_create_database.sql in master, then 01..03 in POGovernance
+sqlcmd -S . -E -i database/sqlserver/00_create_database.sql
+sqlcmd -S . -E -d POGovernance -i database/sqlserver/01_tables.sql -i database/sqlserver/02_procedures.sql -i database/sqlserver/03_seed.sql
+
 # 1. API — set the connection string (appsettings.json, environment variable or user secrets)
-export ConnectionStrings__PoGov="Host=127.0.0.1;Port=5433;Database=pogov;Username=vmm_app;Password=…"
+export ConnectionStrings__DefaultConnection="Server=.;Database=POGovernance;User Id=vmm_app;Password=<My_Encode(pw)>;TrustServerCertificate=True"
 dotnet run --project POGovApi --urls http://localhost:5080
 
 # 2. Portal — points at the API
@@ -55,17 +61,19 @@ set **POGovApi** and **Admin** to *Start*. Both launch profiles use fixed ports:
 The portal finds the API through `PortalSettings:ApiBaseUrl` in `Admin/appsettings.json` (default `http://localhost:5080/`);
 if the API runs anywhere else, change that value. "Cannot reach the server (…)" on the sign-in page means the portal got
 no answer from that address — the API isn't running, or the URL is wrong. If the API is running but the database isn't
-reachable, the message is "The database is not reachable right now" instead: check `ConnectionStrings:PoGov`.
+reachable, the message is "The database is not reachable right now" instead: check `ConnectionStrings:DefaultConnection`.
 
 First sign-in: the `AdminEmail` in `POGovApi/appsettings.json` (`PoGovSettings`) with the default password `1234`; you are asked to choose
 a new password. Then upload the data files on **Data Setup**. Uploading the SCR products file creates logins for buyers and category heads, as before.
 
-**Important:** don't run the Python v1.1.4 server and this API against the same database at the same time (each keeps its own write lock).
+**Important:** don't run the Python v1.1.4 server and this API against the same PostgreSQL database at the same time (each keeps its own write lock).
+On SQL Server the write lock is a database application lock (`sp_getapplock`), so several API instances can share one database.
 
 ### Configuration
 
 `POGovApi/appsettings.json`:
-- `ConnectionStrings:PoGov` — PostgreSQL.
+- `ConnectionStrings:DefaultConnection` — SQL Server (QPS name); its password is decoded with `MyNewEncDec` (`New_Enc_Dec.My_Decode`) when `PoGovSettings:EncryptedDbPassword` is `true`.
+- `PoGovSettings:Storage` — `sqlserver` (default) or `postgres` (then `ConnectionStrings:PoGov`); `PoGovSettings:SqlServerCreateSchema` — create the SQL Server schema at start-up when missing.
 - `PoGovSettings` — the old `config.json` settings: `AdminEmail`, `DefaultPassword`, `PasswordMinLength`, `SessionIdleHours`, `MaxFailedLogins`, `LockoutMinutes`, `RestrictToOwnMcs`, `BackupDir` / `BackupHour` / `BackupKeepDays`, `MaxUploadMb`, `HistoryRetentionDays`, `AnthropicApiKey` / `AnthropicModel`, `GroqApiKey` / `GroqModel`, `OutboundProxy`, `BusinessTimeZone` (Asia/Kolkata).
 - `Tool1:ReducedLabel` — `false` (default) labels breaches exactly like the running v1.1.4 page; `true` uses "Recommend Reduced Qty" as described in the v1.1.4 README.
 
@@ -81,6 +89,8 @@ reachable from the portal only (bind it to localhost or firewall it). Nightly ba
 
 ```bash
 dotnet test
+# + the SQL Server store tests (skipped otherwise; each run creates and drops its own database):
+POGOV_SQLSERVER_TEST="Server=localhost,1433;User Id=sa;Password=…;TrustServerCertificate=True" dotnet test
 ```
 
 Most tests are **parity tests**: a Node script in `tests/parity/<area>/` runs the original functions extracted

@@ -14,9 +14,22 @@
     <PackageReference Include="Dapper" Version="2.1.35" />
     <PackageReference Include="ExcelDataReader" Version="3.7.0" />
     <PackageReference Include="ExcelDataReader.DataSet" Version="3.7.0" />
+    <PackageReference Include="Microsoft.Data.SqlClient" Version="5.2.2" />
     <PackageReference Include="Microsoft.Extensions.Http" Version="8.0.1" />
     <PackageReference Include="Npgsql" Version="8.0.5" />
     <PackageReference Include="System.Text.Encoding.CodePages" Version="8.0.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- QPS: New_Enc_Dec.My_Decode decodes the password inside ConnectionStrings:DefaultConnection (.NET Framework 4.5 assembly, loads on net8) -->
+    <Reference Include="MyNewEncDec">
+      <HintPath>Dlls\MyNewEncDec.dll</HintPath>
+    </Reference>
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- SQL Server scripts (database/sqlserver), embedded for SqlServerSchema (tests, migration tool, PoGovSettings:SqlServerCreateSchema) -->
+    <EmbeddedResource Include="..\database\sqlserver\0*.sql" LogicalName="POGov.SqlServer.%(Filename)%(Extension)" />
   </ItemGroup>
 
   <PropertyGroup>

@@ -1,5 +1,4 @@
 @* users.js renderAudit: the audit trail by date range (default last 7 days) and search. *@
-@inject IAPICallService Api
 
 <div class="card" style="padding:12px 14px;margin-bottom:12px;display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end">
     <div><div class="pf-lbl">From</div><input type="date" class="pf-in" value="@_from" @onchange="e => _from = e.Value?.ToString() ?? string.Empty" data-testid="au-from" /></div>
@@ -68,8 +67,8 @@ else
 
     private async Task LoadAsync()
     {
-        var res = await Api.GetAuditAsync(_from, _to, _q);
-        if (!res.IsSuccess || res.Data == null) { _error = res.ResponseMessage; _d = null; return; }
+        var res = await ApiMasterService.GetAuditAsync(_from, _to, _q);
+        if (!res.IsSuccess || res.Data == null) { _error = res.responseMessage; _d = null; return; }
         _error = null;
         _d = res.Data;
     }

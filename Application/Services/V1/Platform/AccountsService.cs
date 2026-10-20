@@ -14,8 +14,11 @@ namespace Application.Services.V1.Platform
 {
     /// <summary>
     /// Port of accounts.py <c>Accounts</c>: users and sessions are held in memory (documents "users" /
-    /// "sessions" in the store), reloaded when another process changed the users document
-    /// (doc_stamp), and written back whole (the store only writes the rows that changed).
+    /// "sessions" in the store) and written back whole (the store only writes the rows that changed).
+    /// Several API instances can share one store: before users or sessions are read or changed, the
+    /// document's doc_stamp is checked and the document re-read when another instance wrote it; a sessions
+    /// write applies this instance's changes (new / ended sessions) onto what is stored at that moment, so one
+    /// instance never signs out the users of another.
     /// </summary>
     public sealed class AccountsService : IAccountsService
     {
@@ -32,7 +35,9 @@ namespace Application.Services.V1.Platform
         private readonly SemaphoreSlim _gate = new(1, 1);   // accounts.py self.lock
         private Dictionary<string, AppUser> _users = new();
         private Dictionary<string, SessionRecord> _sessions = new();
-        private long _mtime;
+        private long _mtime;        // users doc_stamp this instance has seen (Unknown = re-read on the next check)
+        private long _sessStamp;    // sessions doc_stamp this instance has seen
+        private const long Unknown = long.MinValue;
         private volatile bool _loaded;
         private sealed record ScopeCacheEntry(string? Ver, ScopeIndex Idx);
         private volatile ScopeCacheEntry? _scopeCache;   // swapped as one reference
@@ -119,37 +124,87 @@ namespace Application.Services.V1.Platform
             using (await LockAsync(ct))
             {
                 if (_loaded) return;
-                _users = ReadMap<AppUser>(await _store.GetDocAsync(DocNames.Users, ct));
                 _mtime = await UsersStampAsync(ct);
+                _users = ReadMap<AppUser>(await _store.GetDocAsync(DocNames.Users, ct));
+                _sessStamp = await SessionsStampAsync(ct);
                 _sessions = ReadMap<SessionRecord>(await _store.GetDocAsync(DocNames.Sessions, ct));
                 await SeedAdminLockedAsync(ct);
                 _loaded = true;
             }
         }
 
-        /// <summary>Picks up changes made outside this process (e.g. a reset-admin tool).</summary>
+        /// <summary>Picks up changes made outside this process (another API instance, a reset-admin tool).</summary>
         private async Task MaybeReloadAsync(CancellationToken ct)
         {
             var m = await UsersStampAsync(ct);
             if (m != _mtime)
-            {
                 using (await LockAsync(ct))
-                {
-                    var node = await _store.GetDocAsync(DocNames.Users, ct);
-                    var fresh = ReadMap<AppUser>(node);
-                    if (node is JsonObject o && o.Count > 0) _users = fresh;
-                    _mtime = m;
-                }
-            }
+                    await ReloadUsersLockedAsync(ct);
+        }
+
+        /// <summary>Re-reads the users when their doc_stamp changed since this instance last read them (caller holds the lock).</summary>
+        private async Task ReloadUsersLockedAsync(CancellationToken ct)
+        {
+            var m = await UsersStampAsync(ct);
+            if (m == _mtime) return;
+            var node = await _store.GetDocAsync(DocNames.Users, ct);
+            var fresh = ReadMap<AppUser>(node);
+            if (node is JsonObject o && o.Count > 0) _users = fresh;
+            _mtime = m;
         }
 
         private async Task SaveUsersLockedAsync(CancellationToken ct)
         {
             await _store.PutDocAsync(DocNames.Users, WriteMap(_users), ct);
-            _mtime = await UsersStampAsync(ct);
+            // Not the stamp read after the write: another instance may have written in between. Re-read on the next check.
+            _mtime = Unknown;
         }
 
-        private Task SaveSessionsLockedAsync(CancellationToken ct) => _store.PutDocAsync(DocNames.Sessions, WriteMap(_sessions), ct);
+        // ── sessions (shared by every API instance on the store) ────
+
+        private async Task<long> SessionsStampAsync(CancellationToken ct)
+        {
+            try { return await _store.DocStampAsync(DocNames.Sessions, ct); }
+            catch (Exception) { return 0; }
+        }
+
+        /// <summary>
+        /// Re-reads the sessions when another API instance wrote them since this one last read them (doc_stamp, as for the
+        /// users), keeping the later "last seen" of a session both know (last seen is only persisted every 5 minutes).
+        /// Caller holds the lock.
+        /// </summary>
+        private async Task RefreshSessionsLockedAsync(CancellationToken ct)
+        {
+            var stamp = await SessionsStampAsync(ct);
+            if (stamp == _sessStamp) return;
+            var fresh = ReadMap<SessionRecord>(await _store.GetDocAsync(DocNames.Sessions, ct));
+            foreach (var (token, s) in fresh)
+                if (_sessions.TryGetValue(token, out var mine) && mine.Seen > s.Seen) s.Seen = mine.Seen;
+            _sessions = fresh;
+            _sessStamp = stamp;
+        }
+
+        /// <summary>
+        /// Writes the sessions with this instance's changes — <paramref name="upserted"/> (new or updated) and
+        /// <paramref name="removed"/> tokens — applied onto the sessions stored right now, so sessions another instance
+        /// created or ended meanwhile are kept / stay ended. Caller holds the lock.
+        /// </summary>
+        private async Task SaveSessionsLockedAsync(IEnumerable<string> upserted, IEnumerable<string> removed, CancellationToken ct)
+        {
+            var up = upserted.ToList();
+            var rm = removed.ToList();
+            var mine = _sessions;
+            var stamp = await SessionsStampAsync(ct);
+            if (stamp != _sessStamp)
+            {
+                await RefreshSessionsLockedAsync(ct);
+                foreach (var t in rm) _sessions.Remove(t);
+                foreach (var t in up)
+                    if (mine.TryGetValue(t, out var s)) _sessions[t] = s;
+            }
+            await _store.PutDocAsync(DocNames.Sessions, WriteMap(_sessions), ct);
+            _sessStamp = Unknown;   // see SaveUsersLockedAsync
+        }
 
         private async Task SeedAdminLockedAsync(CancellationToken ct)
         {
@@ -187,12 +242,14 @@ namespace Application.Services.V1.Platform
         public async Task<IReadOnlyList<AppUser>> GetUsersAsync(CancellationToken ct = default)
         {
             await InitializeAsync(ct);
+            await MaybeReloadAsync(ct);
             using (await LockAsync(ct)) return _users.Values.Select(u => u.Clone()).ToList();
         }
 
         public async Task<AppUser?> GetUserAsync(string email, CancellationToken ct = default)
         {
             await InitializeAsync(ct);
+            await MaybeReloadAsync(ct);
             using (await LockAsync(ct)) return _users.TryGetValue(NormEmail(email), out var u) ? u.Clone() : null;
         }
 
@@ -213,6 +270,7 @@ namespace Application.Services.V1.Platform
             AppUser created;
             using (await LockAsync(ct))
             {
+                await ReloadUsersLockedAsync(ct);
                 if (_users.ContainsKey(email)) throw new AppValidationException($"{email} already exists");
                 created = _users[email] = NewUser(email, name, rl, by, source);
                 await SaveUsersLockedAsync(ct);
@@ -228,6 +286,7 @@ namespace Application.Services.V1.Platform
             AppUser result;
             using (await LockAsync(ct))
             {
+                await ReloadUsersLockedAsync(ct);
                 if (!_users.TryGetValue(email, out var u)) throw new NotFoundException("No such user");
                 var me = email == NormEmail(by);
                 var nw = u.Clone();
@@ -278,6 +337,7 @@ namespace Application.Services.V1.Platform
             email = NormEmail(email);
             using (await LockAsync(ct))
             {
+                await ReloadUsersLockedAsync(ct);
                 if (!_users.TryGetValue(email, out var u)) throw new NotFoundException("No such user");
                 u.Pw = _hasher.Hash(DefaultPassword);
                 u.MustChange = true;
@@ -295,6 +355,7 @@ namespace Application.Services.V1.Platform
             email = NormEmail(email);
             using (await LockAsync(ct))
             {
+                await ReloadUsersLockedAsync(ct);
                 if (!_users.Remove(email)) throw new NotFoundException("No such user");
                 await SaveUsersLockedAsync(ct);
                 await EndSessionsLockedAsync(email, null, ct);
@@ -322,6 +383,7 @@ namespace Application.Services.V1.Platform
             email = NormEmail(email);
             using (await LockAsync(ct))
             {
+                await ReloadUsersLockedAsync(ct);
                 if (!_users.TryGetValue(email, out var u) || !_hasher.Verify(oldPassword, u.Pw))
                     return "Current password is incorrect";
                 var err = ValidateNewPassword(email, newPassword);
@@ -347,6 +409,8 @@ namespace Application.Services.V1.Platform
             string? token = null, error = null;
             using (await LockAsync(ct))
             {
+                await ReloadUsersLockedAsync(ct);
+                await RefreshSessionsLockedAsync(ct);
                 if (!_users.TryGetValue(email, out var u) || !u.Active)
                 {
                     audits.Add((email.Length > 0 ? email : "?", "login-fail", $"unknown or inactive user ip={ip}"));
@@ -380,8 +444,8 @@ namespace Application.Services.V1.Platform
                     token = NewToken();
                     var now = Now;
                     _sessions[token] = new SessionRecord { Email = email, Created = now, Seen = now, Ip = ip };
-                    PruneSessionsLocked();
-                    await SaveSessionsLockedAsync(ct);
+                    var pruned = PruneSessionsLocked();
+                    await SaveSessionsLockedAsync(new[] { token }, pruned, ct);
                     audits.Add((email, "login", $"ip={ip}"));
                 }
             }
@@ -393,12 +457,14 @@ namespace Application.Services.V1.Platform
         private static string NewToken() =>
             Convert.ToBase64String(RandomNumberGenerator.GetBytes(32)).TrimEnd('=').Replace('+', '-').Replace('/', '_');
 
-        private void PruneSessionsLocked()
+        /// <summary>Removes idle sessions; returns their tokens.</summary>
+        private List<string> PruneSessionsLocked()
         {
             var idle = _cfg.SessionIdleSeconds;
             var now = Now;
-            foreach (var t in _sessions.Where(kv => now - kv.Value.Seen > idle).Select(kv => kv.Key).ToList())
-                _sessions.Remove(t);
+            var gone = _sessions.Where(kv => now - kv.Value.Seen > idle).Select(kv => kv.Key).ToList();
+            foreach (var t in gone) _sessions.Remove(t);
+            return gone;
         }
 
         public async Task<AppUser?> SessionUserAsync(string? token, CancellationToken ct = default)
@@ -409,19 +475,20 @@ namespace Application.Services.V1.Platform
             await MaybeReloadAsync(ct);
             using (await LockAsync(ct))
             {
+                await RefreshSessionsLockedAsync(ct);   // a session signed in / out on another API instance
                 if (!_sessions.TryGetValue(token, out var s)) return null;
                 var now = Now;
                 if (now - s.Seen > idle)
                 {
                     _sessions.Remove(token);
-                    await SaveSessionsLockedAsync(ct);
+                    await SaveSessionsLockedAsync(Array.Empty<string>(), new[] { token }, ct);
                     return null;
                 }
                 if (!_users.TryGetValue(s.Email, out var u) || !u.Active) return null;
                 if (now - s.Seen > 300)
                 {
                     s.Seen = now;   // persist "last seen" at most every 5 min
-                    await SaveSessionsLockedAsync(ct);
+                    await SaveSessionsLockedAsync(new[] { token }, Array.Empty<string>(), ct);
                 }
                 else s.Seen = now;
                 return u.Clone();
@@ -434,8 +501,9 @@ namespace Application.Services.V1.Platform
             SessionRecord? s;
             using (await LockAsync(ct))
             {
+                await RefreshSessionsLockedAsync(ct);
                 _sessions.Remove(token, out s);
-                await SaveSessionsLockedAsync(ct);
+                await SaveSessionsLockedAsync(Array.Empty<string>(), new[] { token }, ct);
             }
             if (s != null) await _audit.AppendAsync(s.Email, "logout", "", ct);
         }
@@ -448,9 +516,10 @@ namespace Application.Services.V1.Platform
 
         private async Task EndSessionsLockedAsync(string email, string? keep, CancellationToken ct)
         {
-            foreach (var t in _sessions.Where(kv => kv.Value.Email == email && kv.Key != keep).Select(kv => kv.Key).ToList())
-                _sessions.Remove(t);
-            await SaveSessionsLockedAsync(ct);
+            await RefreshSessionsLockedAsync(ct);
+            var gone = _sessions.Where(kv => kv.Value.Email == email && kv.Key != keep).Select(kv => kv.Key).ToList();
+            foreach (var t in gone) _sessions.Remove(t);
+            await SaveSessionsLockedAsync(Array.Empty<string>(), gone, ct);
         }
 
         // ── SCR products → users, scope, approvers ──────────────────
@@ -571,6 +640,7 @@ namespace Application.Services.V1.Platform
             var res = new ScrSyncResult { Found = people.Count };
             using (await LockAsync(ct))
             {
+                await ReloadUsersLockedAsync(ct);
                 foreach (var (email, d) in people)
                 {
                     if (!_users.TryGetValue(email, out var u))

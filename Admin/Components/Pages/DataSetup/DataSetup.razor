@@ -6,7 +6,6 @@
 @using Domain.Entities.Store
 @using Admin.Components.Shared.DataSetup
 @implements IDisposable
-@inject IAPICallService Api
 @inject ServerStatusService Status
 @inject ISnackbar Snackbar
 @inject IDialogService Dialogs
@@ -202,16 +201,16 @@
 
     private async Task LoadStatusAsync()
     {
-        var res = await Api.GetAsync<StatusResponse>("api/v1/status");
+        var res = await Status.GetAsync();
         if (res.IsSuccess && res.Data != null) ApplyDatasets(res.Data.Datasets);
-        else if (!res.IsSuccess) Snackbar.Add("⚠ " + res.ResponseMessage, Severity.Error);
+        else if (!res.IsSuccess) Snackbar.Add("⚠ " + res.responseMessage, Severity.Error);
     }
 
     private long _seenDataVersion;
 
     private void OnStatusChanged()
     {
-        if (_disposed || _busy || Status.Raw.ValueKind != JsonValueKind.Object || Status.DataVersion == _seenDataVersion) return;
+        if (_disposed || _busy || Status.Last == null || Status.DataVersion == _seenDataVersion) return;
         _ = InvokeAsync(() =>
         {
             ApplyFromRaw();
@@ -221,12 +220,7 @@
 
     private void ApplyFromRaw()
     {
-        try
-        {
-            var s = Status.Raw.Deserialize<StatusResponse>(APICallService.Json);
-            if (s != null) ApplyDatasets(s.Datasets);
-        }
-        catch (JsonException e) { Log.LogWarning(e, "Bad status payload"); }
+        if (Status.Last is { } s) ApplyDatasets(s.Datasets);
     }
 
     private void ApplyDatasets(Dictionary<string, DatasetEntry>? ds)
@@ -245,16 +239,17 @@
     // ── uploads ──
 
     private Task OnSlotFiles(string key, InputFileChangeEventArgs e) =>
-        RunUploadAsync(Slot(key), "api/v1/ingest/file/" + key + (key == DatasetKeys.Bsr ? "?append=true" : ""), Files(e), key);
+        RunUploadAsync(Slot(key), AllApiNames.PO_INGEST_FILE, Files(e), key,
+            new Dictionary<string, string> { ["Key"] = key, ["Append"] = "true" });
 
-    private Task OnZip(InputFileChangeEventArgs e) => RunUploadAsync(_zip, "api/v1/ingest/zip", Files(e).Take(1).ToList(), "zip");
-    private Task OnRaw(InputFileChangeEventArgs e) => RunUploadAsync(_raw, "api/v1/ingest/raw", Files(e), "raw");
-    private Task OnGrc(InputFileChangeEventArgs e) => RunUploadAsync(Slot(DatasetKeys.Grc), "api/v1/ingest/grc", Files(e).Take(1).ToList(), DatasetKeys.Grc);
+    private Task OnZip(InputFileChangeEventArgs e) => RunUploadAsync(_zip, AllApiNames.PO_INGEST_ZIP, Files(e).Take(1).ToList(), "zip");
+    private Task OnRaw(InputFileChangeEventArgs e) => RunUploadAsync(_raw, AllApiNames.PO_INGEST_RAW, Files(e), "raw");
+    private Task OnGrc(InputFileChangeEventArgs e) => RunUploadAsync(Slot(DatasetKeys.Grc), AllApiNames.PO_INGEST_GRC, Files(e).Take(1).ToList(), DatasetKeys.Grc);
 
     private static List<IBrowserFile> Files(InputFileChangeEventArgs e) =>
         e.FileCount == 0 ? new() : e.GetMultipleFiles(DataSetupText.MaxFiles).ToList();
 
-    private async Task RunUploadAsync(SlotState slot, string path, List<IBrowserFile> files, string kind)
+    private async Task RunUploadAsync(SlotState slot, string apiName, List<IBrowserFile> files, string kind, Dictionary<string, string>? fields = null)
     {
         if (files.Count == 0 || _busy) return;
         var total = files.Sum(f => f.Size);
@@ -294,22 +289,22 @@
             });
         }
 
-        ApiResponse<IngestResponse> res;
+        ApiDataResponse<IngestResponse> res;
         try
         {
-            var uploads = new List<UploadFile>();
+            var uploads = new List<ApiUploadFile>();
             foreach (var f in files)
             {
                 var s = new ProgressStream(f.OpenReadStream(DataSetupText.MaxUploadBytes), Progress);
                 streams.Add(s);
-                uploads.Add(new UploadFile(f.Name, s, string.IsNullOrEmpty(f.ContentType) ? "application/octet-stream" : f.ContentType));
+                uploads.Add(new ApiUploadFile(f.Name, s, string.IsNullOrEmpty(f.ContentType) ? "application/octet-stream" : f.ContentType));
             }
-            res = await Api.UploadAsync<IngestResponse>(path, uploads);
+            res = await ApiMasterService.CallingAPIUpload<ApiDataResponse<IngestResponse>>(apiName, uploads, fields);
         }
         catch (Exception ex) when (ex is IOException or InvalidOperationException or JSException or TaskCanceledException)
         {
-            Log.LogWarning(ex, "Upload to {Path} failed", path);
-            res = ApiResponse<IngestResponse>.Fail(500, ex.Message);
+            Log.LogWarning(ex, "Upload ({Api}) failed", apiName);
+            res = ApiDataResponse<IngestResponse>.Fail(500, ex.Message);
         }
         finally
         {
@@ -324,7 +319,7 @@
         StateHasChanged();
     }
 
-    private async Task ApplyResultAsync(SlotState slot, string kind, ApiResponse<IngestResponse> res)
+    private async Task ApplyResultAsync(SlotState slot, string kind, ApiDataResponse<IngestResponse> res)
     {
         var data = res.Data;
         var rep = data?.Report;
@@ -338,11 +333,11 @@
         }
         else if (!res.IsSuccess)
         {
-            slot.Fail("✗ " + res.ResponseMessage);
+            slot.Fail("✗ " + res.responseMessage);
         }
 
-        if (kind == "zip") _zipReport = rep ?? (res.IsSuccess ? null : new IngestReport { Errors = { res.ResponseMessage } });
-        if (kind == "raw") _rawReport = rep ?? (res.IsSuccess ? null : new IngestReport { Errors = { res.ResponseMessage } });
+        if (kind == "zip") _zipReport = rep ?? (res.IsSuccess ? null : new IngestReport { Errors = { res.responseMessage ?? "" } });
+        if (kind == "raw") _rawReport = rep ?? (res.IsSuccess ? null : new IngestReport { Errors = { res.responseMessage ?? "" } });
 
         // datasets saved → each slot shows what is on the server now (shared.js markSlot)
         if (data != null)
@@ -372,7 +367,7 @@
             foreach (var t in rep.Toasts)
                 Snackbar.Add(t, t.StartsWith("Error", StringComparison.Ordinal) ? Severity.Error : t.StartsWith("Saved to server", StringComparison.Ordinal) ? Severity.Success : Severity.Normal);
         if (!res.IsSuccess && (rep == null || rep.Toasts.Count == 0))
-            Snackbar.Add("⚠ Could not save to server: " + res.ResponseMessage, Severity.Error);
+            Snackbar.Add("⚠ Could not save to server: " + res.responseMessage, Severity.Error);
         if (rep != null)
             foreach (var w in rep.Warnings) Snackbar.Add("⚠ " + w, Severity.Warning);
 
@@ -380,7 +375,7 @@
         {
             await Status.RefreshAsync();
             Status.MarkLoaded();
-            if (Status.Raw.ValueKind == JsonValueKind.Object) ApplyFromRaw();
+            ApplyFromRaw();
         }
 
         // alert() boxes (zip: required files missing)
@@ -398,7 +393,7 @@
             Snackbar.Add($"SCR products: {added} new login(s) created, {updated} updated (Users tab)", Severity.Info);
     }
 
-    // ── clear a slot (index.html clearFileSlot → shared.js DELETE data/{key}) ──
+    // ── clear a slot (index.html clearFileSlot → shared.js DELETE data/{key} = PO_DATA_CLEAR) ──
 
     private async Task ClearAsync(string key)
     {
@@ -411,7 +406,7 @@
         var st = Slot(key);
         st.Busy = true; st.Status = "Removing " + DataSetupText.Label(key) + "…";
         StateHasChanged();
-        var res = await Api.DeleteAsync<DataVersionResponse>("api/v1/data/" + key);
+        var res = await ApiMasterService.CallingAPI<ApiDataResponse<DataVersionResponse>, DataKeyReq>(AllApiNames.PO_DATA_CLEAR, new DataKeyReq { Key = key });
         st.Busy = false;
         if (res.IsSuccess)
         {
@@ -422,12 +417,12 @@
             Snackbar.Add("Cleared — upload fresh files for this slot");
             await Status.RefreshAsync();
             Status.MarkLoaded();
-            if (Status.Raw.ValueKind == JsonValueKind.Object) ApplyFromRaw();
+            ApplyFromRaw();
         }
         else
         {
             if (_datasets != null && _datasets.TryGetValue(key, out var e)) st.Ok(DataSetupText.SavedStatus(e), e.Label);
-            Snackbar.Add("⚠ Could not save to server: " + res.ResponseMessage, Severity.Error);
+            Snackbar.Add("⚠ Could not save to server: " + res.responseMessage, Severity.Error);
         }
         _busy = false;
     }

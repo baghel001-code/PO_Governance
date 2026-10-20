@@ -1,9 +1,8 @@
 @page "/category/how-it-works"
 @* Category "❓ How it works" — port of index.html view-cat-howitworks (hw-banner, hw-tabs, hwTab, renderEngineBHelp).
    The static text lives in wwwroot/help/hw-*.html (+ how-it-works.css); {{NAME}} placeholders are filled from
-   GET api/v1/help/params, re-fetched when the planner parameters change. *@
+   PO_HELP_PARAMS, re-fetched when the planner parameters change. *@
 @using System.Text.RegularExpressions
-@inject IAPICallService Api
 @inject IWebHostEnvironment Env
 @inject ServerStatusService Status
 @inject ILogger<HowItWorks> Log
@@ -66,9 +65,9 @@
 
     private async Task LoadParamsAsync()
     {
-        var res = await Api.GetAsync<HelpParamsDto>("api/v1/help/params");
+        var res = await ApiMasterService.CallingAPI<ApiDataResponse<HelpParamsDto>, EmptyReq>(AllApiNames.PO_HELP_PARAMS, EmptyReq.Instance);
         if (res.IsSuccess && res.Data != null) { _params = res.Data; _paramsError = null; }
-        else _paramsError = res.ResponseMessage;
+        else _paramsError = res.responseMessage;
         if (Tabs.All(t => t.Id != _active)) _active = Tabs[0].Id;
     }
 

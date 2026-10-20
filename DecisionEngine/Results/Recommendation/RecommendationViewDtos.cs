@@ -3,7 +3,7 @@ using System.Text.Json.Serialization;
 namespace DecisionEngine.Results.Recommendation
 {
     /// <summary>
-    /// Input of the "View Recommendation" screen (POST api/v1/recommendation). Either a Generic
+    /// Input of the "View Recommendation" screen (PO_RECOMMENDATION_GET, api/v1/RecommendationGet). Either a Generic
     /// Material (resolved as Tool 1 does: Article Master → Universe Master → F2, engine B when the GM
     /// is in Universe Master, else A), or the bucket (Brand / MC / MRP / Flag) with an optional engine.
     /// </summary>

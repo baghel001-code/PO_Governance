@@ -6,14 +6,29 @@ namespace Infrastructure.Utilitys
 {
     /// <summary>
     /// Runs the SQL Server scripts of database/sqlserver (embedded in this assembly) the way sqlcmd does:
-    /// split on "GO" lines, one batch at a time. 01_tables.sql, 02_procedures.sql, 03_seed.sql are idempotent.
+    /// split on "GO" lines, one batch at a time. 01_tables.sql, 02_procedures.sql, 03_seed.sql, 04_api_master.sql are idempotent.
     /// Used by the tests, the migration tool (--create-schema) and, when PoGovSettings:SqlServerCreateSchema
     /// is true, by the API at start-up.
     /// </summary>
     public static class SqlServerSchema
     {
         /// <summary>Scripts run in the application database, in order (00_create_database.sql runs in master).</summary>
-        public static readonly string[] DatabaseScripts = { "01_tables.sql", "02_procedures.sql", "03_seed.sql" };
+        public static readonly string[] DatabaseScripts = { "01_tables.sql", "02_procedures.sql", "03_seed.sql", ApiMasterScript };
+
+        /// <summary>API_MASTER + PRO_GET_ALL_API + seed (QPS API master list the portal loads at start-up).</summary>
+        public const string ApiMasterScript = "04_api_master.sql";
+
+        private static readonly Regex ApiBaseLine = new(@"(DECLARE @ApiBase\s+NVARCHAR\(400\)\s*=\s*N')[^']*(')", RegexOptions.Compiled);
+
+        /// <summary>04_api_master.sql with another API base URL in its seed (e.g. PoGovSettings:ApiBaseUrl).</summary>
+        public static string ApiMasterSql(string? apiBaseUrl)
+        {
+            var sql = ReadScript(ApiMasterScript);
+            if (string.IsNullOrWhiteSpace(apiBaseUrl)) return sql;
+            var b = apiBaseUrl.Trim();
+            if (!b.EndsWith('/')) b += "/";
+            return ApiBaseLine.Replace(sql, m => m.Groups[1].Value + b.Replace("'", "''") + m.Groups[2].Value, 1);
+        }
 
         public const string ExpectedVersion = "2";
 
@@ -39,14 +54,19 @@ namespace Infrastructure.Utilitys
             return noLine.Trim().Length == 0;
         }
 
-        /// <summary>Runs 01..03 against the database of <paramref name="connectionString"/>.</summary>
-        public static async Task ApplyAsync(string connectionString, Action<string>? say = null, CancellationToken ct = default)
+        /// <summary>Runs 01..04 against the database of <paramref name="connectionString"/> (the API_MASTER seed with <paramref name="apiBaseUrl"/> when given).</summary>
+        public static Task ApplyAsync(string connectionString, Action<string>? say = null, CancellationToken ct = default) =>
+            ApplyAsync(connectionString, DatabaseScripts, say, null, ct);
+
+        /// <summary>Runs the given scripts (in order) against the database of <paramref name="connectionString"/>.</summary>
+        public static async Task ApplyAsync(string connectionString, IEnumerable<string> scripts, Action<string>? say = null, string? apiBaseUrl = null,
+                                            CancellationToken ct = default)
         {
             await using var c = new SqlConnection(connectionString);
             await c.OpenAsync(ct);
-            foreach (var file in DatabaseScripts)
+            foreach (var file in scripts)
             {
-                var batches = SplitBatches(ReadScript(file));
+                var batches = SplitBatches(file == ApiMasterScript ? ApiMasterSql(apiBaseUrl) : ReadScript(file));
                 foreach (var b in batches)
                     await c.ExecuteAsync(new CommandDefinition(b, commandTimeout: 300, cancellationToken: ct));
                 say?.Invoke($"  {file}: {batches.Count} batches");

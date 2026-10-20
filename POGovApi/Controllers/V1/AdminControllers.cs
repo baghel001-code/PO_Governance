@@ -3,6 +3,7 @@ using Application.DTOs.Platform;
 using Application.Interfaces.V1;
 using Domain.Constants;
 using Domain.Entities.AppSettings;
+using Domain.Entities.Request;
 using Domain.Entities.Response;
 using Domain.Entities.Store;
 using Domain.Exceptions;
@@ -13,7 +14,7 @@ using Microsoft.Extensions.Options;
 namespace POGovApi.Controllers.V1
 {
     /// <summary>User management (admin) — server.py api_GET/POST_users.</summary>
-    [Route("api/v1/users")]
+    [Route("api/v1/[Action]")]
     public sealed class UsersController : ApiControllerBase
     {
         private readonly IAccountsService _acc;
@@ -27,8 +28,8 @@ namespace POGovApi.Controllers.V1
             _cfg = cfg.Value;
         }
 
-        [HttpGet]
-        public async Task<ActionResult<ApiResponse<UsersListResponse>>> List(CancellationToken ct)
+        [HttpPost]
+        public async Task<ActionResult<ApiDataResponse<UsersListResponse>>> UsersList(CancellationToken ct)
         {
             RequireAdmin();
             var scope = await _acc.ScopeIndexAsync(ct);
@@ -47,8 +48,8 @@ namespace POGovApi.Controllers.V1
         }
 
         /// <summary>SCR products file analysis: e-mail columns, role guesses, mapping, people found.</summary>
-        [HttpGet("scr")]
-        public async Task<ActionResult<ApiResponse<ScrOverviewResponse>>> Scr(CancellationToken ct)
+        [HttpPost]
+        public async Task<ActionResult<ApiDataResponse<ScrOverviewResponse>>> UsersScr(CancellationToken ct)
         {
             RequireAdmin();
             var (_, rows) = await _scr.GetScrRowsAsync(ct);
@@ -67,19 +68,19 @@ namespace POGovApi.Controllers.V1
         }
 
         [HttpPost]
-        public async Task<ActionResult<ApiResponse<UserResponse>>> Add([FromBody] AddUserRequest body, CancellationToken ct)
+        public async Task<ActionResult<ApiDataResponse<UserResponse>>> UserAdd([FromBody] AddUserRequest req, CancellationToken ct)
         {
             RequireAdmin();
-            var u = await _acc.AddUserAsync(body.Email ?? "", (body.Name ?? "").Trim(), body.Roles ?? new List<string>(), Me.Email, "manual", ct);
+            var u = await _acc.AddUserAsync(req.Email ?? "", (req.Name ?? "").Trim(), req.Roles ?? new List<string>(), Me.Email, "manual", ct);
             return Success(new UserResponse { User = _acc.Public(u) });
         }
 
-        [HttpPost("bulk")]
-        public async Task<ActionResult<ApiResponse<BulkUsersResponse>>> Bulk([FromBody] BulkUsersRequest body, CancellationToken ct)
+        [HttpPost]
+        public async Task<ActionResult<ApiDataResponse<BulkUsersResponse>>> UsersBulk([FromBody] BulkUsersRequest req, CancellationToken ct)
         {
             RequireAdmin();
             var res = new BulkUsersResponse();
-            foreach (var row in body.Users ?? new List<AddUserRequest>())
+            foreach (var row in req.Users ?? new List<AddUserRequest>())
             {
                 try
                 {
@@ -92,19 +93,19 @@ namespace POGovApi.Controllers.V1
         }
 
         /// <summary>Creates logins for every buyer / category head in the SCR products file.</summary>
-        [HttpPost("scr")]
-        public Task<ActionResult<ApiResponse<ScrSyncResponse>>> ScrSync(CancellationToken ct) => SyncAsync(ct);
+        [HttpPost]
+        public Task<ActionResult<ApiDataResponse<ScrSyncResponse>>> UsersScrSync(CancellationToken ct) => SyncAsync(ct);
 
         /// <summary>Saves the admin's column mapping, then syncs.</summary>
-        [HttpPost("scr/mapping")]
-        public async Task<ActionResult<ApiResponse<ScrSyncResponse>>> ScrMapping([FromBody(EmptyBodyBehavior = EmptyBodyBehavior.Allow)] ScrMappingRequest? body, CancellationToken ct)
+        [HttpPost]
+        public async Task<ActionResult<ApiDataResponse<ScrSyncResponse>>> UsersScrMapping([FromBody(EmptyBodyBehavior = EmptyBodyBehavior.Allow)] ScrMappingRequest? req, CancellationToken ct)
         {
             RequireAdmin();
-            await _acc.SaveMappingAsync(body?.Mapping ?? new ScrMapping(), Me.Email, ct);
+            await _acc.SaveMappingAsync(req?.Mapping ?? new ScrMapping(), Me.Email, ct);
             return await SyncAsync(ct);
         }
 
-        private async Task<ActionResult<ApiResponse<ScrSyncResponse>>> SyncAsync(CancellationToken ct)
+        private async Task<ActionResult<ApiDataResponse<ScrSyncResponse>>> SyncAsync(CancellationToken ct)
         {
             RequireAdmin();
             var (_, rows) = await _scr.GetScrRowsAsync(ct);
@@ -112,35 +113,35 @@ namespace POGovApi.Controllers.V1
             return Success(new ScrSyncResponse { Result = await _acc.SyncFromScrAsync(rows, Me.Email, ct) });
         }
 
-        private async Task<string> ExistingAsync(string email, CancellationToken ct)
+        private async Task<string> ExistingAsync(string? email, CancellationToken ct)
         {
             RequireAdmin();
             var e = PoGovSettingsExt.Norm(email);
-            if (await _acc.GetUserAsync(e, ct) == null) throw new NotFoundException("No such user");
+            if (e.Length == 0 || await _acc.GetUserAsync(e, ct) == null) throw new NotFoundException("No such user");
             return e;
         }
 
-        /// <summary>body: {name?, roles?, active?, unlock?}.</summary>
-        [HttpPost("{email}/update")]
-        public async Task<ActionResult<ApiResponse<UserResponse>>> Update(string email, [FromBody(EmptyBodyBehavior = EmptyBodyBehavior.Allow)] JsonObject? body, CancellationToken ct)
+        /// <summary>{Email, Name?, Roles?, Active?, Unlock?} — only the properties sent are changed.</summary>
+        [HttpPost]
+        public async Task<ActionResult<ApiDataResponse<UserResponse>>> UserUpdate([FromBody] UserUpdateReq req, CancellationToken ct)
         {
-            var e = await ExistingAsync(email, ct);
-            var u = await _acc.UpdateUserAsync(e, body ?? new JsonObject(), Me.Email, ct);
+            var e = await ExistingAsync(req.Email, ct);
+            var u = await _acc.UpdateUserAsync(e, req.ToBody(), Me.Email, ct);
             return Success(new UserResponse { User = _acc.Public(u) });
         }
 
-        [HttpPost("{email}/reset-password")]
-        public async Task<ActionResult<ApiResponse<OkResponse>>> ResetPassword(string email, CancellationToken ct)
+        [HttpPost]
+        public async Task<ActionResult<ApiDataResponse<OkResponse>>> UserResetPassword([FromBody] UserEmailReq req, CancellationToken ct)
         {
-            var e = await ExistingAsync(email, ct);
+            var e = await ExistingAsync(req.Email, ct);
             await _acc.ResetPasswordAsync(e, Me.Email, ct);
             return Success(OkResponse.Instance);
         }
 
-        [HttpPost("{email}/delete")]
-        public async Task<ActionResult<ApiResponse<OkResponse>>> Delete(string email, CancellationToken ct)
+        [HttpPost]
+        public async Task<ActionResult<ApiDataResponse<OkResponse>>> UserDelete([FromBody] UserEmailReq req, CancellationToken ct)
         {
-            var e = await ExistingAsync(email, ct);
+            var e = await ExistingAsync(req.Email, ct);
             if (e == Me.Email) throw new AppValidationException("You cannot delete your own login");
             if (e == PoGovSettingsExt.Norm(_cfg.AdminEmailOrDefault))
                 throw new AppValidationException("The main admin (config.json admin_email) cannot be deleted");
@@ -155,36 +156,36 @@ namespace POGovApi.Controllers.V1
     }
 
     /// <summary>Audit trail (admin) — server.py api_GET_audit.</summary>
-    [Route("api/v1/audit")]
+    [Route("api/v1/[Action]")]
     public sealed class AuditController : ApiControllerBase
     {
         private readonly IAuditService _audit;
         public AuditController(IAuditService audit) => _audit = audit;
 
-        [HttpGet]
-        public async Task<ActionResult<ApiResponse<AuditQueryResponse>>> Get([FromQuery] string? from, [FromQuery] string? to, [FromQuery] string? q, CancellationToken ct)
+        [HttpPost]
+        public async Task<ActionResult<ApiDataResponse<AuditQueryResponse>>> AuditQuery([FromBody(EmptyBodyBehavior = EmptyBodyBehavior.Allow)] AuditQueryReq? req, CancellationToken ct)
         {
             RequireAdmin();
-            return Success(await _audit.QueryAsync(from, to, q, ct));
+            return Success(await _audit.QueryAsync(req?.From, req?.To, req?.Q, ct));
         }
     }
 
     /// <summary>Backups (admin) — server.py api_GET/POST_backups.</summary>
-    [Route("api/v1/backups")]
+    [Route("api/v1/[Action]")]
     public sealed class BackupsController : ApiControllerBase
     {
         private readonly IBackupService _backups;
         public BackupsController(IBackupService backups) => _backups = backups;
 
-        [HttpGet]
-        public ActionResult<ApiResponse<BackupListResponse>> List()
+        [HttpPost]
+        public ActionResult<ApiDataResponse<BackupListResponse>> BackupsList()
         {
             RequireAdmin();
             return Success(_backups.List());
         }
 
         [HttpPost]
-        public async Task<ActionResult<ApiResponse<BackupResponse>>> Create(CancellationToken ct)
+        public async Task<ActionResult<ApiDataResponse<BackupResponse>>> BackupCreate(CancellationToken ct)
         {
             RequireAdmin();
             return Success(new BackupResponse { Name = await _backups.BackupNowAsync(Me.AuditName, ct) });
@@ -192,51 +193,51 @@ namespace POGovApi.Controllers.V1
     }
 
     /// <summary>User feedback — server.py api_GET/POST_feedback.</summary>
-    [Route("api/v1/feedback")]
+    [Route("api/v1/[Action]")]
     public sealed class FeedbackController : ApiControllerBase
     {
         private readonly IFeedbackService _fb;
         public FeedbackController(IFeedbackService fb) => _fb = fb;
 
-        /// <summary>Admins see all items unless mine is set; everyone else sees their own.</summary>
-        [HttpGet]
-        public async Task<ActionResult<ApiResponse<ItemsResponse>>> List([FromQuery] string? mine, CancellationToken ct) =>
-            Success(await _fb.ListAsync(!string.IsNullOrEmpty(mine), Me, ct));
+        /// <summary>Admins see all items unless Mine is set; everyone else sees their own.</summary>
+        [HttpPost]
+        public async Task<ActionResult<ApiDataResponse<ItemsResponse>>> FeedbackList([FromBody(EmptyBodyBehavior = EmptyBodyBehavior.Allow)] FeedbackListReq? req, CancellationToken ct) =>
+            Success(await _fb.ListAsync(req?.Mine == true, Me, ct));
 
         [HttpPost]
-        public async Task<ActionResult<ApiResponse<FeedbackCreatedResponse>>> Create([FromBody(EmptyBodyBehavior = EmptyBodyBehavior.Allow)] JsonObject? body, CancellationToken ct) =>
-            Success(await _fb.CreateAsync(body ?? new JsonObject(), Me, ct));
+        public async Task<ActionResult<ApiDataResponse<FeedbackCreatedResponse>>> FeedbackCreate([FromBody(EmptyBodyBehavior = EmptyBodyBehavior.Allow)] FeedbackCreateReq? req, CancellationToken ct) =>
+            Success(await _fb.CreateAsync(req?.ToBody() ?? new JsonObject(), Me, ct));
 
-        /// <summary>Admin: {status: new | in progress | closed, note}.</summary>
-        [HttpPost("{id}")]
-        public async Task<ActionResult<ApiResponse<OkResponse>>> SetStatus(string id, [FromBody(EmptyBodyBehavior = EmptyBodyBehavior.Allow)] JsonObject? body, CancellationToken ct)
+        /// <summary>Admin: {Id, Status: new | in progress | closed, Note}.</summary>
+        [HttpPost]
+        public async Task<ActionResult<ApiDataResponse<OkResponse>>> FeedbackSetStatus([FromBody] FeedbackSetStatusReq req, CancellationToken ct)
         {
-            await _fb.SetStatusAsync(id, body ?? new JsonObject(), Me, ct);
+            await _fb.SetStatusAsync(req.Id ?? "", req.ToBody(), Me, ct);
             return Success(OkResponse.Instance);
         }
     }
 
     /// <summary>AI proxy — server.py api_POST_ai (chat: Anthropic shape; insights: OpenAI shape).</summary>
-    [Route("api/v1/ai")]
+    [Route("api/v1/[Action]")]
     public sealed class AiController : ApiControllerBase
     {
         private readonly IAiService _ai;
         public AiController(IAiService ai) => _ai = ai;
 
-        private ActionResult<ApiResponse<JsonNode>> Upstream(AiResult r)
+        private ActionResult<ApiDataResponse<JsonNode>> Upstream(AiResult r)
         {
             if (r.Status == 200) return Success(r.Data);
             var msg = (r.Data as JsonObject)?["error"] is JsonObject e && e["message"] is JsonValue m ? m.ToString()
                     : (r.Data as JsonObject)?["error"]?.ToString() ?? $"AI service answered HTTP {r.Status}";
-            return StatusCode(r.Status, ApiResponse<JsonNode>.Fail(r.Status, msg, r.Data));
+            return StatusCode(r.Status, ApiDataResponse<JsonNode>.Fail(r.Status, msg, r.Data));
         }
 
-        [HttpPost("chat")]
-        public async Task<ActionResult<ApiResponse<JsonNode>>> Chat([FromBody(EmptyBodyBehavior = EmptyBodyBehavior.Allow)] JsonObject? body, CancellationToken ct) =>
-            Upstream(await _ai.ChatAsync(body ?? new JsonObject(), Me, ct));
+        [HttpPost]
+        public async Task<ActionResult<ApiDataResponse<JsonNode>>> AiChat([FromBody(EmptyBodyBehavior = EmptyBodyBehavior.Allow)] AiChatReq? req, CancellationToken ct) =>
+            Upstream(await _ai.ChatAsync(req?.ToBody() ?? new JsonObject(), Me, ct));
 
-        [HttpPost("insights")]
-        public async Task<ActionResult<ApiResponse<JsonNode>>> Insights([FromBody(EmptyBodyBehavior = EmptyBodyBehavior.Allow)] JsonObject? body, CancellationToken ct) =>
-            Upstream(await _ai.InsightsAsync(body ?? new JsonObject(), Me, ct));
+        [HttpPost]
+        public async Task<ActionResult<ApiDataResponse<JsonNode>>> AiInsights([FromBody(EmptyBodyBehavior = EmptyBodyBehavior.Allow)] AiPromptReq? req, CancellationToken ct) =>
+            Upstream(await _ai.InsightsAsync(req?.ToBody() ?? new JsonObject(), Me, ct));
     }
 }

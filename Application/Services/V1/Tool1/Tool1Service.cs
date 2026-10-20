@@ -170,7 +170,7 @@ namespace Application.Services.V1.Tool1
             if (_ledger is IRequestService platform)
             {
                 // server.py visible_to (own requests, requests they approve, their SCR Brand × MC × MRP) —
-                // the same set GET api/v1/requests returns, which is what v1.1.4 kept in S.requests.
+                // the same set PO_REQUESTS_GET returns, which is what v1.1.4 kept in S.requests.
                 var day = await platform.GetDayForUserAsync(today, user, ct);
                 visible = day.Requests;
                 seq = day.Seq;

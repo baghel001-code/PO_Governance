@@ -7,12 +7,12 @@ Every text and figure below comes from the API, already formatted (en-IN groupin
 
 | Endpoint (roles buyer, cathead, planner, admin) | DTO |
 |---|---|
-| `GET api/v1/tool1/options?gm=` | `Tool1FormOptionsDto` |
-| `POST api/v1/tool1/validate` body `Tool1RequestInputDto` | `Tool1ResultDto` |
-| `POST api/v1/tool1/submit` body `Tool1SubmitInputDto` | `Tool1ResultDto` |
-| `GET api/v1/tool1/today?mine=` | `Tool1TodayDto` |
+| `PO_TOOL1_OPTIONS` → `POST api/v1/Tool1Options` body `{Gm}` | `Tool1FormOptionsDto` |
+| `PO_TOOL1_VALIDATE` → `POST api/v1/Tool1Validate` body `Tool1RequestInputDto` | `Tool1ResultDto` |
+| `PO_TOOL1_SUBMIT` → `POST api/v1/Tool1Submit` body `Tool1SubmitInputDto` | `Tool1ResultDto` |
+| `PO_TOOL1_TODAY` → `POST api/v1/Tool1Today` body `{Mine}` | `Tool1TodayDto` |
 
-All responses use the `ApiResponse<T>` envelope. A 400 `ResponseMessage` is a toast:
+All responses use the `ApiDataResponse<T>` envelope. A 400 `responseMessage` is a toast:
 "Please fill all 4 fields." or "Upload required files first: f4, bsr".
 
 ## 1. The page
@@ -180,7 +180,7 @@ v1.1.4 did everything in one click. The server splits it into two calls, so the 
   green reason. It uses the same component as View Recommendation: `Items[].Text`, with an expandable
   breakdown that has `Footer`.
 - **Footer**: `FooterHint` on the left, then the **📊 View Recommendation** button. It opens the
-  recommendation modal with `RecEngine` / `RecInfo` (`POST api/v1/recommendation` with `{gm}` works too).
+  recommendation modal with `RecEngine` / `RecInfo` (`PO_RECOMMENDATION_GET` with `{gm}` works too).
 
 ## 4. Today's Requests (`🕒 Today's Requests` tab)
 
@@ -216,6 +216,6 @@ v1.1.4 did everything in one click. The server splits it into two calls, so the 
   - Others see their own requests and the ones they approve.
   - v1.1.4 also showed a restricted user the requests on their SCR-mapped MCs (`Shared.visibleRequests`).
     That needs the user's scope keys, which `AppUserContext` doesn't carry. Use the platform's
-    `GET api/v1/requests` listing if it applies the scope, or extend `GetTodayAsync` once a scope provider
+    `PO_REQUESTS_GET` listing if it applies the scope, or extend `GetTodayAsync` once a scope provider
     exists.
 - Poll every 30 s, or refresh after each submit.

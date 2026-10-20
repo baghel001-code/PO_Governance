@@ -1,6 +1,5 @@
 @page "/approvals"
 @* users.js Approvals: Watch List requests waiting for the category head (pending cards) and decided ones. *@
-@inject IAPICallService Api
 @inject UserSessionState Session
 @inject ServerStatusService Status
 @inject ISnackbar Snackbar
@@ -124,8 +123,8 @@ else
 
     private async Task LoadAsync()
     {
-        var res = await Api.GetApprovalsAsync(120);
-        if (!res.IsSuccess || res.Data == null) { _error = res.ResponseMessage; return; }
+        var res = await ApiMasterService.GetApprovalsAsync(120);
+        if (!res.IsSuccess || res.Data == null) { _error = res.responseMessage; return; }
         _error = null;
         _data = res.Data;
         _forms.Clear();
@@ -141,8 +140,8 @@ else
         _busy = true;
         try
         {
-            var res = await Api.DecideApprovalAsync(rid, decision, f.Qty, comment);
-            if (!res.IsSuccess) { Snackbar.Warn(res.ResponseMessage); return; }
+            var res = await ApiMasterService.DecideApprovalAsync(rid, decision, f.Qty, comment);
+            if (!res.IsSuccess) { Snackbar.Warn(res.responseMessage); return; }
             Snackbar.Toast(decision == "approved" ? "Approved " + rid : "Rejected " + rid);
             await LoadAsync();
             await Status.RefreshAsync();

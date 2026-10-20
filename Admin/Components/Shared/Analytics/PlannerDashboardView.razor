@@ -1,6 +1,5 @@
 @* Planner dashboard over a Tool 2 run — port of index.html renderPlannerDashboard / _plannerDashResetFilters
-   (v1.1.4 kept the function but had no markup; laid out like the Category dashboard). Data: GET api/v1/insights/planner. *@
-@inject IAPICallService Api
+   (v1.1.4 kept the function but had no markup; laid out like the Category dashboard). Data: PO_INSIGHTS_PLANNER. *@
 
 <div class="an-head" style="margin-bottom:10px">
     <div>
@@ -110,11 +109,13 @@ else
     private async Task LoadAsync()
     {
         var seq = ++_seq;
-        var res = await Api.GetAsync<PlannerDashboardDto>(AnQuery.Build("api/v1/insights/planner",
-            ("runId", RunId), ("brand", _q.Brand), ("division", _q.Division), ("mc", _q.Mc), ("mrp", _q.Mrp), ("flag", _q.Flag),
-            ("deliveryMonth", _q.DeliveryMonth), ("engine", _q.Engine), ("decision", _q.Decision)));
+        var res = await ApiMasterService.CallingAPI<ApiDataResponse<PlannerDashboardDto>, PlannerDashboardQuery>(AllApiNames.PO_INSIGHTS_PLANNER, new PlannerDashboardQuery
+        {
+            RunId = AnQuery.N(RunId), Brand = AnQuery.N(_q.Brand), Division = AnQuery.N(_q.Division), Mc = AnQuery.N(_q.Mc), Mrp = AnQuery.N(_q.Mrp),
+            Flag = AnQuery.N(_q.Flag), DeliveryMonth = AnQuery.N(_q.DeliveryMonth), Engine = AnQuery.N(_q.Engine), Decision = AnQuery.N(_q.Decision)
+        });
         if (seq != _seq) return;
-        if (!res.IsSuccess || res.Data == null) { _error = res.ResponseMessage; return; }
+        if (!res.IsSuccess || res.Data == null) { _error = res.responseMessage; return; }
         _error = null;
         _dto = res.Data;
         var a = _dto.Applied ?? new PlannerDashboardQuery();

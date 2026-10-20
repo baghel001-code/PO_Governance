@@ -335,7 +335,7 @@ namespace DecisionEngine.Results.Tool2
         [JsonPropertyName("catHeads")] public List<string> CatHeads { get; set; } = new();
     }
 
-    /// <summary>Response of POST api/v1/assessment/run.</summary>
+    /// <summary>Response of PO_TOOL2_RUN (api/v1/Tool2Run).</summary>
     public sealed class Tool2RunResultDto
     {
         [JsonPropertyName("runId")] public string? RunId { get; set; }
@@ -343,7 +343,7 @@ namespace DecisionEngine.Results.Tool2
         [JsonPropertyName("view")] public Tool2ViewDto View { get; set; } = new();
     }
 
-    /// <summary>GET api/v1/assessment/options.</summary>
+    /// <summary>PO_TOOL2_OPTIONS (api/v1/Tool2Options).</summary>
     public sealed class Tool2OptionsDto
     {
         /// <summary>Current parameters (or the run's when a run id is given).</summary>

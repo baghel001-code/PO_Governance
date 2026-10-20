@@ -6,13 +6,13 @@ using Microsoft.AspNetCore.Mvc;
 namespace POGovApi.Controllers.V1
 {
     /// <summary>
-    /// Streams a stored gzip JSON payload (data-file version, saved run) inside the ApiResponse
-    /// envelope without parsing it: {"responseCode":0,"responseMessage":"SUCCESS","data":&lt;payload&gt;,"isSuccess":true}.
+    /// Streams a stored gzip JSON payload (data-file version, saved run) inside the ApiDataResponse envelope
+    /// without parsing it: {"responseCode":0,"responseMessage":"SUCCESS","recordId":0,"Data":&lt;payload&gt;}.
     /// </summary>
     public sealed class GzipJsonEnvelopeResult : IActionResult
     {
-        private static readonly byte[] Head = Encoding.UTF8.GetBytes("{\"responseCode\":0,\"responseMessage\":\"SUCCESS\",\"data\":");
-        private static readonly byte[] Tail = Encoding.UTF8.GetBytes(",\"isSuccess\":true}");
+        private static readonly byte[] Head = Encoding.UTF8.GetBytes("{\"responseCode\":0,\"responseMessage\":\"SUCCESS\",\"recordId\":0,\"Data\":");
+        private static readonly byte[] Tail = Encoding.UTF8.GetBytes("}");
         private readonly byte[] _gz;
 
         public GzipJsonEnvelopeResult(byte[] gz) => _gz = gz;
@@ -33,21 +33,26 @@ namespace POGovApi.Controllers.V1
 
     public static class RequestBody
     {
-        /// <summary>server.py read_body with the max_upload_mb limit.</summary>
-        public static async Task<byte[]> ReadAllAsync(HttpRequest req, int maxUploadMb, CancellationToken ct)
+        private static string TooLarge(int maxUploadMb) => $"Upload is larger than max_upload_mb ({maxUploadMb} MB) in config.json";
+
+        /// <summary>
+        /// A multipart/form-data body with one file part (any field name) and text fields — DataPut / RunSave.
+        /// The max_upload_mb limit applies to the whole body.
+        /// </summary>
+        public static async Task<(byte[] File, IFormCollection Form)> ReadMultipartAsync(HttpRequest req, int maxUploadMb, CancellationToken ct)
         {
             long limit = (long)maxUploadMb * 1024 * 1024;
-            if (req.ContentLength > limit)
-                throw new AppValidationException($"Upload is larger than max_upload_mb ({maxUploadMb} MB) in config.json");
-            using var ms = new MemoryStream(req.ContentLength is > 0 and < int.MaxValue ? (int)req.ContentLength.Value : 0);
-            var buf = new byte[1 << 20];
-            int n;
-            while ((n = await req.Body.ReadAsync(buf, ct)) > 0)
-            {
-                ms.Write(buf, 0, n);
-                if (ms.Length > limit) throw new AppValidationException($"Upload is larger than max_upload_mb ({maxUploadMb} MB) in config.json");
-            }
-            return ms.ToArray();
+            if (req.ContentLength > limit) throw new AppValidationException(TooLarge(maxUploadMb));
+            if (!req.HasFormContentType) throw new AppValidationException("Send the file as multipart/form-data");
+            var form = await req.ReadFormAsync(ct);
+            var f = form.Files.FirstOrDefault() ?? throw new AppValidationException("No file uploaded");
+            if (f.Length > limit) throw new AppValidationException(TooLarge(maxUploadMb));
+            using var ms = new MemoryStream((int)Math.Min(f.Length, int.MaxValue));
+            await f.CopyToAsync(ms, ct);
+            return (ms.ToArray(), form);
         }
+
+        /// <summary>gzip magic bytes 1F 8B (v1.1.4 sent "X-Body-Encoding: gzip" instead).</summary>
+        public static bool IsGzip(byte[] raw) => raw.Length >= 2 && raw[0] == 0x1F && raw[1] == 0x8B;
     }
 }

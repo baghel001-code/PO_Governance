@@ -1,6 +1,6 @@
 @page "/planner/grc"
 @* Planner "📈 GRC Back Testing" — port of index.html view-analytics (renderGRCImpact, renderArticleTrace,
-   _grcResetFilters, exportGRCRowDetail). Every figure / text comes from api/v1/grc-backtest; this page only
+   _grcResetFilters, exportGRCRowDetail). Every figure / text comes from PO_GRC_*; this page only
    lays out GrcImpactDto / GrcArticleTraceDto (see docs/ui/grc-backtesting.md). *@
 @attribute [Authorize(Roles = Roles.Staff)]
 @using System.Text.Json.Nodes
@@ -8,11 +8,8 @@
 @using Admin.Components.Shared.Recommendation
 @using Admin.Components.Shared.Seasons
 @using Microsoft.AspNetCore.Components.Authorization
-@inject IAPICallService Api
 @inject FileDownloadService Files
 @inject ISnackbar Snackbar
-@inject IHttpClientFactory HttpFactory
-@inject AuthenticationStateProvider AuthState
 
 <PageTitle>GRC Back Testing · VMM PO Governance</PageTitle>
 
@@ -131,7 +128,7 @@
 
     protected override async Task OnInitializedAsync()
     {
-        var p = await PlannerParams.GetAsync(Api);
+        var p = await PlannerParams.GetAsync(ApiMasterService);
         _savedAsOf = PlannerParams.GetString(p, "grcAsOfPeriod");
         await ComputeAsync();
     }
@@ -147,13 +144,13 @@
         var seq = ++_seq;
         _computing = true;
         StateHasChanged();
-        var res = await Api.PostAsync<GrcImpactDto>("api/v1/grc-backtest/compute", BuildRequest());
+        var res = await ApiMasterService.CallingAPI<ApiDataResponse<GrcImpactDto>, GrcImpactRequest>(AllApiNames.PO_GRC_COMPUTE, BuildRequest());
         if (seq != _seq) return;
         _computing = false;
         if (!res.IsSuccess || res.Data == null)
         {
-            if (_impact == null) _loadError = res.ResponseMessage;
-            else Snackbar.Add(res.ResponseMessage, Severity.Error);
+            if (_impact == null) _loadError = res.responseMessage;
+            else Snackbar.Add(res.responseMessage ?? "", Severity.Error);
             StateHasChanged();
             return;
         }
@@ -166,7 +163,7 @@
         // The browser kept S.params.grcAsOfPeriod = the as-of the screen ended on.
         if (_impact.HasGrcData && !string.IsNullOrEmpty(c.AsOfPeriod) && c.AsOfPeriod != _savedAsOf)
         {
-            var err = await PlannerParams.SaveAsync(Api, new Dictionary<string, JsonNode?> { ["grcAsOfPeriod"] = c.AsOfPeriod });
+            var err = await PlannerParams.SaveAsync(ApiMasterService, new Dictionary<string, JsonNode?> { ["grcAsOfPeriod"] = c.AsOfPeriod });
             if (err == null) _savedAsOf = c.AsOfPeriod;
             else Snackbar.Add(err, Severity.Error);
         }
@@ -201,10 +198,10 @@
         _exporting = true;
         try
         {
-            var client = new GrcExportClient(HttpFactory, AuthState, Api);
+            var client = new GrcExportClient(ApiMasterService);
             var (file, msg) = await client.ExportAsync(_asOf);
-            if (!file.IsSuccess || file.Data == null) { Snackbar.Add(file.ResponseMessage); return; }
-            await Files.SaveAsync(file.Data);
+            if (!file.IsSuccess) { Snackbar.Add(file.responseMessage ?? ""); return; }
+            await Files.SaveAsync(file);
             Snackbar.Add(string.IsNullOrEmpty(msg) ? "Exported" : msg);
         }
         finally { _exporting = false; }
@@ -220,8 +217,8 @@
         var gm = _traceGm.Trim();
         _traceError = null;
         if (gm.Length == 0) { _trace = null; return; }
-        var res = await Api.GetAsync<GrcArticleTraceDto>($"api/v1/grc-backtest/trace/{Uri.EscapeDataString(gm)}?asOfPeriod={Uri.EscapeDataString(_asOf ?? "")}");
-        if (!res.IsSuccess || res.Data == null) { _trace = null; _traceError = res.ResponseMessage; return; }
+        var res = await ApiMasterService.CallingAPI<ApiDataResponse<GrcArticleTraceDto>, GrcTraceReq>(AllApiNames.PO_GRC_TRACE, new GrcTraceReq { Gm = gm, AsOfPeriod = _asOf ?? "" });
+        if (!res.IsSuccess || res.Data == null) { _trace = null; _traceError = res.responseMessage; return; }
         _trace = res.Data;
     }
 

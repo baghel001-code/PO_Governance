@@ -1,7 +1,6 @@
 @page "/category/insights"
 @* Category "📊 Insights" (Category Dashboard) — port of index.html view-cat-insights + renderCatInsights /
-   _catDashResetFilters. All figures, texts and colours come from GET api/v1/insights/category (CatInsightsDto). *@
-@inject IAPICallService Api
+   _catDashResetFilters. All figures, texts and colours come from PO_INSIGHTS_CATEGORY (CatInsightsDto). *@
 @inject NavigationManager Nav
 
 <PageTitle>Insights · VMM PO Governance</PageTitle>
@@ -155,11 +154,13 @@
     private async Task LoadAsync()
     {
         var seq = ++_seq;
-        var res = await Api.GetAsync<CatInsightsDto>(AnQuery.Build("api/v1/insights/category",
-            ("brand", _q.Brand), ("division", _q.Division), ("mc", _q.Mc), ("month", _q.Month),
-            ("engine", _q.Engine), ("decision", _q.Decision), ("from", _q.From), ("to", ToParam)));
+        var res = await ApiMasterService.CallingAPI<ApiDataResponse<CatInsightsDto>, CatInsightsQuery>(AllApiNames.PO_INSIGHTS_CATEGORY, new CatInsightsQuery
+        {
+            Brand = AnQuery.N(_q.Brand), Division = AnQuery.N(_q.Division), Mc = AnQuery.N(_q.Mc), Month = AnQuery.N(_q.Month),
+            Engine = AnQuery.N(_q.Engine), Decision = AnQuery.N(_q.Decision), From = AnQuery.N(_q.From), To = AnQuery.N(ToParam)
+        });
         if (seq != _seq) return;
-        if (!res.IsSuccess || res.Data == null) { _error = res.ResponseMessage; return; }
+        if (!res.IsSuccess || res.Data == null) { _error = res.responseMessage; return; }
         _error = null;
         _dto = res.Data;
         // show the filters the server actually applied (a value that vanished from the options is dropped)

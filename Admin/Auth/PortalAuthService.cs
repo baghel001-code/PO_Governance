@@ -1,31 +1,34 @@
 using System.Security.Claims;
-using System.Text.Json;
-using Admin.Interfaces;
+using Application.DTOs.Platform;
+using Application.Interfaces.V1;
 using Domain.Constants;
+using Domain.Entities.Common;
+using Domain.Entities.Request;
+using Domain.Entities.Response;
 using Microsoft.AspNetCore.Authentication;
-using Microsoft.AspNetCore.Authentication.Cookies;
 
 namespace Admin.Auth
 {
     /// <summary>
-    /// Signs people in to the portal: checks the password with POGovApi (which keeps the session in
-    /// app_sessions, exactly like v1.1.4) and stores the returned session token in the portal's auth
-    /// cookie, so every later API call is made as that person.
+    /// Signs people in to the portal: checks the password with POGovApi (PO_AUTH_LOGIN; the API keeps the session in
+    /// app_sessions, exactly like v1.1.4) and stores the returned session token in the portal's auth cookie, so every
+    /// later API call is made as that person (X-Session-Token).
     /// </summary>
     public sealed class PortalAuthService
     {
-        private readonly IAPICallService _api;
+        private readonly IAPICall _api;
 
-        public PortalAuthService(IAPICallService api) => _api = api;
+        public PortalAuthService(IAPICall api) => _api = api;
 
         public sealed record SignInResult(bool Ok, string? Error, bool MustChange);
 
         public async Task<SignInResult> SignInAsync(HttpContext http, string email, string password)
         {
-            var res = await _api.PostAnonymousAsync<JsonElement>("api/v1/auth/login", new { email = email.Trim(), password });
+            var res = await _api.CallingAPI<ApiDataResponse<LoginResponse>, LoginRequest>(AllApiNames.PO_AUTH_LOGIN,
+                new LoginRequest { Email = email.Trim(), Password = password }, "", http.RequestAborted);
             if (!res.IsSuccess)
-                return new(false, string.IsNullOrWhiteSpace(res.ResponseMessage) ? "Sign in failed" : res.ResponseMessage, false);
-            var token = Str(res.Data, "token");
+                return new(false, string.IsNullOrWhiteSpace(res.responseMessage) ? "Sign in failed" : res.responseMessage, false);
+            var token = res.Data?.Token;
             if (string.IsNullOrEmpty(token)) return new(false, "Sign in failed", false);
             var principal = await BuildPrincipalAsync(token);
             if (principal == null) return new(false, "Sign in failed", false);
@@ -46,52 +49,36 @@ namespace Admin.Auth
         {
             var token = http.User.FindFirst(CustomClaimTypes.SessionToken)?.Value;
             if (!string.IsNullOrEmpty(token))
-                await _api.SendWithTokenAsync<JsonElement>(HttpMethod.Post, "api/v1/auth/logout", token, new { });
+                await _api.CallingAPI<GenRes, EmptyReq>(AllApiNames.PO_AUTH_LOGOUT, EmptyReq.Instance, token);
             await http.SignOutAsync(AppConstants.PortalAuthScheme);
         }
 
+        /// <summary>PO_AUTH_ME with this token (null when the API refuses it).</summary>
+        public Task<ApiDataResponse<MeResponse>> MeAsync(string token, CancellationToken ct = default) =>
+            _api.CallingAPI<ApiDataResponse<MeResponse>, EmptyReq>(AllApiNames.PO_AUTH_ME, EmptyReq.Instance, token, ct);
+
         public async Task<ClaimsPrincipal?> BuildPrincipalAsync(string token)
         {
-            var me = await _api.SendWithTokenAsync<JsonElement>(HttpMethod.Get, "api/v1/auth/me", token);
-            if (!me.IsSuccess) return null;
-            var user = me.Data.ValueKind == JsonValueKind.Object && me.Data.TryGetProperty("user", out var u) ? u : me.Data;
-            return FromUserJson(user, token);
+            var me = await MeAsync(token);
+            if (!me.IsSuccess || me.Data?.User == null) return null;
+            return FromUser(me.Data.User, token);
         }
 
-        public static ClaimsPrincipal FromUserJson(JsonElement user, string token)
+        public static ClaimsPrincipal FromUser(UserPublicDto user, string token)
         {
-            var email = Str(user, "email");
+            var email = user.Email ?? "";
             var claims = new List<Claim>
             {
                 new(ClaimTypes.NameIdentifier, email),
-                new(ClaimTypes.Name, Str(user, "name") is { Length: > 0 } n ? n : email),
+                new(ClaimTypes.Name, string.IsNullOrEmpty(user.Name) ? email : user.Name),
                 new(ClaimTypes.Email, email),
                 new(CustomClaimTypes.Email, email),
                 new(CustomClaimTypes.SessionToken, token),
-                new(CustomClaimTypes.MustChange, Bool(user, "mustChange") ? "true" : "false"),
+                new(CustomClaimTypes.MustChange, user.MustChange ? "true" : "false"),
             };
-            if (user.ValueKind == JsonValueKind.Object && user.TryGetProperty("roles", out var roles) && roles.ValueKind == JsonValueKind.Array)
-                foreach (var r in roles.EnumerateArray())
-                    if (r.GetString() is { Length: > 0 } role) claims.Add(new Claim(ClaimTypes.Role, role));
+            foreach (var role in user.Roles ?? new List<string>())
+                if (!string.IsNullOrEmpty(role)) claims.Add(new Claim(ClaimTypes.Role, role));
             return new ClaimsPrincipal(new ClaimsIdentity(claims, AppConstants.PortalAuthScheme));
-        }
-
-        private static string Str(JsonElement e, string name)
-        {
-            if (e.ValueKind != JsonValueKind.Object) return "";
-            foreach (var p in e.EnumerateObject())
-                if (string.Equals(p.Name, name, StringComparison.OrdinalIgnoreCase) && p.Value.ValueKind == JsonValueKind.String)
-                    return p.Value.GetString() ?? "";
-            return "";
-        }
-
-        private static bool Bool(JsonElement e, string name)
-        {
-            if (e.ValueKind != JsonValueKind.Object) return false;
-            foreach (var p in e.EnumerateObject())
-                if (string.Equals(p.Name, name, StringComparison.OrdinalIgnoreCase))
-                    return p.Value.ValueKind == JsonValueKind.True;
-            return false;
         }
     }
 }

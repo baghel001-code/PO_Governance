@@ -13,15 +13,19 @@ JSON text, same IDs), so data moves both ways with the migration tool.
 | `01_tables.sql` | `POGovernance` | the 13 tables of schema v2 + index `request_events_day (req_date, id)` |
 | `02_procedures.sql` | `POGovernance` | the 14 `PRO_POGOV_*` procedures (`CREATE OR ALTER`) |
 | `03_seed.sql` | `POGovernance` | `schema_info`: `version = 2` |
+| `04_api_master.sql` | `POGovernance` | QPS API master: table `API_MASTER`, procedure `PRO_GET_ALL_API` (`@Cmd` `ALL` / `BY_TASK`), one row per POGovApi action |
 
-All four are idempotent — run them again after an upgrade.
+All five are idempotent — run them again after an upgrade (04 only inserts missing task names; it never overwrites a row).
 
 ## 1. Create the database
 
 ```bat
 sqlcmd -S <server> -E -i 00_create_database.sql
-sqlcmd -S <server> -E -d POGovernance -i 01_tables.sql -i 02_procedures.sql -i 03_seed.sql
+sqlcmd -S <server> -E -d POGovernance -i 01_tables.sql -i 02_procedures.sql -i 03_seed.sql -i 04_api_master.sql
 ```
+
+Before running `04_api_master.sql`, set `@ApiBase` at the top of its seed to the URL of POGovApi on this server
+(default `http://localhost:5080/`) and `@ApiToken` to the `My_Encode`d static token (= `JwtSettings:SecretKey`).
 
 (`-E` = Windows login; with a SQL login use `-U sa -P <pw>`; add `-C` to trust a self-signed server certificate.)
 In SSMS: open each file, choose the database (`master` for 00, `POGovernance` for the others), Execute.
@@ -30,9 +34,32 @@ The API needs only `EXECUTE` on the procedures (they own the table access throug
 `GRANT EXECUTE ON SCHEMA::dbo TO vmm_app;` (see the end of `00_create_database.sql`). The migration tool
 additionally reads the tables (row counts) — run it as `db_owner` or `sa`.
 
-Instead of running 01..03 yourself you can set `PoGovSettings:SqlServerCreateSchema = true`: the API then runs the
-embedded copies of 01..03 at start-up when `schema_info` is missing (it needs `CREATE TABLE` / `CREATE PROCEDURE`
-rights for that). Without it, a database without the schema stops the start-up with a message naming the scripts.
+Instead of running 01..04 yourself you can set `PoGovSettings:SqlServerCreateSchema = true`: the API then runs the
+embedded copies of 01..04 at start-up when `schema_info` is missing, and 04 alone when only `API_MASTER` is missing
+(it needs `CREATE TABLE` / `CREATE PROCEDURE` rights for that; the seed gets `ApiMaster:BaseUrl` as its base URL).
+Without it, a database without the schema stops the start-up with a message naming the scripts; a database without
+`API_MASTER` only logs an error (the portal cannot load its API list until 04 is run).
+
+### The API master (04_api_master.sql)
+
+The portal never builds API URLs: it loads the active rows of `API_MASTER` at start-up (`GetAllApi` → `PRO_GET_ALL_API`)
+and calls each API by its task name (`AllApiNames.PO_TOOL1_VALIDATE` → row `PO_TOOL1_VALIDATE` →
+`POST http://<api>/api/v1/Tool1Validate`, its timeout in seconds, `Authorization: Bearer <static token>`). Columns are
+QPS's `ApiData`: `Api_Name`, `Task_Name` (unique), `Api_Url`, `Api_Username`, `Api_Pwd`, `Api_Proxy`, `Api_Port`
+(proxy, used when the portal's `AppConfigurationSettings:ProxyValue` = 1), `Api_Http_Method` (POST; GET only for
+`GetAllApi` / `Health`), `Api_Content_Type`, `Api_Authorization_Type` (`Bearer`), `Api_Authorization` (the static token,
+`My_Encode`d), `Api_Timeout`, `Token_Api_Name`, `Api_Token_Expiry_Time`, `Api_Token_Status`, `Active_Status`
+(0 = hidden from the portal) + `Description`, `Created_At`, `Updated_At`.
+
+Move the API to another server / port / https — one UPDATE, then restart the portal:
+
+```sql
+UPDATE dbo.API_MASTER SET Api_Url = REPLACE(Api_Url, N'http://localhost:5080/', N'https://pogov-api.company.local/'), Updated_At = SYSDATETIME();
+```
+
+New static token: `UPDATE dbo.API_MASTER SET Api_Authorization = N'<My_Encode(token)>'` and the same text in
+`JwtSettings:SecretKey` (API) and `MasterApiSettings:Api_Authorization` (portal). `GRANT EXECUTE ON SCHEMA::dbo` (below)
+covers `PRO_GET_ALL_API` too.
 
 ## 2. Configure the API (`POGovApi/appsettings.json`, or `appsettings.Production.json`, or environment variables)
 
@@ -127,6 +154,7 @@ password.
 | `PRO_POGOV_STORE_INFO` | `STORAGE_BYTES`, `IS_EMPTY`, `SCHEMA_VERSION` | StorageBytes, IsEmpty, start-up check |
 | `PRO_POGOV_TRUNCATE_ALL` | (`@Confirm = 'TRUNCATE ALL'`) | empty all data tables (migration `--force`) |
 | `PRO_POGOV_APP_LOCK` | `GET`, `RELEASE`, `STATE` | LockAsync (the server-wide write lock) |
+| `PRO_GET_ALL_API` | `ALL`, `BY_TASK` | API master list (`APIService.GetAllApi` / `GetSpecificApiData`, not IStore) |
 
 * **Types:** PostgreSQL `json` → `NVARCHAR(MAX)` with `CHECK (ISJSON(…) = 1)` (text kept exactly as the API
   writes it, Python `json.dumps` format); `bytea` → `VARBINARY(MAX)`; `timestamptz` → `DATETIMEOFFSET(7)`
@@ -138,7 +166,10 @@ password.
   its connection dies, SQL Server ends the session and releases the lock. Waiting instances log
   "Waiting for the database write lock …" every 10 s.
 * **Users / sessions:** when another instance wrote the document since this instance read it, the procedure
-  refuses the diff (`50409`) and the API re-reads the rows before writing.
+  refuses the diff (`50409`) and the API re-reads the rows before writing. `AccountsService` also checks the users /
+  sessions doc stamp before every read or change and re-reads the document when another instance wrote it; a sessions
+  write applies only this instance's new / ended sessions onto the stored ones, so instances never sign out each other's
+  users (a sign-in / sign-out on one instance is seen by the others on their next request).
 * **Errors:** connection failures are retried once on a fresh connection (pool cleared), deadlocks up to three
   times; while the server is unreachable the API answers 503 "The database is not reachable right now".
 * **Tests:** `tests/POGovernance.Tests/SqlServer` runs every store scenario (documents, users map, logs, audit,

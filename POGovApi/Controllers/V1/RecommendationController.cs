@@ -9,7 +9,7 @@ namespace POGovApi.Controllers.V1
     /// "📊 View Recommendation" (index.html openRec / _openRec / _render / _exportEngineARecs).
     /// Open to every signed-in role (admin, planner, cathead, buyer).
     /// </summary>
-    [Route("api/v1/recommendation")]
+    [Route("api/v1/[Action]")]
     public sealed class RecommendationController : ApiControllerBase
     {
         private readonly IRecommendationService _service;
@@ -26,19 +26,21 @@ namespace POGovApi.Controllers.V1
         /// for the selected months (default: the next 4 F4 months) and an optional dimension override.
         /// </summary>
         [HttpPost]
-        public async Task<ActionResult<ApiResponse<RecommendationViewDto>>> Get([FromBody] RecommendationRequestDto request, CancellationToken ct) =>
+        public async Task<ActionResult<ApiDataResponse<RecommendationViewDto>>> RecommendationGet([FromBody] RecommendationRequestDto request, CancellationToken ct) =>
             Success(await _service.GetAsync(request, ct));
 
         /// <summary>The month bar: every F4 month of the bucket and the default selection.</summary>
-        [HttpGet("months")]
-        public async Task<ActionResult<ApiResponse<RecommendationMonthsDto>>> Months([FromQuery] string? gm, [FromQuery] string? brand,
-            [FromQuery] string? mcCd, [FromQuery] string? mrp, [FromQuery] string? flag, [FromQuery] string? engine, CancellationToken ct) =>
-            Success(await _service.GetMonthsAsync(new RecommendationRequestDto { Gm = gm, Brand = brand, McCd = mcCd, Mrp = mrp, Flag = flag, Engine = engine }, ct));
+        [HttpPost]
+        public async Task<ActionResult<ApiDataResponse<RecommendationMonthsDto>>> RecommendationMonths([FromBody] RecommendationRequestDto request, CancellationToken ct) =>
+            Success(await _service.GetMonthsAsync(new RecommendationRequestDto
+            {
+                Gm = request.Gm, Brand = request.Brand, McCd = request.McCd, Mrp = request.Mrp, Flag = request.Flag, Engine = request.Engine
+            }, ct));
 
         /// <summary>"⬇ Download Excel (all columns)" — the 5-sheet full-detail workbook (Multi Concept).</summary>
-        [HttpPost("export")]
+        [HttpPost]
         [Produces("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", "application/json")]
-        public async Task<IActionResult> Export([FromBody] RecommendationRequestDto request, CancellationToken ct)
+        public async Task<IActionResult> RecommendationExport([FromBody] RecommendationRequestDto request, CancellationToken ct)
         {
             var export = await _service.BuildExportAsync(request, ct);
             var bytes = _excel.Write(export);

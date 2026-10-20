@@ -8,14 +8,14 @@ out. Staff only (admin, planner).
 
 | Call | Returns | Used for |
 |---|---|---|
-| `POST api/v1/assessment/run` | `Tool2RunResultDto { runId, runNo, view: Tool2ViewDto }` | sidebar **▶ Run Assessment** |
-| `GET api/v1/assessment/runs/{id}` | `Tool2ViewDto` | History → **Open** a saved run (v1.1.4 runs too) |
-| `POST api/v1/assessment/runs/{id}/detail` body `Tool2DetailFilterDto` | `Tool2DetailViewDto` | Detail view tab / filters / decision chips |
-| `POST api/v1/assessment/runs/{id}/rollup` body `Tool2RollupFilterDto` | `Tool2RollupDto` | Division × MC + Vendor tables' filters |
-| `GET api/v1/assessment/options[?runId=]` | `Tool2OptionsDto` | params, assessable F2 lines (disable Run when 0), filter lists, Category Heads |
-| `POST api/v1/assessment/export` body `Tool2ExportRequestDto` | file (xlsx / csv / zip); header `X-Export-Message` = toast | **⬇ Excel** buttons (and CSV) |
+| `PO_TOOL2_RUN` → `POST api/v1/Tool2Run` | `Tool2RunResultDto { runId, runNo, view: Tool2ViewDto }` | sidebar **▶ Run Assessment** |
+| `PO_TOOL2_GET_RUN` → `POST api/v1/Tool2GetRun` body `{RunId}` | `Tool2ViewDto` | History → **Open** a saved run (v1.1.4 runs too) |
+| `PO_TOOL2_DETAIL` → `POST api/v1/Tool2Detail` body `{RunId, Filter: Tool2DetailFilterDto}` | `Tool2DetailViewDto` | Detail view tab / filters / decision chips |
+| `PO_TOOL2_ROLLUP` → `POST api/v1/Tool2Rollup` body `{RunId, Filter: Tool2RollupFilterDto}` | `Tool2RollupDto` | Division × MC + Vendor tables' filters |
+| `PO_TOOL2_OPTIONS` → `POST api/v1/Tool2Options` body `{RunId?}` | `Tool2OptionsDto` | params, assessable F2 lines (disable Run when 0), filter lists, Category Heads |
+| `PO_TOOL2_EXPORT` → `POST api/v1/Tool2Export` body `Tool2ExportRequestDto` | file (xlsx / csv / zip); header `X-Export-Message` = toast | **⬇ Excel** buttons (and CSV) |
 
-Errors are `ApiResponse` messages with the v1.1.4 toast texts (e.g. "Please upload the F2 (Released PO) file in Data
+Errors are `ApiDataResponse` messages (responseMessage) with the v1.1.4 toast texts (e.g. "Please upload the F2 (Released PO) file in Data
 Setup first", "No valid rows found in F2 — …", "No rows match the selected Category Head(s) — export cancelled.").
 
 `runId` of a run that could not be saved starts with `unsaved-` (kept in server memory only); show

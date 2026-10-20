@@ -6,7 +6,8 @@ namespace Domain.Constants
         public const string AuthScheme = "PoGovSession";
         public const string PortalAuthScheme = "PoGovPortal";
         public const string PortalCookie = "pogov_auth";
-        public const string ApiClientName = "PoGovApi";
+        /// <summary>Header carrying the signed-in user's session token (the Authorization header carries the static API token).</summary>
+        public const string SessionHeader = "X-Session-Token";
         public const string RestrictedHeader = "X-VMM";
     }
 

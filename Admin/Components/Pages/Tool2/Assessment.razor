@@ -2,20 +2,19 @@
 @* Planner "📋 PO Assessment" (Tool 2) — port of index.html #sb-assess + #view-assess (runAssessment,
    renderAssessmentDashboard, renderBrandSummary, filterAssTable, renderRollupTables, exportAssXLSX / CSV,
    toggleCatHeadExportPanel) and shared.js enterHistoryRun / exitHistory. Every number and text comes from
-   api/v1/assessment (Tool2ViewDto, see docs/ui/tool2.md); this page only lays it out.
+   PO_TOOL2_* (Tool2ViewDto, see docs/ui/tool2.md); this page only lays it out.
    ?run={id} re-opens a saved run (History → Open). *@
 @attribute [Authorize(Roles = Roles.Staff)]
 @using Application.DTOs.Platform
+@using Application.DTOs.Requests
 @using Domain.Entities.Store
 @using Microsoft.AspNetCore.Components.Authorization
 @using Microsoft.AspNetCore.Components.Server.ProtectedBrowserStorage
-@inject IAPICallService Api
 @inject FileDownloadService Files
 @inject ISnackbar Snackbar
 @inject IDialogService Dialogs
 @inject NavigationManager Nav
-@inject IHttpClientFactory HttpFactory
-@inject AuthenticationStateProvider AuthState
+@inject ServerStatusService Status
 @inject ProtectedSessionStorage SessionStore
 @inject ILogger<Assessment> Log
 
@@ -190,11 +189,11 @@
 
     private async Task LoadSideAsync()
     {
-        var opt = Api.GetAsync<Tool2OptionsDto>("api/v1/assessment/options");
-        var st = Api.GetAsync<StatusResponse>("api/v1/status");
+        var opt = ApiMasterService.CallingAPI<ApiDataResponse<Tool2OptionsDto>, RunIdReq>(AllApiNames.PO_TOOL2_OPTIONS, new RunIdReq());
+        var st = Status.GetAsync();
         var o = await opt;
         if (o.IsSuccess) _options = o.Data;
-        else Snackbar.Add("⚠ " + o.ResponseMessage, Severity.Error);
+        else Snackbar.Add("⚠ " + o.responseMessage, Severity.Error);
         var s = await st;
         if (s.IsSuccess && s.Data != null) _datasets = s.Data.Datasets ?? new Dictionary<string, DatasetEntry>();
     }
@@ -205,15 +204,15 @@
         _loadingRun = true;
         _loadError = null;
         StateHasChanged();
-        var res = await Api.GetAsync<Tool2ViewDto>("api/v1/assessment/runs/" + Uri.EscapeDataString(id));
+        var res = await ApiMasterService.CallingAPI<ApiDataResponse<Tool2ViewDto>, RunIdReq>(AllApiNames.PO_TOOL2_GET_RUN, new RunIdReq { RunId = id });
         if (seq != _openSeq) return;
         _loadingRun = false;
         if (!res.IsSuccess || res.Data == null)
         {
             ClearView();
             _history = false;
-            _loadError = "Could not open saved run " + id + ": " + res.ResponseMessage;
-            Snackbar.Add("⚠ " + res.ResponseMessage, Severity.Error);
+            _loadError = "Could not open saved run " + id + ": " + res.responseMessage;
+            Snackbar.Add("⚠ " + res.responseMessage, Severity.Error);
             return;
         }
         SetView(res.Data, id, history: true);
@@ -231,7 +230,7 @@
         }
         catch (Exception e) { Log.LogDebug(e, "Session storage not readable"); }
         if (string.IsNullOrEmpty(id)) return;
-        var res = await Api.GetAsync<Tool2ViewDto>("api/v1/assessment/runs/" + Uri.EscapeDataString(id));
+        var res = await ApiMasterService.CallingAPI<ApiDataResponse<Tool2ViewDto>, RunIdReq>(AllApiNames.PO_TOOL2_GET_RUN, new RunIdReq { RunId = id });
         if (res.IsSuccess && res.Data != null && string.IsNullOrEmpty(RunParam)) SetView(res.Data, id, history: false);
     }
 
@@ -268,12 +267,12 @@
         _running = true;
         _statusOverride = "⏳ Assessing F2 lines…";
         StateHasChanged();
-        var res = await Api.PostAsync<Tool2RunResultDto>("api/v1/assessment/run");
+        var res = await ApiMasterService.CallingAPI<ApiDataResponse<Tool2RunResultDto>, EmptyReq>(AllApiNames.PO_TOOL2_RUN, EmptyReq.Instance);
         _running = false;
         if (!res.IsSuccess || res.Data == null)
         {
             _statusOverride = null;
-            Snackbar.Add(res.ResponseMessage, Severity.Error);
+            Snackbar.Add(res.responseMessage ?? "", Severity.Error);
             return;
         }
         var v = res.Data.View;
@@ -322,11 +321,11 @@
         var seq = ++_detailSeq;
         _detailBusy = true;
         StateHasChanged();
-        var res = await Api.PostAsync<Tool2DetailViewDto>($"api/v1/assessment/runs/{Uri.EscapeDataString(_runId)}/detail", _filter);
+        var res = await ApiMasterService.CallingAPI<ApiDataResponse<Tool2DetailViewDto>, Tool2DetailReq>(AllApiNames.PO_TOOL2_DETAIL, new Tool2DetailReq { RunId = _runId, Filter = _filter });
         if (seq != _detailSeq) return;
         _detailBusy = false;
         if (res.IsSuccess && res.Data != null) _detail = res.Data;
-        else Snackbar.Add("⚠ " + res.ResponseMessage, Severity.Error);
+        else Snackbar.Add("⚠ " + res.responseMessage, Severity.Error);
     }
 
     private async Task RollupChangedAsync()
@@ -335,11 +334,11 @@
         var seq = ++_rollupSeq;
         _rollupBusy = true;
         StateHasChanged();
-        var res = await Api.PostAsync<Tool2RollupDto>($"api/v1/assessment/runs/{Uri.EscapeDataString(_runId)}/rollup", _rollupFilter);
+        var res = await ApiMasterService.CallingAPI<ApiDataResponse<Tool2RollupDto>, Tool2RollupReq>(AllApiNames.PO_TOOL2_ROLLUP, new Tool2RollupReq { RunId = _runId, Filter = _rollupFilter });
         if (seq != _rollupSeq) return;
         _rollupBusy = false;
         if (res.IsSuccess && res.Data != null) _rollup = res.Data;
-        else Snackbar.Add("⚠ " + res.ResponseMessage, Severity.Error);
+        else Snackbar.Add("⚠ " + res.responseMessage, Severity.Error);
     }
 
     private async Task ExportAsync(string format)
@@ -349,7 +348,7 @@
         StateHasChanged();
         try
         {
-            var client = new Tool2ExportClient(HttpFactory, AuthState, Api);
+            var client = new Tool2ExportClient(ApiMasterService);
             var req = new Tool2ExportRequestDto
             {
                 RunId = _runId,
@@ -358,12 +357,12 @@
                 SeparateFiles = _separate,
             };
             var (file, msg) = await client.ExportAsync(req);
-            if (!file.IsSuccess || file.Data == null)
+            if (!file.IsSuccess)
             {
-                Snackbar.Add(file.ResponseMessage, Severity.Error);
+                Snackbar.Add(file.responseMessage ?? "", Severity.Error);
                 return;
             }
-            await Files.SaveAsync(file.Data);
+            await Files.SaveAsync(file);
             Snackbar.Add(msg ?? (format == "csv" ? "CSV exported ✓" : "Excel exported ✓"), Severity.Success);
         }
         finally

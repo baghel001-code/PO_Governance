@@ -45,10 +45,15 @@ namespace Infrastructure.ServicesConfiguration
                 services.AddSingleton<New_Enc_Dec>();
                 services.AddSingleton(sp => new DapperHelper(configuration, sp.GetRequiredService<New_Enc_Dec>(), sp.GetRequiredService<ILogger<DapperHelper>>()));
                 services.AddSingleton<IStore>(sp => new SqlServerStore(sp.GetRequiredService<DapperHelper>(), sp.GetService<ILogger<SqlServerStore>>(),
-                    configuration.GetValue<bool>(PoGovSettings.SectionName + ":SqlServerCreateSchema")));
+                    configuration.GetValue<bool>(PoGovSettings.SectionName + ":SqlServerCreateSchema"))
+                {
+                    ApiMasterBaseUrl = configuration["ApiMaster:BaseUrl"]
+                });
             }
             else
                 throw new InvalidOperationException($"PoGovSettings:Storage = '{storage}': use 'sqlserver' or 'postgres'.");
+            // API master list (GetAllApi): API_MASTER via PRO_GET_ALL_API; without SQL Server, the 04_api_master.sql seed
+            services.AddSingleton<IAPI>(sp => new APIService(sp.GetService<DapperHelper>(), configuration, sp.GetService<ILogger<APIService>>()));
             services.AddSingleton<IAppClock, AppClock>();
             services.AddSingleton<IPasswordHasher, PasswordHasher>();
             services.AddSingleton<IDatasetCache, DatasetCache>();
@@ -78,6 +83,20 @@ namespace Infrastructure.ServicesConfiguration
 
         /// <summary>Exception → ApiResponse mapping. Add first in the pipeline.</summary>
         public static IApplicationBuilder UseApiExceptionHandling(this IApplicationBuilder app) => app.UseMiddleware<ExceptionMiddleware>();
+
+        /// <summary>Static API token (QPS StaticTokenMiddleware, JwtSettings:SecretKey) on api/v1/* except Health. Add before UseAuthentication.</summary>
+        public static IApplicationBuilder UseStaticToken(this IApplicationBuilder app) => app.UseMiddleware<StaticTokenMiddleware>();
+
+        /// <summary>
+        /// Portal side (QPS AddInfrastructure(useProxyValue …)): <see cref="IAPICall"/> = <see cref="APICallService"/>, scoped, with the
+        /// <see cref="ISessionTokenAccessor"/> the portal registers (signed-in user's session token → X-Session-Token).
+        /// </summary>
+        public static IServiceCollection AddApiCallService(this IServiceCollection services, int useProxyValue)
+        {
+            services.AddScoped<IAPICall>(sp => new APICallService(useProxyValue, sp.GetService<ISessionTokenAccessor>(),
+                sp.GetService<ILoggerFactory>()?.CreateLogger<APICallService>()));
+            return services;
+        }
 
         /// <summary>mustChange → 403 (and the optional X-VMM check). Add after UseAuthentication.</summary>
         public static IApplicationBuilder UseMustChangePassword(this IApplicationBuilder app) => app.UseMiddleware<MustChangePasswordMiddleware>();

@@ -1,5 +1,4 @@
 @* feedback.js F.renderAdmin(): every user's feedback, status filter, search, average rating, status + note per item. *@
-@inject IAPICallService Api
 @inject ISnackbar Snackbar
 
 @if (_error != null)
@@ -109,8 +108,8 @@ else
 
     public async Task LoadAsync()
     {
-        var res = await Api.GetFeedbackAsync(mine: false);
-        if (!res.IsSuccess) { _error = res.ResponseMessage; return; }
+        var res = await ApiMasterService.GetFeedbackAsync(mine: false);
+        if (!res.IsSuccess) { _error = res.responseMessage; return; }
         _error = null;
         _items = res.Data?.Items ?? new();
         _edits.Clear();
@@ -122,8 +121,8 @@ else
         _busy = true;
         try
         {
-            var res = await Api.SetFeedbackStatusAsync(id, e.Status, (e.Note ?? "").Trim());
-            if (!res.IsSuccess) { Snackbar.Warn(res.ResponseMessage); return; }
+            var res = await ApiMasterService.SetFeedbackStatusAsync(id, e.Status, (e.Note ?? "").Trim());
+            if (!res.IsSuccess) { Snackbar.Warn(res.responseMessage); return; }
             Snackbar.Toast("Saved " + id);
             await LoadAsync();
         }

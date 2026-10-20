@@ -4,21 +4,21 @@ Ports of the remaining v1.1.4 analytics views of `legacy/python-app/app/index.ht
 and colours are produced on the server; the portal lays out the DTO fields named below (all in
 `DecisionEngine.Results.Analytics.*`). Colours are hex values unless noted; CSS variables refer to the portal
 theme (`--vmm-pink`, `--vmm-cyan`, `--vmm-navy`, `--ink2/3`, `--sur2/3`, `--brd`, `--grn`, `--grnl`). Number
-texts are already formatted (Indian grouping). Responses are wrapped in `ApiResponse<T>`.
+texts are already formatted (Indian grouping). Responses are wrapped in `ApiDataResponse<T>` (responseCode, responseMessage, recordId, Data).
 
 | Screen | Endpoint | Roles | DTO |
 |---|---|---|---|
-| 🔎 Attribute Analysis L1 | `GET api/v1/attribute-analysis?brand=&mc=&minStock=` | staff | `AaLevel1Dto` |
-| … L2 (MRP × Flag) | `GET api/v1/attribute-analysis/mc?brand=&mcKey=` | staff | `AaLevel2Dto` |
-| … L3 (bucket) | `GET api/v1/attribute-analysis/bucket?brand=&mcKey=&mrp=&flag=` | staff | `AaLevel3Dto` |
-| 📊 Category Insights | `GET api/v1/insights/category?brand=&division=&mc=&month=&engine=&decision=&from=&to=` | any | `CatInsightsDto` |
-| Planner dashboard | `GET api/v1/insights/planner?runId=&brand=&division=&mc=&mrp=&flag=&deliveryMonth=&engine=&decision=` | staff | `PlannerDashboardDto` |
-| Assistant header | `GET api/v1/assistant/chat/info?scope=tool1\|tool2` | any / staff for tool2 | `AssistantChatInfoDto` |
-| Assistant question | `POST api/v1/assistant/chat` body `AssistantChatRequest` | any / staff for tool2 | `AssistantChatResponse` |
-| 🤖 AI Insights | `POST api/v1/assistant/insights` body `{focus, runId}` | staff | `AiInsightsDto` |
-| How it works values | `GET api/v1/help/params` | any | `HelpParamsDto` |
+| 🔎 Attribute Analysis L1 | `PO_ATTR_LEVEL1` → `POST api/v1/AttrAnalysisLevel1` body `AttrAnalysisQuery {Brand, Mc, MinStock}` | staff | `AaLevel1Dto` |
+| … L2 (MRP × Flag) | `PO_ATTR_LEVEL2` → `POST api/v1/AttrAnalysisLevel2` body `AttrBucketReq {Brand, McKey}` | staff | `AaLevel2Dto` |
+| … L3 (bucket) | `PO_ATTR_LEVEL3` → `POST api/v1/AttrAnalysisLevel3` body `AttrBucketReq {Brand, McKey, Mrp, Flag}` | staff | `AaLevel3Dto` |
+| 📊 Category Insights | `PO_INSIGHTS_CATEGORY` → `POST api/v1/InsightsCategory` body `CatInsightsQuery` | any | `CatInsightsDto` |
+| Planner dashboard | `PO_INSIGHTS_PLANNER` → `POST api/v1/InsightsPlanner` body `PlannerDashboardQuery` | staff | `PlannerDashboardDto` |
+| Assistant header | `PO_ASSISTANT_CHAT_INFO` → `POST api/v1/AssistantChatInfo` body `{Scope: tool1\|tool2}` | any / staff for tool2 | `AssistantChatInfoDto` |
+| Assistant question | `PO_ASSISTANT_CHAT` → `POST api/v1/AssistantChat` body `AssistantChatRequest` | any / staff for tool2 | `AssistantChatResponse` |
+| 🤖 AI Insights | `PO_ASSISTANT_INSIGHTS` → `POST api/v1/AssistantInsights` body `{focus, runId}` | staff | `AiInsightsDto` |
+| How it works values | `PO_HELP_PARAMS` (`POST api/v1/HelpParams`) | any | `HelpParamsDto` |
 
-The raw provider proxy (`api/v1/ai/chat`, `api/v1/ai/insights`) belongs to the platform and is not used by these screens.
+The raw provider proxy (`PO_AI_CHAT` / `PO_AI_INSIGHTS` → `api/v1/AiChat`, `api/v1/AiInsights`) belongs to the platform and is not used by these screens.
 
 ---
 
@@ -121,7 +121,7 @@ early. Suggested placement: a section of the Tool 2 (PO Assessment) results page
   Lines · Retain · Watch List · Reduce/Cancel · Value at Risk (₹) (`ValueAtRiskText`) · Risk %), Recommendations
   ("💡 Recommendations for the Planning Team"). Same styling as the Category dashboard.
 
-`clearAllRequests` (Clear All on Today's Requests) only calls the platform's `DELETE api/v1/requests?date=today`
+`clearAllRequests` (Clear All on Today's Requests) only calls the platform's `PO_REQUESTS_CLEAR` (`POST api/v1/RequestsClear` body `{Date}`)
 after the confirm text of v1.1.4 (*"Clear ALL of today's requests for EVERY user? …"*), then reloads the
 request views — nothing in this area.
 
@@ -162,6 +162,6 @@ Sidebar: focus select (`risk` Highest-risk lines, `brand` Patterns by Brand/MC, 
 Static text: `Admin/wwwroot/help/hw-banner.html` (dark banner), one fragment per tab
 `help/hw-{vision,t1-engA,t1-engB,t2-engA,t2-engB,t2-export,access}.html` (order and titles: `HelpParamsDto.Tabs`;
 `vision` is the default) and the styles `help/how-it-works.css`. Tab buttons: `.hw-tab` / `.hw-tab.active`
-(navy). Live values: `GET api/v1/help/params` → replace each `{{NAME}}` with `Placeholders[NAME]` (D, BUF, MIX, N,
+(navy). Live values: `PO_HELP_PARAMS` (`POST api/v1/HelpParams`) → replace each `{{NAME}}` with `Placeholders[NAME]` (D, BUF, MIX, N,
 MWD, T1, T2, EFFT1, EFFT2, T1_CALC, T2_CALC, T1_RESULT, T2_RESULT). Re-fetch after the parameters change.
 Fragments are regenerated with `node tests/parity/analytics/extract-help.js`.

@@ -1,6 +1,5 @@
 @* users.js renderUsers / drawEdit / bulk: the sign-in accounts. *@
 @using System.Text.RegularExpressions
-@inject IAPICallService Api
 @inject UserSessionState Session
 @inject ISnackbar Snackbar
 @inject IDialogService Dialogs
@@ -177,8 +176,8 @@ else
 
     private async Task LoadAsync()
     {
-        var res = await Api.GetUsersAsync();
-        if (!res.IsSuccess || res.Data == null) { _error = res.ResponseMessage; return; }
+        var res = await ApiMasterService.GetUsersAsync();
+        if (!res.IsSuccess || res.Data == null) { _error = res.responseMessage; return; }
         _error = null;
         _data = res.Data;
         _labels = _data.Roles.ToDictionary(r => r.Id, r => r.Label);
@@ -221,8 +220,8 @@ else
         {
             if (string.IsNullOrEmpty(_edit))
             {
-                var res = await Api.AddUserAsync(_form.Email.Trim(), _form.Name.Trim(), OrderedRoles);
-                if (!res.IsSuccess) { Snackbar.Warn(res.ResponseMessage); return; }
+                var res = await ApiMasterService.AddUserAsync(_form.Email.Trim(), _form.Name.Trim(), OrderedRoles);
+                if (!res.IsSuccess) { Snackbar.Warn(res.responseMessage); return; }
                 Snackbar.Toast("User added — starting password " + _data!.DefaultPassword);
             }
             else
@@ -233,8 +232,8 @@ else
                     ["roles"] = new JsonArray(OrderedRoles.Select(r => (JsonNode?)r).ToArray()),
                     ["active"] = _form.Active
                 };
-                var res = await Api.UpdateUserAsync(_edit, changes);
-                if (!res.IsSuccess) { Snackbar.Warn(res.ResponseMessage); return; }
+                var res = await ApiMasterService.UpdateUserAsync(_edit, changes);
+                if (!res.IsSuccess) { Snackbar.Warn(res.responseMessage); return; }
                 Snackbar.Toast("Saved");
             }
             _edit = null;
@@ -248,8 +247,8 @@ else
         var email = _edit;
         if (string.IsNullOrEmpty(email)) return;
         if (!await Dialogs.Confirm("Delete the login " + email + "?\n\nThey can no longer sign in. Their past requests and approvals stay in History.\nIf they are in the SCR products file, the next SCR upload creates the login again.\n\nTo block someone without deleting, untick \"Active\" instead.")) return;
-        var res = await Api.DeleteUserAsync(email);
-        if (!res.IsSuccess) { Snackbar.Warn(res.ResponseMessage); return; }
+        var res = await ApiMasterService.DeleteUserAsync(email);
+        if (!res.IsSuccess) { Snackbar.Warn(res.responseMessage); return; }
         Snackbar.Toast("Deleted " + email);
         _edit = null;
         await LoadAsync();
@@ -257,8 +256,8 @@ else
 
     private async Task UnlockAsync(string email)
     {
-        var res = await Api.UpdateUserAsync(email, new JsonObject { ["unlock"] = true });
-        if (!res.IsSuccess) { Snackbar.Warn(res.ResponseMessage); return; }
+        var res = await ApiMasterService.UpdateUserAsync(email, new JsonObject { ["unlock"] = true });
+        if (!res.IsSuccess) { Snackbar.Warn(res.responseMessage); return; }
         Snackbar.Toast("Done");
         await LoadAsync();
     }
@@ -266,8 +265,8 @@ else
     private async Task ResetAsync(string email)
     {
         if (!await Dialogs.Confirm("Reset the password of " + email + " to the default (" + _data!.DefaultPassword + ")?\n\nThey are signed out everywhere and must choose a new password at next sign-in.")) return;
-        var res = await Api.ResetPasswordAsync(email);
-        if (!res.IsSuccess) { Snackbar.Warn(res.ResponseMessage); return; }
+        var res = await ApiMasterService.ResetPasswordAsync(email);
+        if (!res.IsSuccess) { Snackbar.Warn(res.responseMessage); return; }
         Snackbar.Toast("Password reset to " + _data.DefaultPassword);
         await LoadAsync();
     }
@@ -289,8 +288,8 @@ else
         _busy = true;
         try
         {
-            var res = await Api.BulkAddUsersAsync(users);
-            if (!res.IsSuccess || res.Data == null) { Snackbar.Warn(res.ResponseMessage); return; }
+            var res = await ApiMasterService.BulkAddUsersAsync(users);
+            if (!res.IsSuccess || res.Data == null) { Snackbar.Warn(res.responseMessage); return; }
             var d = res.Data;
             Snackbar.Toast("Added " + d.Added.Count + (d.Errors.Count > 0 ? " · " + d.Errors.Count + " skipped" : ""));
             if (d.Errors.Count > 0) await Dialogs.Alert("Skipped:\n" + string.Join("\n", d.Errors));

@@ -15,7 +15,10 @@
 @using Admin.Components
 @using Admin.Components.Layout
 @using Admin.Components.Shared
-@using Admin.Interfaces
+@using Application.Interfaces.V1
+@using Domain.Entities.Common
+@using Domain.Entities.Request
+@inject IAPICall ApiMasterService
 @using Admin.Services
 @using Domain.Constants
 @using DecisionEngine.Common

@@ -1,10 +1,9 @@
 @* "⚙ Parameters" of the v1.1.4 Data Setup sidebar (inputs pp-T1 … pp-borderTolerance, syncParams).
    Each change is parsed like syncParams (JS parseFloat — a value that is not a number is ignored) and
-   saved with PUT api/v1/params: the full params object is re-read and the edit merged into it, so keys
+   saved with PO_PARAMS_SAVE: the full params object is re-read and the edit merged into it, so keys
    this panel does not show (seasonCurrent, seasonFallback, grcAsOfPeriod …) are kept. *@
 @using System.Text.Json.Nodes
 @implements IDisposable
-@inject IAPICallService Api
 @inject ServerStatusService Status
 @inject ISnackbar Snackbar
 
@@ -93,8 +92,8 @@
 
     private async Task LoadAsync()
     {
-        var res = await Api.GetAsync<JsonNode>("api/v1/params");
-        if (!res.IsSuccess) { _loadError = "Could not load parameters: " + res.ResponseMessage; return; }
+        var res = await PlannerParams.ReadAsync(ApiMasterService);
+        if (!res.IsSuccess) { _loadError = "Could not load parameters: " + res.responseMessage; return; }
         _loadError = null;
         _loadedVersion = Status.ParamsVersion;
         if (res.Data is JsonObject o)
@@ -140,17 +139,17 @@
         StateHasChanged();
         try
         {
-            var cur = await Api.GetAsync<JsonNode>("api/v1/params");
-            if (!cur.IsSuccess) throw new InvalidOperationException(cur.ResponseMessage);
+            var cur = await PlannerParams.ReadAsync(ApiMasterService);
+            if (!cur.IsSuccess) throw new InvalidOperationException(cur.responseMessage);
             var full = cur.Data as JsonObject ?? new JsonObject();
             full = (JsonObject)full.DeepClone();
             foreach (var kv in Defaults)
                 if (full[kv.Key] == null) full[kv.Key] = kv.Value;
             full[key] = v;
-            var res = await Api.PutAsync<JsonObject>("api/v1/params", full);
-            if (!res.IsSuccess) throw new InvalidOperationException(res.ResponseMessage);
+            var res = await PlannerParams.WriteAsync(ApiMasterService, full);
+            if (!res.IsSuccess) throw new InvalidOperationException(res.responseMessage);
             long ver = 0;
-            if (res.Data?["paramsVersion"] is JsonValue pv && pv.TryGetValue<long>(out var l)) ver = l;
+            if (res.Data != null) ver = res.Data.ParamsVersion;
             // refresh our copy of every value (someone may have changed another one meanwhile)
             foreach (var k in Defaults.Keys)
                 if (full[k] is JsonValue fv && fv.TryGetValue<double>(out var d) && k != key) { _text[k] = Js.NumberToString(d); Bump(k); }

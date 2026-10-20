@@ -1,40 +1,42 @@
 using Application.Interfaces.V1.Analytics;
 using DecisionEngine.Results.Analytics.AttrAnalysis;
+using Domain.Entities.Request;
 using Domain.Entities.Response;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Mvc.ModelBinding;
 
 namespace POGovApi.Controllers.V1
 {
     /// <summary>Planner "🔎 Attribute Analysis" screen (index.html view-attranalysis). Planners and admins only.</summary>
-    [Route("api/v1/attribute-analysis")]
+    [Route("api/v1/[Action]")]
     public sealed class AttributeAnalysisController : ApiControllerBase
     {
         private readonly IAttributeAnalysisService _aa;
 
         public AttributeAnalysisController(IAttributeAnalysisService aa) => _aa = aa;
 
-        /// <summary>Level 1 — Brand → MC (filters: brand, mc, minStock).</summary>
-        [HttpGet]
-        public async Task<ActionResult<ApiResponse<AaLevel1Dto>>> Level1([FromQuery] AttrAnalysisQuery query, CancellationToken ct)
+        /// <summary>Level 1 — Brand → MC (filters: Brand, Mc, MinStock).</summary>
+        [HttpPost]
+        public async Task<ActionResult<ApiDataResponse<AaLevel1Dto>>> AttrAnalysisLevel1([FromBody(EmptyBodyBehavior = EmptyBodyBehavior.Allow)] AttrAnalysisQuery? req, CancellationToken ct)
         {
             RequireStaff();
-            return Success(await _aa.GetLevel1Async(query, ct));
+            return Success(await _aa.GetLevel1Async(req ?? new AttrAnalysisQuery(), ct));
         }
 
-        /// <summary>Level 2 — MRP × Flag buckets of one Brand × MC (mcKey = "MC CD|||MC Desc" from level 1).</summary>
-        [HttpGet("mc")]
-        public async Task<ActionResult<ApiResponse<AaLevel2Dto>>> Level2([FromQuery] string brand, [FromQuery] string mcKey, CancellationToken ct)
+        /// <summary>Level 2 — MRP × Flag buckets of one Brand × MC (McKey = "MC CD|||MC Desc" from level 1).</summary>
+        [HttpPost]
+        public async Task<ActionResult<ApiDataResponse<AaLevel2Dto>>> AttrAnalysisLevel2([FromBody] AttrBucketReq req, CancellationToken ct)
         {
             RequireStaff();
-            return Success(await _aa.GetLevel2Async(brand, mcKey, ct));
+            return Success(await _aa.GetLevel2Async(req.Brand ?? "", req.McKey ?? "", ct));
         }
 
         /// <summary>Level 3 — attribute Sales Mix / Stock Mix tables and colour-level STR of one bucket.</summary>
-        [HttpGet("bucket")]
-        public async Task<ActionResult<ApiResponse<AaLevel3Dto>>> Level3([FromQuery] string brand, [FromQuery] string mcKey, [FromQuery] string? mrp, [FromQuery] string? flag, CancellationToken ct)
+        [HttpPost]
+        public async Task<ActionResult<ApiDataResponse<AaLevel3Dto>>> AttrAnalysisLevel3([FromBody] AttrBucketReq req, CancellationToken ct)
         {
             RequireStaff();
-            return Success(await _aa.GetLevel3Async(brand, mcKey, mrp ?? "", flag ?? "", ct));
+            return Success(await _aa.GetLevel3Async(req.Brand ?? "", req.McKey ?? "", req.Mrp ?? "", req.Flag ?? "", ct));
         }
     }
 }

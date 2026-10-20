@@ -1,9 +1,9 @@
 using Admin.Auth;
 using Admin.Common;
-using Admin.Interfaces;
 using Admin.Services;
+using Application.Interfaces.V1;
 using Domain.Constants;
-using Microsoft.AspNetCore.Authentication.Cookies;
+using Infrastructure.ServicesConfiguration;
 using Microsoft.AspNetCore.Components.Authorization;
 
 namespace Admin.ServiceRegistration
@@ -13,13 +13,12 @@ namespace Admin.ServiceRegistration
         public static IServiceCollection AddPortal(this IServiceCollection services, IConfiguration config, IWebHostEnvironment env)
         {
             services.Configure<PortalSettings>(config.GetSection("PortalSettings"));
+            services.Configure<AppConfigurationSettings>(config.GetSection("AppConfigurationSettings"));
             var settings = config.GetSection("PortalSettings").Get<PortalSettings>() ?? new PortalSettings();
 
-            services.AddHttpClient(AppConstants.ApiClientName, c =>
-            {
-                c.BaseAddress = new Uri(settings.ApiBaseUrl.EndsWith('/') ? settings.ApiBaseUrl : settings.ApiBaseUrl + "/");
-                c.Timeout = TimeSpan.FromSeconds(settings.ApiTimeoutSeconds);
-            });
+            // QPS: IAPICall = Infrastructure APICallService (task name → API_MASTER row); the user's session token from the auth state.
+            services.AddApiCallService(config.GetValue<int>("AppConfigurationSettings:ProxyValue"));
+            services.AddScoped<ISessionTokenAccessor, SessionTokenAccessor>();
 
             services.AddAuthentication(AppConstants.PortalAuthScheme)
                 .AddCookie(AppConstants.PortalAuthScheme, o =>
@@ -38,7 +37,6 @@ namespace Admin.ServiceRegistration
             services.AddCascadingAuthenticationState();
             services.AddScoped<AuthenticationStateProvider, ApiRevalidatingAuthStateProvider>();
 
-            services.AddScoped<IAPICallService, APICallService>();
             services.AddScoped<PortalAuthService>();
             services.AddScoped<UserSessionState>();
             services.AddScoped<ServerStatusService>();

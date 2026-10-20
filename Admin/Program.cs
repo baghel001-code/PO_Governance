@@ -2,6 +2,8 @@ using Admin.Auth;
 using Admin.Components;
 using Admin.ServiceRegistration;
 using Domain.Constants;
+using Infrastructure.Services.V1;
+using Infrastructure.ServicesConfiguration;
 using MudBlazor;
 using MudBlazor.Services;
 using Serilog;
@@ -29,9 +31,21 @@ builder.Services.AddMudServices(c =>
     c.SnackbarConfiguration.ShowCloseIcon = true;
 });
 builder.Services.AddHttpContextAccessor();
+// QPS: MasterApiSettings (where GetAllApi is + the encoded static API token) and ApiNamesSettings (task names)
+ConfigurationInitializer.InitializeApiSettings(builder.Configuration);
 builder.Services.AddPortal(builder.Configuration, builder.Environment);
 
 var app = builder.Build();
+
+// QPS: load the API master list (AllApi.ApiDetails) through AllApiNames.MasterApi = GetAllApi. When POGovApi is not up yet the
+// portal still starts (the error is logged) and APICallService loads the list on the first call.
+{
+    var log = app.Services.GetRequiredService<ILoggerFactory>().CreateLogger("ApiMaster");
+    var apiMaster = new APICallService(builder.Configuration.GetValue<int>("AppConfigurationSettings:ProxyValue"), null, log);
+    if (!await apiMaster.LoadApiMasterAsync())
+        log.LogError("POGovApi API master not loaded at start-up ({Url}) - sign-in shows 'Cannot reach the server' until POGovApi answers.",
+            Domain.Entities.Common.ApiMasterData.apiData?.Api_Url);
+}
 
 app.Use(async (ctx, next) =>
 {

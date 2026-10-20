@@ -2,7 +2,7 @@ using System.Text.Json.Serialization;
 
 namespace DecisionEngine.Results.Tool2
 {
-    /// <summary>POST api/v1/assessment/export.</summary>
+    /// <summary>PO_TOOL2_EXPORT (api/v1/Tool2Export).</summary>
     public sealed class Tool2ExportRequestDto
     {
         /// <summary>The saved run to export (required).</summary>

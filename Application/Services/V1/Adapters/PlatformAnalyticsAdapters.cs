@@ -10,7 +10,7 @@ namespace Application.Services.V1.Adapters
 {
     /// <summary>
     /// Requests a user may see, for the analytics screens: each day's live requests with approvals applied,
-    /// filtered by visibility — exactly what GET api/v1/requests?date= returns (v1.1.4 S.requests).
+    /// filtered by visibility — exactly what PO_REQUESTS_GET (api/v1/RequestsGet) returns (v1.1.4 S.requests).
     /// </summary>
     public sealed class RequestHistorySource : IRequestHistorySource
     {

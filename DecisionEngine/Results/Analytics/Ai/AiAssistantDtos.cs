@@ -9,7 +9,7 @@ namespace DecisionEngine.Results.Analytics.Ai
         public string Content { get; set; } = "";
     }
 
-    /// <summary>POST api/v1/assistant/chat.</summary>
+    /// <summary>PO_ASSISTANT_CHAT (api/v1/AssistantChat).</summary>
     public sealed class AssistantChatRequest
     {
         /// <summary>"tool1" (Category — requests) or "tool2" (Planner — Raised PO Assessment; staff only).</summary>
@@ -54,7 +54,7 @@ namespace DecisionEngine.Results.Analytics.Ai
         public List<AiChatMessageDto> Messages { get; set; } = new();
     }
 
-    /// <summary>POST api/v1/assistant/insights.</summary>
+    /// <summary>PO_ASSISTANT_INSIGHTS (api/v1/AssistantInsights).</summary>
     public sealed class AiInsightsRequest
     {
         /// <summary>"risk" (Highest-risk lines, default), "brand" (Patterns by Brand/MC), "action" (What to action first).</summary>

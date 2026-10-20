@@ -1,7 +1,6 @@
 @* Today's Tool 1 requests (index.html renderCatHistory + shared.js visibleRequests / toggleMine / clearRequests).
    Embeddable: other screens call RefreshAsync() after saving a request. *@
 @implements IDisposable
-@inject IAPICallService Api
 @inject UserSessionState Session
 @inject ServerStatusService Status
 @inject ISnackbar Snackbar
@@ -100,8 +99,8 @@ else
     /// <summary>Reloads today's requests from the server.</summary>
     public async Task RefreshAsync()
     {
-        var res = await Api.GetRequestsDayAsync();
-        if (!res.IsSuccess || res.Data == null) { _error = res.ResponseMessage; _all ??= new(); }
+        var res = await ApiMasterService.GetRequestsDayAsync();
+        if (!res.IsSuccess || res.Data == null) { _error = res.responseMessage; _all ??= new(); }
         else
         {
             _error = null;
@@ -116,8 +115,7 @@ else
     private void OnStatus()
     {
         if (_all == null || _busy) return;
-        if (Status.Raw.ValueKind == System.Text.Json.JsonValueKind.Object && Status.Raw.TryGetProperty("reqSeq", out var s)
-            && s.ValueKind == System.Text.Json.JsonValueKind.Number && s.GetInt32() != _seq)
+        if (Status.Last is { } st && st.ReqSeq != _seq)
             _ = RefreshAsync();
     }
 
@@ -129,8 +127,8 @@ else
         _busy = true;
         try
         {
-            var res = await Api.ClearRequestsAsync(string.IsNullOrEmpty(_date) ? Fmt.Ymd(Fmt.NowIst) : _date);
-            if (!res.IsSuccess) { Snackbar.Warn("Could not clear (HTTP " + res.ResponseCode + ")"); return; }
+            var res = await ApiMasterService.ClearRequestsAsync(string.IsNullOrEmpty(_date) ? Fmt.Ymd(Fmt.NowIst) : _date);
+            if (!res.IsSuccess) { Snackbar.Warn("Could not clear (HTTP " + res.responseCode + ")"); return; }
             _seq = res.Data?.Seq ?? _seq;
         }
         finally { _busy = false; }

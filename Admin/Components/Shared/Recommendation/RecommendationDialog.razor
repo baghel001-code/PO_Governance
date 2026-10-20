@@ -1,9 +1,8 @@
 @* "📊 View Recommendation" modal — port of index.html #rec-overlay (_openRec / _buildMonthBar / _render /
    _paintRec / _traceRow / _toggleRecGrp / _exportEngineARecs). Every figure comes from
-   POST api/v1/recommendation (RecommendationViewDto); this component only lays it out.
+   PO_RECOMMENDATION_GET (RecommendationViewDto); this component only lays it out.
    Open it with RecommendationDialog.ShowAsync(DialogService, gm) or (…, new RecommendationRequestDto{…}). *@
 @using DecisionEngine.Results.Recommendation
-@inject IAPICallService Api
 @inject FileDownloadService Files
 @inject ISnackbar Snackbar
 @inject IDialogService Dialogs
@@ -111,12 +110,12 @@
         _failure = null;
         _open.Clear();
         StateHasChanged();
-        var res = await Api.PostAsync<RecommendationViewDto>("api/v1/recommendation", CurrentRequest());
+        var res = await ApiMasterService.CallingAPI<ApiDataResponse<RecommendationViewDto>, RecommendationRequestDto>(AllApiNames.PO_RECOMMENDATION_GET, CurrentRequest());
         if (seq != _seq) return; // a newer request superseded this one
         _loading = false;
         if (!res.IsSuccess || res.Data == null)
         {
-            _failure = res.ResponseMessage;
+            _failure = res.responseMessage;
             StateHasChanged();
             return;
         }
@@ -180,9 +179,9 @@
 
     private async Task ExportAsync()
     {
-        var file = await Api.DownloadAsync("api/v1/recommendation/export", CurrentRequest());
-        if (!file.IsSuccess || file.Data == null) { Snackbar.Add(file.ResponseMessage); return; }
-        await Files.SaveAsync(file.Data);
+        var file = await ApiMasterService.CallingAPIDownload(AllApiNames.PO_RECOMMENDATION_EXPORT, CurrentRequest());
+        if (!file.IsSuccess) { Snackbar.Add(file.responseMessage ?? ""); return; }
+        await Files.SaveAsync(file);
         Snackbar.Add("Excel exported ✓");
     }
 

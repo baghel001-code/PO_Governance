@@ -1,5 +1,4 @@
 @* feedback.js F.open(): send feedback (type, screen, article, message, rating) + "Your earlier feedback". *@
-@inject IAPICallService Api
 @inject UserSessionState Session
 @inject ISnackbar Snackbar
 
@@ -97,7 +96,7 @@
     private async Task LoadMineAsync()
     {
         if (!ShowMine) return;
-        var res = await Api.GetFeedbackAsync(mine: true);
+        var res = await ApiMasterService.GetFeedbackAsync(mine: true);
         if (res.IsSuccess) _mine = res.Data?.Items;   // the list is optional
     }
 
@@ -114,8 +113,8 @@
         _sending = true;
         try
         {
-            var res = await Api.SendFeedbackAsync(_kind, _screen, (_article ?? "").Trim(), msg, _rating, Session.View);
-            if (!res.IsSuccess || res.Data == null) { Snackbar.Warn(res.ResponseMessage); return; }
+            var res = await ApiMasterService.SendFeedbackAsync(_kind, _screen, (_article ?? "").Trim(), msg, _rating, Session.View);
+            if (!res.IsSuccess || res.Data == null) { Snackbar.Warn(res.responseMessage); return; }
             Snackbar.Toast("Thank you — sent to the administrator (" + res.Data.Id + ")");
             _message = ""; _article = ""; _rating = null;
             await LoadMineAsync();

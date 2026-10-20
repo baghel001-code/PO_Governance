@@ -9,12 +9,12 @@ noted; CSS variables refer to the portal theme (`--vmm-pink`, `--vmm-navy`, `--v
 
 | Call | Returns |
 |---|---|
-| `GET  api/v1/grc-backtest/options?asOfPeriod=&viewMode=&cutover=&division=&catHead=&brand=&drillPeriod=` | `GrcControlsDto` |
-| `POST api/v1/grc-backtest/compute` body `GrcImpactRequest` | `GrcImpactDto` (whole GRC Impact card) |
-| `GET  api/v1/grc-backtest/trace/{gm}?asOfPeriod=` | `GrcArticleTraceDto` |
-| `POST api/v1/grc-backtest/export` body `{asOfPeriod}` | `.xlsx` file (`GRC_Row_Detail_yyyy-MM-dd.xlsx`), header `X-Message` = "Exported N rows" (URL-encoded); 404 `ApiResponse` "No GRC file loaded" |
-| `GET  api/v1/seasons` | `SeasonSelectionDto` |
-| `POST api/v1/seasons/toggle` body `{group:"current"\|"fallback", season}` | `SeasonSelectionDto` (not saved — see below) |
+| `PO_GRC_OPTIONS` → `POST api/v1/GrcOptions` body `GrcImpactRequest` | `GrcControlsDto` |
+| `PO_GRC_COMPUTE` → `POST api/v1/GrcCompute` body `GrcImpactRequest` | `GrcImpactDto` (whole GRC Impact card) |
+| `PO_GRC_TRACE` → `POST api/v1/GrcTrace` body `{Gm, AsOfPeriod}` | `GrcArticleTraceDto` |
+| `PO_GRC_EXPORT` → `POST api/v1/GrcExport` body `{AsOfPeriod}` | `.xlsx` file (`GRC_Row_Detail_yyyy-MM-dd.xlsx`), header `X-Message` = "Exported N rows" (URL-encoded); 404 `ApiDataResponse` "No GRC file loaded" |
+| `PO_SEASONS_GET` → `POST api/v1/SeasonsGet` | `SeasonSelectionDto` |
+| `PO_SEASONS_TOGGLE` → `POST api/v1/SeasonsToggle` body `{group:"current"\|"fallback", season}` | `SeasonSelectionDto` (not saved — see below) |
 
 **Re-compute on every control change** (the browser re-rendered on each `onchange`): send the current
 values of all controls; the response's `Controls` tells you what each select ends on (options + value).

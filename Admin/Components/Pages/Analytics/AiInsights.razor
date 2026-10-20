@@ -5,7 +5,6 @@
    AI provider and returns AiInsightsDto. Second tab: the Tool 2 Planner dashboard (renderPlannerDashboard had no markup
    in v1.1.4) — also reachable as /planner/dashboard. *@
 @attribute [Authorize(Roles = Roles.Staff)]
-@inject IAPICallService Api
 @inject ISnackbar Snackbar
 @inject ServerStatusService Status
 @inject NavigationManager Nav
@@ -162,11 +161,11 @@
         StateHasChanged();
         try
         {
-            var res = await Api.PostAsync<AiInsightsDto>("api/v1/assistant/insights", new AiInsightsRequest { Focus = _focus });
+            var res = await ApiMasterService.CallingAPI<ApiDataResponse<AiInsightsDto>, AiInsightsRequest>(AllApiNames.PO_ASSISTANT_INSIGHTS, new AiInsightsRequest { Focus = _focus });
             if (!res.IsSuccess || res.Data == null)
             {
                 _shown = true;
-                _dto = new AiInsightsDto { State = "error", Kpis = previous?.Kpis ?? new(), FallbackText = "Request failed: " + res.ResponseMessage };
+                _dto = new AiInsightsDto { State = "error", Kpis = previous?.Kpis ?? new(), FallbackText = "Request failed: " + res.responseMessage };
                 Snackbar.Add("Could not reach the portal server", Severity.Error);
                 return;
             }

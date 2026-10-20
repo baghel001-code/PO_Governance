@@ -71,6 +71,29 @@ namespace Infrastructure.Repositories
         {
         }
 
+        /// <summary>Base URL written into the API_MASTER seed when this store creates it (ApiMaster:BaseUrl); null = the script's default.</summary>
+        public string? ApiMasterBaseUrl { get; set; }
+
+        /// <summary>
+        /// The API master (04_api_master.sql) of a database created before it existed: created with the rest of the schema when
+        /// SqlServerCreateSchema is on, otherwise only reported (the portal cannot start without it).
+        /// </summary>
+        private async Task EnsureApiMasterAsync(CancellationToken ct)
+        {
+            var exists = await _db.QueryFirstOrDefaultAsync<int?>(
+                "SELECT CASE WHEN OBJECT_ID(N'dbo.PRO_GET_ALL_API', N'P') IS NOT NULL AND OBJECT_ID(N'dbo.API_MASTER', N'U') IS NOT NULL THEN 1 ELSE 0 END",
+                null, CommandType.Text, ct: ct) == 1;
+            if (exists) return;
+            if (_createSchema)
+            {
+                _log?.LogInformation("Creating the API master (database/sqlserver/04_api_master.sql) in {Db}", _db.Describe());
+                await SqlServerSchema.ApplyAsync(_db.ConnectionString, new[] { SqlServerSchema.ApiMasterScript }, null, ApiMasterBaseUrl, ct);
+            }
+            else
+                _log?.LogError("The database {Db} has no API master (API_MASTER / PRO_GET_ALL_API): run database/sqlserver/04_api_master.sql " +
+                               "- the portal loads its API list from it (GetAllApi).", _db.Describe());
+        }
+
         public string Kind => "sqlserver";
 
         public string Describe() => "SQL Server " + _db.Describe();
@@ -213,8 +236,8 @@ namespace Infrastructure.Repositories
                     }
                     if (v == null && _createSchema)
                     {
-                        _log?.LogInformation("Creating the SQL Server schema (database/sqlserver 01..03) in {Db}", _db.Describe());
-                        await SqlServerSchema.ApplyAsync(_db.ConnectionString, null, ct);
+                        _log?.LogInformation("Creating the SQL Server schema (database/sqlserver 01..04) in {Db}", _db.Describe());
+                        await SqlServerSchema.ApplyAsync(_db.ConnectionString, SqlServerSchema.DatabaseScripts, null, ApiMasterBaseUrl, ct);
                         v = await SchemaVersionAsync(ct);
                     }
                     if (v == null)
@@ -223,6 +246,7 @@ namespace Infrastructure.Repositories
                             "02_procedures.sql and 03_seed.sql in it (see database/sqlserver/README.md), or set PoGovSettings:SqlServerCreateSchema = true.");
                     if (string.CompareOrdinal(v, SqlServerSchema.ExpectedVersion) < 0)
                         throw new InvalidOperationException($"SQL Server schema version {v} is older than {SqlServerSchema.ExpectedVersion}: run database/sqlserver/01..03 again.");
+                    await EnsureApiMasterAsync(ct);
                     return;
                 }
                 catch (Exception e) when (IsConnectionError(e) && DateTime.UtcNow < deadline && !ct.IsCancellationRequested)

@@ -1,5 +1,4 @@
 @* users.js renderBackups / backupNow. *@
-@inject IAPICallService Api
 @inject ISnackbar Snackbar
 
 @if (_error != null)
@@ -38,8 +37,8 @@ else
 
     private async Task LoadAsync()
     {
-        var res = await Api.GetBackupsAsync();
-        if (!res.IsSuccess || res.Data == null) { _error = res.ResponseMessage; return; }
+        var res = await ApiMasterService.GetBackupsAsync();
+        if (!res.IsSuccess || res.Data == null) { _error = res.responseMessage; return; }
         _error = null;
         _d = res.Data;
     }
@@ -50,8 +49,8 @@ else
         _busy = true;
         try
         {
-            var res = await Api.BackupNowAsync();
-            if (!res.IsSuccess || res.Data == null) { Snackbar.Warn(res.ResponseMessage); return; }
+            var res = await ApiMasterService.BackupNowAsync();
+            if (!res.IsSuccess || res.Data == null) { Snackbar.Warn(res.responseMessage); return; }
             Snackbar.Toast("Saved " + res.Data.Name);
             await LoadAsync();
         }

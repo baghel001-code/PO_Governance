@@ -1,9 +1,8 @@
 @* Season Selection — port of index.html renderSeasonPills / _toggleSeasonPill (Data Setup sidebar slot).
-   Pills come from GET api/v1/seasons; a click goes through POST api/v1/seasons/toggle (toggle +
+   Pills come from PO_SEASONS_GET; a click goes through PO_SEASONS_TOGGLE (toggle +
    re-validation on the server), then seasonCurrent / seasonFallback are saved into the planner params. *@
 @using System.Text.Json.Nodes
 @using DecisionEngine.Results.Analytics.Grc
-@inject IAPICallService Api
 @inject ISnackbar Snackbar
 
 <div class="ss-slot @(Dark ? "dark" : "")">
@@ -34,8 +33,8 @@
     /// <summary>Re-reads the seasons (call after Article Master was uploaded).</summary>
     public async Task ReloadAsync()
     {
-        var res = await Api.GetAsync<SeasonSelectionDto>("api/v1/seasons");
-        if (!res.IsSuccess) { Snackbar.Add(res.ResponseMessage); return; }
+        var res = await ApiMasterService.CallingAPI<ApiDataResponse<SeasonSelectionDto>, EmptyReq>(AllApiNames.PO_SEASONS_GET, EmptyReq.Instance);
+        if (!res.IsSuccess) { Snackbar.Add(res.responseMessage ?? ""); return; }
         _sel = res.Data;
         // The browser wrote the defaulted selection back into S.params on render.
         if (_sel is { Changed: true, Seasons.Count: > 0 }) await SaveAsync(_sel);
@@ -64,8 +63,8 @@
         _busy = true;
         try
         {
-            var res = await Api.PostAsync<SeasonSelectionDto>("api/v1/seasons/toggle", new SeasonToggleRequest { Group = group, Season = season });
-            if (!res.IsSuccess || res.Data == null) { Snackbar.Add(res.ResponseMessage); return; }
+            var res = await ApiMasterService.CallingAPI<ApiDataResponse<SeasonSelectionDto>, SeasonToggleRequest>(AllApiNames.PO_SEASONS_TOGGLE, new SeasonToggleRequest { Group = group, Season = season });
+            if (!res.IsSuccess || res.Data == null) { Snackbar.Add(res.responseMessage ?? ""); return; }
             _sel = res.Data;
             StateHasChanged();
             if (await SaveAsync(_sel)) await OnChanged.InvokeAsync(_sel);
@@ -75,7 +74,7 @@
 
     private async Task<bool> SaveAsync(SeasonSelectionDto sel)
     {
-        var err = await PlannerParams.SaveAsync(Api, new Dictionary<string, JsonNode?>
+        var err = await PlannerParams.SaveAsync(ApiMasterService, new Dictionary<string, JsonNode?>
         {
             ["seasonCurrent"] = PlannerParams.ToArray(sel.SeasonCurrent),
             ["seasonFallback"] = PlannerParams.ToArray(sel.SeasonFallback),

@@ -1,7 +1,7 @@
 using System.IO.Compression;
 using System.Text.Json;
 using System.Text.Json.Nodes;
-using System.Text.Json.Serialization;
+using Domain.Entities.Request;
 using Application.Interfaces.V1;
 using Application.Services.V1.Platform;
 using Domain.Constants;
@@ -16,7 +16,7 @@ namespace POGovApi.Controllers.V1
     /// the Tool 1 request export, all files of one upload as one workbook, and one stored file version.
     /// Needs <c>builder.Services.AddHistoryExcelExport()</c> (Infrastructure) in Program.cs.
     /// </summary>
-    [Route("api/v1/history/export")]
+    [Route("api/v1/[Action]")]
     public sealed class HistoryExportController : ApiControllerBase
     {
         private const string XlsxContentType = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
@@ -31,25 +31,15 @@ namespace POGovApi.Controllers.V1
             _excel = excel;
         }
 
-        public sealed class RequestExportBody
-        {
-            [JsonPropertyName("from")] public string? From { get; set; }
-            [JsonPropertyName("to")] public string? To { get; set; }
-            /// <summary>Search text (Request ID, GM, colour, user, MC desc, brand, division).</summary>
-            [JsonPropertyName("q")] public string? Q { get; set; }
-            /// <summary>Exact decision, or empty for all.</summary>
-            [JsonPropertyName("decision")] public string? Decision { get; set; }
-        }
-
         /// <summary>
         /// "⬇ Excel" on Tool 1 requests: the requests of the range the user may see, filtered like the screen,
         /// as Tool1_Requests_&lt;from|all&gt;_to_&lt;to|today&gt;.xlsx. 400 "Nothing to export" when none match.
         /// </summary>
-        [HttpPost("requests")]
+        [HttpPost]
         [Produces(XlsxContentType, "application/json")]
-        public async Task<IActionResult> Requests([FromBody(EmptyBodyBehavior = EmptyBodyBehavior.Allow)] RequestExportBody? body, CancellationToken ct)
+        public async Task<IActionResult> HistoryExportRequests([FromBody(EmptyBodyBehavior = EmptyBodyBehavior.Allow)] RequestExportReq? body, CancellationToken ct)
         {
-            body ??= new RequestExportBody();
+            body ??= new RequestExportReq();
             var from = body.From ?? "";
             var to = body.To ?? "";
             var all = (await _history.RequestsAsync(from, to, Me, ct)).Items;
@@ -69,10 +59,11 @@ namespace POGovApi.Controllers.V1
         }
 
         /// <summary>"⬇ All files (one Excel)": every stored file of the upload, one sheet each, as &lt;uploadId&gt;.xlsx.</summary>
-        [HttpGet("uploads/{uploadId}")]
+        [HttpPost]
         [Produces(XlsxContentType, "application/json")]
-        public async Task<IActionResult> Upload(string uploadId, CancellationToken ct)
+        public async Task<IActionResult> HistoryExportUpload([FromBody] UploadIdReq req, CancellationToken ct)
         {
+            var uploadId = req.UploadId ?? "";
             RequireRole("Planner or admin only", Roles.Planner, Roles.Admin);
             var g = (await _history.UploadsAsync(null, null, ct)).Items.FirstOrDefault(x => x.UploadId == uploadId)
                     ?? throw new NotFoundException("No such upload");
@@ -87,10 +78,11 @@ namespace POGovApi.Controllers.V1
         }
 
         /// <summary>"⬇ Excel" on one file of an upload: [&lt;uploadId&gt;_]&lt;KEY&gt;.xlsx.</summary>
-        [HttpGet("data/{key}")]
+        [HttpPost]
         [Produces(XlsxContentType, "application/json")]
-        public async Task<IActionResult> DataVersion(string key, [FromQuery] string? version, [FromQuery] string? uploadId, CancellationToken ct)
+        public async Task<IActionResult> HistoryExportData([FromBody] DataKeyReq req, CancellationToken ct)
         {
+            var (key, version, uploadId) = (req.Key ?? "", req.Version, req.UploadId);
             RequireRole("Planner or admin only", Roles.Planner, Roles.Admin);
             if (!PlatformCore.KeyRe.IsMatch(key)) throw new AppValidationException("Bad dataset key");
             if (string.IsNullOrEmpty(version)) throw new AppValidationException("Missing version");

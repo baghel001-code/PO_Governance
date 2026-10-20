@@ -1,0 +1,87 @@
+namespace Domain.Entities.Common
+{
+    /// <summary>appsettings "ApiNamesSettings" (QPS ApiNames): task name of each API, copied onto <see cref="AllApiNames"/>.</summary>
+    public class ApiNames
+    {
+        public string? MasterApi { get; set; }
+        public string? PO_GET_ALL_API { get; set; }
+        public string? PO_GET_SPECIFIC_API { get; set; }
+        public string? PO_HEALTH { get; set; }
+        public string? PO_AUTH_LOGIN { get; set; }
+        public string? PO_AUTH_LOGOUT { get; set; }
+        public string? PO_AUTH_CHANGE_PASSWORD { get; set; }
+        public string? PO_AUTH_ME { get; set; }
+        public string? PO_GET_STATUS { get; set; }
+        public string? PO_DATA_GET { get; set; }
+        public string? PO_DATA_PUT { get; set; }
+        public string? PO_DATA_CLEAR { get; set; }
+        public string? PO_DATA_RESTORE { get; set; }
+        public string? PO_UPLOAD_START { get; set; }
+        public string? PO_UPLOAD_RESTORE { get; set; }
+        public string? PO_HISTORY_UPLOADS { get; set; }
+        public string? PO_HISTORY_REQUESTS { get; set; }
+        public string? PO_HISTORY_EXPORT_REQUESTS { get; set; }
+        public string? PO_HISTORY_EXPORT_UPLOAD { get; set; }
+        public string? PO_HISTORY_EXPORT_DATA { get; set; }
+        public string? PO_RUNS_LIST { get; set; }
+        public string? PO_RUN_GET { get; set; }
+        public string? PO_RUN_SAVE { get; set; }
+        public string? PO_RUN_DELETE { get; set; }
+        public string? PO_PARAMS_GET { get; set; }
+        public string? PO_PARAMS_SAVE { get; set; }
+        public string? PO_REQUESTS_GET { get; set; }
+        public string? PO_REQUEST_SAVE { get; set; }
+        public string? PO_REQUESTS_CLEAR { get; set; }
+        public string? PO_APPROVALS_GET { get; set; }
+        public string? PO_APPROVAL_DECIDE { get; set; }
+        public string? PO_USERS_LIST { get; set; }
+        public string? PO_USERS_SCR { get; set; }
+        public string? PO_USER_ADD { get; set; }
+        public string? PO_USERS_BULK { get; set; }
+        public string? PO_USERS_SCR_SYNC { get; set; }
+        public string? PO_USERS_SCR_MAPPING { get; set; }
+        public string? PO_USER_UPDATE { get; set; }
+        public string? PO_USER_RESET_PASSWORD { get; set; }
+        public string? PO_USER_DELETE { get; set; }
+        public string? PO_AUDIT_QUERY { get; set; }
+        public string? PO_BACKUPS_LIST { get; set; }
+        public string? PO_BACKUP_CREATE { get; set; }
+        public string? PO_FEEDBACK_LIST { get; set; }
+        public string? PO_FEEDBACK_CREATE { get; set; }
+        public string? PO_FEEDBACK_SET_STATUS { get; set; }
+        public string? PO_AI_CHAT { get; set; }
+        public string? PO_AI_INSIGHTS { get; set; }
+        public string? PO_ASSISTANT_CHAT_INFO { get; set; }
+        public string? PO_ASSISTANT_CHAT { get; set; }
+        public string? PO_ASSISTANT_INSIGHTS { get; set; }
+        public string? PO_TOOL1_OPTIONS { get; set; }
+        public string? PO_TOOL1_VALIDATE { get; set; }
+        public string? PO_TOOL1_SUBMIT { get; set; }
+        public string? PO_TOOL1_TODAY { get; set; }
+        public string? PO_TOOL2_RUN { get; set; }
+        public string? PO_TOOL2_GET_RUN { get; set; }
+        public string? PO_TOOL2_DETAIL { get; set; }
+        public string? PO_TOOL2_ROLLUP { get; set; }
+        public string? PO_TOOL2_OPTIONS { get; set; }
+        public string? PO_TOOL2_EXPORT { get; set; }
+        public string? PO_RECOMMENDATION_GET { get; set; }
+        public string? PO_RECOMMENDATION_MONTHS { get; set; }
+        public string? PO_RECOMMENDATION_EXPORT { get; set; }
+        public string? PO_GRC_OPTIONS { get; set; }
+        public string? PO_GRC_COMPUTE { get; set; }
+        public string? PO_GRC_TRACE { get; set; }
+        public string? PO_GRC_EXPORT { get; set; }
+        public string? PO_ATTR_LEVEL1 { get; set; }
+        public string? PO_ATTR_LEVEL2 { get; set; }
+        public string? PO_ATTR_LEVEL3 { get; set; }
+        public string? PO_INSIGHTS_CATEGORY { get; set; }
+        public string? PO_INSIGHTS_PLANNER { get; set; }
+        public string? PO_HELP_PARAMS { get; set; }
+        public string? PO_SEASONS_GET { get; set; }
+        public string? PO_SEASONS_TOGGLE { get; set; }
+        public string? PO_INGEST_FILE { get; set; }
+        public string? PO_INGEST_ZIP { get; set; }
+        public string? PO_INGEST_RAW { get; set; }
+        public string? PO_INGEST_GRC { get; set; }
+    }
+}

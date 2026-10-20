@@ -1,8 +1,7 @@
 @page "/planner/attributes"
 @* Planner "🔎 Attribute Analysis" — port of index.html view-attranalysis (_aaRenderLevel1/2/3, _aaCrumb, _aaLegend).
-   Every figure, colour and text comes from api/v1/attribute-analysis (AaLevel1Dto / AaLevel2Dto / AaLevel3Dto). *@
+   Every figure, colour and text comes from PO_ATTR_LEVEL1..3 (AaLevel1Dto / AaLevel2Dto / AaLevel3Dto). *@
 @attribute [Authorize(Roles = Roles.Staff)]
-@inject IAPICallService Api
 
 <PageTitle>Attribute Analysis · VMM PO Governance</PageTitle>
 <HeadContent><link rel="stylesheet" href="css/analytics.css" /></HeadContent>
@@ -90,11 +89,11 @@
     private async Task LoadLevel1Async()
     {
         var seq = ++_seq;
-        var res = await Api.GetAsync<AaLevel1Dto>(AnQuery.Build("api/v1/attribute-analysis",
-            ("brand", _brand), ("mc", _mc), ("minStock", _minStock)));
+        var res = await ApiMasterService.CallingAPI<ApiDataResponse<AaLevel1Dto>, AttrAnalysisQuery>(AllApiNames.PO_ATTR_LEVEL1,
+            new AttrAnalysisQuery { Brand = AnQuery.N(_brand), Mc = AnQuery.N(_mc), MinStock = AnQuery.N(_minStock) });
         if (seq != _seq) return;
         _level = 1;
-        if (!res.IsSuccess || res.Data == null) { _error = res.ResponseMessage; return; }
+        if (!res.IsSuccess || res.Data == null) { _error = res.responseMessage; return; }
         _error = null;
         _l1 = res.Data;
         _brands = _l1.Brands;
@@ -105,9 +104,9 @@
     private async Task GoLevel2Async(string brand, string mcKey)
     {
         var seq = ++_seq;
-        var res = await Api.GetAsync<AaLevel2Dto>(AnQuery.Build("api/v1/attribute-analysis/mc", ("brand", brand), ("mcKey", mcKey)));
+        var res = await ApiMasterService.CallingAPI<ApiDataResponse<AaLevel2Dto>, AttrBucketReq>(AllApiNames.PO_ATTR_LEVEL2, new AttrBucketReq { Brand = brand, McKey = mcKey });
         if (seq != _seq) return;
-        if (!res.IsSuccess || res.Data == null) { _error = res.ResponseMessage; return; }
+        if (!res.IsSuccess || res.Data == null) { _error = res.responseMessage; return; }
         _error = null;
         _dBrand = brand; _dMcKey = mcKey;
         _l2 = res.Data;
@@ -117,10 +116,10 @@
     private async Task GoLevel3Async(string mrp, string flag)
     {
         var seq = ++_seq;
-        var res = await Api.GetAsync<AaLevel3Dto>(AnQuery.Build("api/v1/attribute-analysis/bucket",
-            ("brand", _dBrand), ("mcKey", _dMcKey), ("mrp", mrp), ("flag", flag)));
+        var res = await ApiMasterService.CallingAPI<ApiDataResponse<AaLevel3Dto>, AttrBucketReq>(AllApiNames.PO_ATTR_LEVEL3,
+            new AttrBucketReq { Brand = _dBrand, McKey = _dMcKey, Mrp = mrp, Flag = flag });
         if (seq != _seq) return;
-        if (!res.IsSuccess || res.Data == null) { _error = res.ResponseMessage; return; }
+        if (!res.IsSuccess || res.Data == null) { _error = res.responseMessage; return; }
         _error = null;
         _l3 = res.Data;
         _level = 3;

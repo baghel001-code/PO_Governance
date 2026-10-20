@@ -1,5 +1,4 @@
 @* users.js renderScr / saveScr: which SCR columns hold buyer / category head e-mails, and the people found. *@
-@inject IAPICallService Api
 @inject ISnackbar Snackbar
 
 @if (_error != null)
@@ -82,8 +81,8 @@ else
 
     private async Task LoadAsync()
     {
-        var res = await Api.GetScrAsync();
-        if (!res.IsSuccess || res.Data == null) { _error = res.ResponseMessage; return; }
+        var res = await ApiMasterService.GetScrAsync();
+        if (!res.IsSuccess || res.Data == null) { _error = res.responseMessage; return; }
         _error = null;
         _d = res.Data;
         var saved = _d.Mapping?.Columns ?? new Dictionary<string, string>();
@@ -95,8 +94,8 @@ else
         _busy = true;
         try
         {
-            var res = await Api.SaveScrMappingAsync(new Dictionary<string, string>(_map));
-            if (!res.IsSuccess || res.Data == null) { Snackbar.Warn(res.ResponseMessage); return; }
+            var res = await ApiMasterService.SaveScrMappingAsync(new Dictionary<string, string>(_map));
+            if (!res.IsSuccess || res.Data == null) { Snackbar.Warn(res.responseMessage); return; }
             Snackbar.Toast("Created " + res.Data.Result.Added.Count + " login(s), updated " + res.Data.Result.Updated.Count);
             await LoadAsync();
         }

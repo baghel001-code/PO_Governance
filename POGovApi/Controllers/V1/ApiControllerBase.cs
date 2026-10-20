@@ -9,8 +9,10 @@ using Microsoft.AspNetCore.Mvc;
 namespace POGovApi.Controllers.V1
 {
     /// <summary>
-    /// Base for every v1 controller: authenticated by default (session token → claims, see the
-    /// SessionTokenAuthenticationHandler), helpers for the signed-in user and the ApiResponse envelope.
+    /// Base for every v1 controller (QPS style: each controller has <c>[Route("api/v1/[Action]")]</c>, POST actions
+    /// taking a request object, <c>return Ok(response)</c> with a BaseResponse). Authenticated by default: the static
+    /// API token (StaticTokenMiddleware) identifies the portal, the session token in X-Session-Token
+    /// (SessionTokenAuthenticationHandler) the user — roles are checked here on the server.
     /// </summary>
     [ApiController]
     [Authorize]
@@ -29,9 +31,14 @@ namespace POGovApi.Controllers.V1
             var roles = p.FindAll(ClaimTypes.Role).Select(c => c.Value).ToList();
             var mustChange = string.Equals(p.FindFirstValue(CustomClaimTypes.MustChange), "true", StringComparison.OrdinalIgnoreCase);
             var token = p.FindFirstValue(CustomClaimTypes.SessionToken);
+            return new AppUserContext(email, name, roles, mustChange, token, ClientIp(ctx));
+        }
+
+        /// <summary>X-Forwarded-For (first) or the connection's address — server.py client_address.</summary>
+        public static string ClientIp(HttpContext ctx)
+        {
             var ip = ctx.Request.Headers["X-Forwarded-For"].ToString().Split(',')[0].Trim();
-            if (string.IsNullOrEmpty(ip)) ip = ctx.Connection.RemoteIpAddress?.ToString() ?? "";
-            return new AppUserContext(email, name, roles, mustChange, token, ip);
+            return string.IsNullOrEmpty(ip) ? ctx.Connection.RemoteIpAddress?.ToString() ?? "" : ip;
         }
 
         protected void RequireRole(string message, params string[] roles)
@@ -42,6 +49,7 @@ namespace POGovApi.Controllers.V1
         protected void RequireStaff() => RequireRole("Only planners and admins can do this", Roles.Admin, Roles.Planner);
         protected void RequireAdmin() => RequireRole("Admin only", Roles.Admin);
 
-        protected ActionResult<ApiResponse<T>> Success<T>(T? data) => Ok(ApiResponse<T>.Ok(data));
+        /// <summary>Ok(new ApiDataResponse&lt;T&gt; { Data = data }) — responseCode 0, "SUCCESS".</summary>
+        protected ActionResult<ApiDataResponse<T>> Success<T>(T? data) => Ok(ApiDataResponse<T>.Ok(data));
     }
 }

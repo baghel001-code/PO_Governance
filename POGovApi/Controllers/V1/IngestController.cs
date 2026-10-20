@@ -12,9 +12,9 @@ namespace POGovApi.Controllers.V1
     /// Planner "Data Setup" uploads. The files are parsed on the server exactly like v1.1.4 parsed them in
     /// the browser (SheetJS), then saved as ONE upload batch (shared.js pushFiles): each resulting
     /// dataset becomes a new current version labelled with the slot status text.
-    /// Multipart form; files in any form field (conventionally "files" / "file").
+    /// Multipart form; files in any form field (conventionally "files" / "file"), other inputs as text fields.
     /// </summary>
-    [Route("api/v1/ingest")]
+    [Route("api/v1/[Action]")]
     [IngestUploadLimit]
     public sealed class IngestController : ApiControllerBase
     {
@@ -22,44 +22,45 @@ namespace POGovApi.Controllers.V1
 
         public IngestController(IDataIngestService ingest) => _ingest = ingest;
 
-        /// <summary>One data slot (loadFile): f1, f2, f3, f4, um, bsr, artmaster, attrrel, colmaster, catheadmap.
-        /// BSR uploads add to the current BSR rows unless <paramref name="append"/> is false.</summary>
-        [HttpPost("file/{key}")]
-        public async Task<ActionResult<ApiResponse<IngestResponse>>> File(string key, [FromQuery] bool append = true, CancellationToken ct = default)
+        /// <summary>One data slot (loadFile): form field Key = f1, f2, f3, f4, um, bsr, artmaster, attrrel, colmaster, catheadmap.
+        /// BSR uploads add to the current BSR rows unless form field Append is "false".</summary>
+        [HttpPost]
+        public async Task<ActionResult<ApiDataResponse<IngestResponse>>> IngestFile(CancellationToken ct = default)
         {
             RequireStaff();
-            var files = await ReadFilesAsync(ct);
-            return Success(await _ingest.ImportFilesAsync(key, files, Me, append, ct));
+            var (files, form) = await ReadFilesAsync(ct);
+            var append = !bool.TryParse(form["Append"].ToString(), out var a) || a;
+            return Success(await _ingest.ImportFilesAsync(form["Key"].ToString(), files, Me, append, ct));
         }
 
         /// <summary>Zip bundle with every input file (loadZipBundle).</summary>
-        [HttpPost("zip")]
-        public async Task<ActionResult<ApiResponse<IngestResponse>>> Zip(CancellationToken ct = default)
+        [HttpPost]
+        public async Task<ActionResult<ApiDataResponse<IngestResponse>>> IngestZip(CancellationToken ct = default)
         {
             RequireStaff();
-            var files = await ReadFilesAsync(ct);
+            var (files, _) = await ReadFilesAsync(ct);
             return Success(await _ingest.ImportZipAsync(files[0], Me, ct));
         }
 
         /// <summary>Raw system exports, one or many (handleRawImport).</summary>
-        [HttpPost("raw")]
-        public async Task<ActionResult<ApiResponse<IngestResponse>>> Raw(CancellationToken ct = default)
+        [HttpPost]
+        public async Task<ActionResult<ApiDataResponse<IngestResponse>>> IngestRaw(CancellationToken ct = default)
         {
             RequireStaff();
-            var files = await ReadFilesAsync(ct);
+            var (files, _) = await ReadFilesAsync(ct);
             return Success(await _ingest.ImportRawAsync(files, Me, ct));
         }
 
         /// <summary>GRC buying-history file (loadGRCFile).</summary>
-        [HttpPost("grc")]
-        public async Task<ActionResult<ApiResponse<IngestResponse>>> Grc(CancellationToken ct = default)
+        [HttpPost]
+        public async Task<ActionResult<ApiDataResponse<IngestResponse>>> IngestGrc(CancellationToken ct = default)
         {
             RequireStaff();
-            var files = await ReadFilesAsync(ct);
+            var (files, _) = await ReadFilesAsync(ct);
             return Success(await _ingest.ImportGrcAsync(files[0], Me, ct));
         }
 
-        private async Task<List<IngestUpload>> ReadFilesAsync(CancellationToken ct)
+        private async Task<(List<IngestUpload> Files, IFormCollection Form)> ReadFilesAsync(CancellationToken ct)
         {
             var limit = IngestUploadLimitAttribute.LimitBytes(HttpContext);
             if (Request.ContentLength is long len && len > limit)
@@ -74,7 +75,7 @@ namespace POGovApi.Controllers.V1
                 list.Add(new IngestUpload(Path.GetFileName(f.FileName), ms.ToArray()));
             }
             if (list.Count == 0) throw new AppValidationException("No file uploaded");
-            return list;
+            return (list, form);
         }
     }
 

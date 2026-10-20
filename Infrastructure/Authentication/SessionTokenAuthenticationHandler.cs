@@ -7,13 +7,15 @@ using Infrastructure.Middleware;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Routing;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
 namespace Infrastructure.Authentication
 {
     /// <summary>
-    /// Scheme <see cref="AppConstants.AuthScheme"/>: "Authorization: Bearer &lt;session token&gt;" checked
+    /// Scheme <see cref="AppConstants.AuthScheme"/>: header "X-Session-Token: &lt;session token&gt;" (<see cref="AppConstants.SessionHeader"/>;
+    /// the Authorization header carries the static API token, see StaticTokenMiddleware) checked
     /// against the sessions exactly like accounts.py session_user (idle timeout, last-seen persisted every
     /// 5 min, inactive user → not signed in). Claims: email, name, one role claim per role, mustChange,
     /// session token.
@@ -31,9 +33,8 @@ namespace Infrastructure.Authentication
 
         public static string? TokenFrom(HttpRequest req)
         {
-            var h = req.Headers.Authorization.ToString();
-            if (h.StartsWith("Bearer ", StringComparison.OrdinalIgnoreCase)) return h[7..].Trim();
-            return null;
+            var h = req.Headers[AppConstants.SessionHeader].ToString().Trim();
+            return h.Length > 0 ? h : null;
         }
 
         protected override async Task<AuthenticateResult> HandleAuthenticateAsync()
@@ -92,7 +93,7 @@ namespace Infrastructure.Authentication
                     return;
                 }
                 var anonymous = ctx.GetEndpoint()?.Metadata.GetMetadata<IAllowAnonymous>() != null;
-                var isAuth = path.StartsWith("/api/v1/auth", StringComparison.OrdinalIgnoreCase);
+                var isAuth = string.Equals(ctx.GetRouteValue("controller") as string, "Auth", StringComparison.OrdinalIgnoreCase);
                 if (!anonymous && !isAuth && ctx.User.Identity?.IsAuthenticated == true
                     && string.Equals(ctx.User.FindFirst(CustomClaimTypes.MustChange)?.Value, "true", StringComparison.OrdinalIgnoreCase))
                 {

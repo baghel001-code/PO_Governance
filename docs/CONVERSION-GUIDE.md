@@ -12,10 +12,10 @@ ASP.NET Core 8 solution with clean architecture, following the layout of the QPS
 | `Application` | class library | IO interfaces (`Interfaces/V1`: `IDatasetCache`, `IRequestLedger`, `IAppClock`, `IStore` …), Ingest / Platform DTOs, and the **use-case services** that load data and call the engines (Tool 1 / Tool 2 / recommendation / analytics), ingest, accounts / requests / approvals services, DI registration |
 | `Infrastructure` | class library | PostgreSQL store (Dapper + Npgsql), Excel / ZIP readers, AI client, backups, middleware, `ServicesConfiguration` (DI registration) |
 | `POGovApi` | ASP.NET Core Web API | `Controllers/V1/*` — every endpoint the portal uses (and later the SAP `/api/sap/v1/*` endpoints) |
-| `Admin` | Blazor Server (MudBlazor) | The portal. Talks to `POGovApi` over HTTP only (`APICallService`) — never to the database |
+| `Admin` | Blazor Server (MudBlazor) | The portal. Talks to `POGovApi` over HTTP only (`IAPICall.CallingAPI(AllApiNames.X, req)`, Infrastructure `APICallService`, QPS) — never to the database |
 | `tests/POGovernance.Tests` | xUnit | Unit + parity tests |
 
-Dependency direction: `Domain` and `DecisionEngine` are independent of each other and of everything else; `Domain` + `DecisionEngine` ← `Application` ← `Infrastructure` ← `POGovApi`; `Admin` → `DecisionEngine` (result models) + `Application` (Platform / Ingest DTOs) + `Domain`.
+Dependency direction: `Domain` and `DecisionEngine` are independent of each other and of everything else; `Domain` + `DecisionEngine` ← `Application` ← `Infrastructure` ← `POGovApi`; `Admin` → `Infrastructure` (only `APICallService`, like QPS) + `DecisionEngine` (result models) + `Application` (DTOs, `IAPICall`) + `Domain`.
 `DecisionEngine` must never gain a `ProjectReference` / `PackageReference` (enforced by `tests/POGovernance.Tests/Architecture`).
 
 ## Rules for porting the decision logic
@@ -50,8 +50,12 @@ log records keep their JSON shape.
 
 ## API conventions
 
-* Routes: `api/v1/<area>/…`. Responses are `ApiResponse<T>` (`ResponseCode` 0 = OK, else the HTTP status,
-  `ResponseMessage` = the user-facing reason, same wording as v1.1.4's `{"error": …}`).
-* Auth: `POST api/v1/auth/login` returns a session token (stored in `app_sessions`, same as v1.1.4); the portal
-  sends it as `Authorization: Bearer <token>`. Roles: admin, planner, cathead, buyer — enforced on the API.
-* Business errors throw `Domain.Exceptions.AppException` subclasses; middleware turns them into `ApiResponse`.
+QPS style — the full description, and how to add an API, is in the README section *API conventions*.
+
+* Routes: `[Route("api/v1/[Action]")]`, POST actions with typed request classes (`Domain/Entities/Request`), `return Ok(response)`
+  with a `BaseResponse` (`ApiDataResponse<T>`: `responseCode` 0 = OK, else the HTTP status; `responseMessage` = the user-facing
+  reason, same wording as v1.1.4's `{"error": …}`; `Data`). `PropertyNamingPolicy = null`.
+* The portal calls by task name: `CallingAPI(AllApiNames.PO_…, req)` → the `API_MASTER` row (URL, method, timeout, static token).
+* Auth: `Authorization: Bearer <static API token>` (StaticTokenMiddleware, `JwtSettings:SecretKey`) + `X-Session-Token: <session>`
+  from `AuthLogin` (stored in `app_sessions`, same as v1.1.4). Roles: admin, planner, cathead, buyer — enforced on the API.
+* Business errors throw `Domain.Exceptions.AppException` subclasses; middleware turns them into `ApiDataResponse`.

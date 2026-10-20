@@ -8,9 +8,9 @@ Everything is computed on the server — the portal only lays out what `Recommen
 
 | Call | Purpose |
 |---|---|
-| `POST api/v1/recommendation` body `RecommendationRequestDto {gm?, brand?, mcCd?, mrp?, flag?, div?, mcDesc?, engine?, months?, dimOverride?}` | Whole modal → `ApiResponse<RecommendationViewDto>` |
-| `GET api/v1/recommendation/months?gm=…` (or `brand, mcCd, mrp, flag, engine`) | Month bar only (`RecommendationMonthsDto`) |
-| `POST api/v1/recommendation/export` (same body) | `.xlsx` file (`VMM_EngineA_FullDetail_yyyy-MM-dd.xlsx`); 400 "No recommendation rows to export" otherwise |
+| `PO_RECOMMENDATION_GET` → `POST api/v1/RecommendationGet` body `RecommendationRequestDto {gm?, brand?, mcCd?, mrp?, flag?, div?, mcDesc?, engine?, months?, dimOverride?}` | Whole modal → `ApiDataResponse<RecommendationViewDto>` |
+| `PO_RECOMMENDATION_MONTHS` → `POST api/v1/RecommendationMonths` body `{gm}` (or `brand, mcCd, mrp, flag, engine`) | Month bar only (`RecommendationMonthsDto`) |
+| `PO_RECOMMENDATION_EXPORT` → `POST api/v1/RecommendationExport` (same body) | `.xlsx` file (`VMM_EngineA_FullDetail_yyyy-MM-dd.xlsx`); 400 "No recommendation rows to export" otherwise |
 
 Open from a Tool 1 result card with `{gm}` (the server resolves the bucket and the engine exactly like the card's
 `_recInfo` / `_recEngine`), or with the bucket fields + `engine` ("A" / "B" / "NEW") when there is no GM.

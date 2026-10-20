@@ -60,7 +60,7 @@ v1.1.4's `migrate_to_db.py` (or unzip a `vmm-data-*.zip` backup into a data fold
 
 ## Backups
 
-`POST api/v1/backups` and the nightly job (after `BackupHour`, kept `BackupKeepDays`) write
+`PO_BACKUP_CREATE` (`POST api/v1/BackupCreate`) and the nightly job (after `BackupHour`, kept `BackupKeepDays`) write
 `vmm-data-yyyyMMdd-HHmmss.zip` to `BackupDir` in the **v1.1.4 file layout**
 (`manifest.json`, `users.json`, `datasets/<key>/<version>.json.gz`, `requests/<day>.jsonl`, `audit.log`, …),
 so a backup can be restored with the old tools (`migrate_to_db.py`) or used as a v1.1.4 data folder.

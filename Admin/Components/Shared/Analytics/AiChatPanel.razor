@@ -2,7 +2,6 @@
    _aiChatRenderWelcome, _aiChatAppendMsg, sendAIChat). The server builds the grounded prompt; the portal keeps
    the conversation (History from each response). Scope: Planner view → tool2, Category view → tool1.
    Shown only when the server reports AI chat enabled (ServerStatusService.AiChat) unless ShowWhenDisabled. *@
-@inject IAPICallService Api
 @inject UserSessionState Session
 @inject ServerStatusService Status
 @inject IJSRuntime JS
@@ -116,8 +115,8 @@
         _scope = scope;
         _info = null;
         _infoError = null;
-        var res = await Api.GetAsync<AssistantChatInfoDto>(AnQuery.Build("api/v1/assistant/chat/info", ("scope", scope)));
-        if (!res.IsSuccess || res.Data == null) { _infoError = res.ResponseMessage; return; }
+        var res = await ApiMasterService.CallingAPI<ApiDataResponse<AssistantChatInfoDto>, ScopeReq>(AllApiNames.PO_ASSISTANT_CHAT_INFO, new ScopeReq { Scope = AnQuery.N(scope) });
+        if (!res.IsSuccess || res.Data == null) { _infoError = res.responseMessage; return; }
         _info = res.Data;
         if (_info.Enabled && _bubbles.Count == 0 && !string.IsNullOrEmpty(_info.Welcome))
             _bubbles.Add(new Bubble("assistant", _info.Welcome));
@@ -137,11 +136,11 @@
         StateHasChanged();
         try
         {
-            var res = await Api.PostAsync<AssistantChatResponse>("api/v1/assistant/chat",
+            var res = await ApiMasterService.CallingAPI<ApiDataResponse<AssistantChatResponse>, AssistantChatRequest>(AllApiNames.PO_ASSISTANT_CHAT,
                 new AssistantChatRequest { Scope = _scope ?? Scope, Question = q, History = _history });
             _bubbles.Remove(thinking);
             if (!res.IsSuccess || res.Data == null)
-                _bubbles.Add(new Bubble("error", res.ResponseCode == 503 ? "Could not reach the portal server: " + res.ResponseMessage : "Error: " + res.ResponseMessage));
+                _bubbles.Add(new Bubble("error", res.responseCode is 503 or 1003 ? "Could not reach the portal server: " + res.responseMessage : "Error: " + res.responseMessage));
             else if (res.Data.Ok)
             {
                 _bubbles.Add(new Bubble("assistant", res.Data.Answer ?? "(no response text)"));

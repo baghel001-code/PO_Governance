@@ -12,7 +12,7 @@ namespace Application.DTOs.Platform
     public sealed class LoginResponse
     {
         [JsonPropertyName("ok")] public bool Ok { get; set; } = true;
-        /// <summary>Session token: send as "Authorization: Bearer &lt;token&gt;".</summary>
+        /// <summary>Session token: send as "X-Session-Token: &lt;token&gt;" (Authorization carries the static API token).</summary>
         [JsonPropertyName("token")] public string Token { get; set; } = "";
         [JsonPropertyName("mustChange")] public bool MustChange { get; set; }
         [JsonPropertyName("name")] public string Name { get; set; } = "";

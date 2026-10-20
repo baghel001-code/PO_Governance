@@ -4,7 +4,7 @@ namespace Application.Interfaces.V1.Analytics
 {
     /// <summary>
     /// The AI provider behind the assistant (server.py <c>anthropic_call</c> / <c>insights_call</c>). Implemented
-    /// by the platform's AI client (the same one that serves the raw api/v1/ai/* proxy endpoints); the
+    /// by the platform's AI client (the same one that serves the raw api/v1/AiChat / AiInsights proxy endpoints); the
     /// coordinator wires it. Implementations never throw for HTTP / network failures — they return the
     /// status and the provider's (or a synthesized) error body, exactly like server.py's <c>_post_json</c>.
     /// </summary>

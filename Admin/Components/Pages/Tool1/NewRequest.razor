@@ -3,7 +3,6 @@
    formClear / renderResult, shared.js saveRequest). The server decides; this page collects the four
    fields, asks the Confirm Final Quantity question and lays out the returned cards. *@
 @implements IDisposable
-@inject IAPICallService Api
 @inject UserSessionState Session
 @inject ISnackbar Snackbar
 @inject ILogger<NewRequest> Log
@@ -173,13 +172,13 @@
     private async Task LoadOptionsAsync(string gm, CancellationToken ct)
     {
         var seq = ++_optSeq;
-        ApiResponse<Tool1FormOptionsDto> res;
-        try { res = await Api.GetAsync<Tool1FormOptionsDto>("api/v1/tool1/options?gm=" + Uri.EscapeDataString(gm.Trim()), ct); }
+        ApiDataResponse<Tool1FormOptionsDto> res;
+        try { res = await ApiMasterService.CallingAPI<ApiDataResponse<Tool1FormOptionsDto>, GmReq>(AllApiNames.PO_TOOL1_OPTIONS, new GmReq { Gm = gm.Trim() }, null, ct); }
         catch (OperationCanceledException) { return; }
         if (seq != _optSeq || ct.IsCancellationRequested) return; // a newer keystroke won
         if (!res.IsSuccess || res.Data == null)
         {
-            if (!string.IsNullOrEmpty(res.ResponseMessage)) Snackbar.Add(res.ResponseMessage, Severity.Warning);
+            if (!string.IsNullOrEmpty(res.responseMessage)) Snackbar.Add(res.responseMessage ?? "", Severity.Warning);
             return;
         }
         var o = res.Data;
@@ -224,8 +223,8 @@
                 Month = _month,
                 Qty = ParseQty(_qty),
             };
-            var v = await Api.PostAsync<Tool1ResultDto>("api/v1/tool1/validate", input);
-            if (!v.IsSuccess || v.Data == null) { Toast(v.ResponseMessage, "Validation failed"); return; }
+            var v = await ApiMasterService.CallingAPI<ApiDataResponse<Tool1ResultDto>, Tool1RequestInputDto>(AllApiNames.PO_TOOL1_VALIDATE, input);
+            if (!v.IsSuccess || v.Data == null) { Toast(v.responseMessage, "Validation failed"); return; }
 
             var result = await SubmitAsync(input, v.Data);
             if (result == null) return;
@@ -273,11 +272,11 @@
                 else body.ConfirmedQty = ans.ConfirmedQty;
             }
 
-            var s = await Api.PostAsync<Tool1ResultDto>("api/v1/tool1/submit", body);
+            var s = await ApiMasterService.CallingAPI<ApiDataResponse<Tool1ResultDto>, Tool1SubmitInputDto>(AllApiNames.PO_TOOL1_SUBMIT, body);
             if (!s.IsSuccess || s.Data == null)
             {
-                if (s.ResponseCode == 409 && !force) { force = true; continue; }
-                Toast(s.ResponseMessage, "Request decided but NOT saved to server (HTTP " + s.ResponseCode + ")");
+                if (s.responseCode == 409 && !force) { force = true; continue; }
+                Toast(s.responseMessage, "Request decided but NOT saved to server (HTTP " + s.responseCode + ")");
                 return null;
             }
             if (s.Data.Status == "needsConfirmation" && s.Data.NeedsConfirmation) { current = s.Data; continue; }
@@ -289,7 +288,7 @@
 
     private async Task RefreshCountAsync()
     {
-        var res = await Api.GetAsync<Tool1TodayDto>("api/v1/tool1/today");
+        var res = await ApiMasterService.CallingAPI<ApiDataResponse<Tool1TodayDto>, MineReq>(AllApiNames.PO_TOOL1_TODAY, new MineReq());
         if (res.IsSuccess && res.Data != null) _count = res.Data.Count;
         await InvokeAsync(StateHasChanged);
     }

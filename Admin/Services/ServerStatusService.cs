@@ -1,19 +1,22 @@
-using System.Text.Json;
-using Admin.Interfaces;
+using Application.DTOs.Platform;
+using Application.Interfaces.V1;
+using Domain.Entities.Common;
+using Domain.Entities.Request;
+using Domain.Entities.Response;
 
 namespace Admin.Services
 {
     /// <summary>
-    /// Polls GET api/v1/status (v1.1.4 polled /api/status every ~30 s): the Approvals badge, and the
+    /// Polls PO_GET_STATUS (v1.1.4 polled /api/status every ~30 s): the Approvals badge, and the
     /// "New data on the server — Load now" banner when the planner uploads new files or changes parameters.
     /// </summary>
     public sealed class ServerStatusService : IDisposable
     {
-        private readonly IAPICallService _api;
+        private readonly IAPICall _api;
         private PeriodicTimer? _timer;
         private CancellationTokenSource? _cts;
 
-        public ServerStatusService(IAPICallService api) => _api = api;
+        public ServerStatusService(IAPICall api) => _api = api;
 
         public event Action? Changed;
 
@@ -26,7 +29,8 @@ namespace Admin.Services
         public string? ServerVersion { get; private set; }
         public bool AiChat { get; private set; }
         public bool AiInsights { get; private set; }
-        public JsonElement Raw { get; private set; }
+        /// <summary>The last status answer (null until one arrived).</summary>
+        public StatusResponse? Last { get; private set; }
 
         /// <summary>Data / params version the open page last loaded (0 = not yet).</summary>
         public long SeenDataVersion { get; private set; }
@@ -53,33 +57,33 @@ namespace Admin.Services
             catch (OperationCanceledException) { }
         }
 
+        /// <summary>PO_GET_STATUS (the same call the pages use to read the datasets / params on load).</summary>
+        public Task<ApiDataResponse<StatusResponse>> GetAsync(CancellationToken ct = default) =>
+            _api.CallingAPI<ApiDataResponse<StatusResponse>, EmptyReq>(AllApiNames.PO_GET_STATUS, EmptyReq.Instance, null, ct);
+
         public async Task RefreshAsync(CancellationToken ct = default)
         {
-            var res = await _api.GetAsync<JsonElement>("api/v1/status", ct);
+            ApiDataResponse<StatusResponse> res;
+            try { res = await GetAsync(ct); }
+            catch (OperationCanceledException) { return; }
             Online = res.IsSuccess;
-            if (res.IsSuccess && res.Data.ValueKind == JsonValueKind.Object)
+            if (res.IsSuccess && res.Data != null)
             {
                 var d = res.Data;
-                Raw = d.Clone();
-                PendingApprovals = Int(d, "pendingApprovals");
-                DataVersion = Long(d, "dataVersion");
-                ParamsVersion = Long(d, "paramsVersion");
-                Today = d.TryGetProperty("today", out var t) && t.ValueKind == JsonValueKind.String ? t.GetString() : Today;
-                ServerVersion = d.TryGetProperty("version", out var v) && v.ValueKind == JsonValueKind.String ? v.GetString() : ServerVersion;
-                if (d.TryGetProperty("ai", out var ai) && ai.ValueKind == JsonValueKind.Object)
-                {
-                    AiChat = ai.TryGetProperty("chat", out var c) && c.ValueKind == JsonValueKind.True;
-                    AiInsights = ai.TryGetProperty("insights", out var i) && i.ValueKind == JsonValueKind.True;
-                }
+                Last = d;
+                PendingApprovals = d.PendingApprovals;
+                DataVersion = d.DataVersion;
+                ParamsVersion = d.ParamsVersion;
+                Today = string.IsNullOrEmpty(d.Today) ? Today : d.Today;
+                ServerVersion = string.IsNullOrEmpty(d.Version) ? ServerVersion : d.Version;
+                AiChat = d.Ai?.Chat == true;
+                AiInsights = d.Ai?.Insights == true;
                 if (SeenDataVersion == 0) { SeenDataVersion = DataVersion; SeenParamsVersion = ParamsVersion; }
                 Message = "● Shared · " + (Today ?? "");
             }
-            else Message = res.ResponseCode == 401 ? "Signed out" : "Server unreachable";
+            else Message = res.responseCode == 401 ? "Signed out" : "Server unreachable";
             Changed?.Invoke();
         }
-
-        private static int Int(JsonElement d, string n) => d.TryGetProperty(n, out var v) && v.ValueKind == JsonValueKind.Number ? v.GetInt32() : 0;
-        private static long Long(JsonElement d, string n) => d.TryGetProperty(n, out var v) && v.ValueKind == JsonValueKind.Number ? v.GetInt64() : 0;
 
         public void Dispose()
         {

@@ -10,7 +10,7 @@ using Npgsql;
 namespace Infrastructure.Middleware
 {
     /// <summary>
-    /// Turns exceptions into the <see cref="ApiResponse{T}"/> envelope (server.py route() error handling):
+    /// Turns exceptions into the <see cref="ApiDataResponse{T}"/> envelope (responseCode = HTTP status, responseMessage, Data = payload) (server.py route() error handling):
     /// <list type="bullet">
     /// <item><see cref="AppException"/> → its status, message and payload (e.g. 409 {conflict, byOthers, seq})</item>
     /// <item>a DecisionEngine rule error the service did not translate → 404 (<see cref="EngineNotFoundException"/>) / 400</item>
@@ -22,8 +22,10 @@ namespace Infrastructure.Middleware
     public sealed class ExceptionMiddleware
     {
         public const string DbUnreachable = "The database is not reachable right now - please try again in a minute.";
-        private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web)
+        /// <summary>Same JSON shape as the controllers (PropertyNamingPolicy = null, QPS).</summary>
+        public static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web)
         {
+            PropertyNamingPolicy = null,
             Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping
         };
 
@@ -42,9 +44,11 @@ namespace Infrastructure.Middleware
             {
                 await _next(ctx);
             }
-            catch (OperationCanceledException) when (ctx.RequestAborted.IsCancellationRequested)
+            catch (Exception e) when (ctx.RequestAborted.IsCancellationRequested)
             {
-                // client went away
+                // client went away (the portal cancels a call when its page closes); SqlClient reports that as
+                // SqlException 3980 "Operation cancelled by user" rather than OperationCanceledException.
+                _log.LogDebug("Request aborted by the client: {Error}", e.Message);
             }
             catch (Exception e)
             {
@@ -87,7 +91,7 @@ namespace Infrastructure.Middleware
             ctx.Response.StatusCode = status;
             ctx.Response.ContentType = "application/json; charset=utf-8";
             ctx.Response.Headers.CacheControl = "no-store";
-            await ctx.Response.WriteAsync(JsonSerializer.Serialize(ApiResponse<object>.Fail(status, message, payload), Json));
+            await ctx.Response.WriteAsync(JsonSerializer.Serialize(ApiDataResponse<object>.Fail(status, message, payload), Json));
         }
     }
 }

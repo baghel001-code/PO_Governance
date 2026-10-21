@@ -28,6 +28,7 @@ namespace Admin.ServiceRegistration
                     o.Cookie.SameSite = SameSiteMode.Strict;
                     o.Cookie.SecurePolicy = env.IsDevelopment() ? CookieSecurePolicy.SameAsRequest : CookieSecurePolicy.Always;
                     o.LoginPath = "/Account/Login";
+                    o.ReturnUrlParameter = "next";   // Login.razor / AccountEndpoints read ?next=
                     o.LogoutPath = "/Account/Logout";
                     o.AccessDeniedPath = "/Account/AccessDenied";
                     o.ExpireTimeSpan = TimeSpan.FromHours(settings.SessionIdleHours);

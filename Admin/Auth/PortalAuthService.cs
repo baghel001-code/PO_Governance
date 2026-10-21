@@ -45,6 +45,16 @@ namespace Admin.Auth
             return true;
         }
 
+        /// <summary>PO_AUTH_CHANGE_PASSWORD, then re-issues the cookie (mustChange cleared). Null = success, else the message.</summary>
+        public async Task<string?> ChangePasswordAsync(HttpContext http, string token, string oldPassword, string newPassword)
+        {
+            var res = await _api.CallingAPI<ApiDataResponse<OkResponse>, ChangePasswordRequest>(AllApiNames.PO_AUTH_CHANGE_PASSWORD,
+                new ChangePasswordRequest { Old = oldPassword, New = newPassword }, token, http.RequestAborted);
+            if (!res.IsSuccess) return string.IsNullOrEmpty(res.responseMessage) ? "Could not change password" : res.responseMessage;
+            await RefreshAsync(http, token);
+            return null;
+        }
+
         public async Task SignOutAsync(HttpContext http)
         {
             var token = http.User.FindFirst(CustomClaimTypes.SessionToken)?.Value;

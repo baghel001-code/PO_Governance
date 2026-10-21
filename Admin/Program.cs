@@ -66,16 +66,12 @@ if (!app.Environment.IsDevelopment())
 app.UseStaticFiles();
 app.UseAuthentication();
 app.UseAuthorization();
+app.UseAccountRedirects();   // signed in → skip the sign-in page; must change password → change-password page
 app.UseAntiforgery();
 
-// Sign out: ends the API session (app_sessions) and clears the portal cookie.
-async Task<IResult> SignOut(HttpContext http, PortalAuthService auth)
-{
-    await auth.SignOutAsync(http);
-    return Results.Redirect("/Account/Login");
-}
-app.MapGet("/Account/Logout", SignOut);
-app.MapPost("/Account/Logout", SignOut);
+// Sign-in, password change, sign-out and the "/" start page are plain HTTP endpoints (Auth/AccountEndpoints.cs):
+// they set the cookie and redirect without going through a Blazor page.
+app.MapAccountEndpoints();
 
 app.MapRazorComponents<App>().AddInteractiveServerRenderMode();
 app.Lifetime.ApplicationStopped.Register(Log.CloseAndFlush);

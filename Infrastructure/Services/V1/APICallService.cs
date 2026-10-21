@@ -94,19 +94,33 @@ namespace Infrastructure.Services.V1
                 return false;
             }
             var enc = new New_Enc_Dec();
+            var badTokens = new List<string>();
             foreach (var row in res.ApiData)
             {
                 if (!string.IsNullOrWhiteSpace(row.Api_Authorization))
                 {
-                    try { row.Api_Authorization = enc.My_Decode(row.Api_Authorization.Trim()); }
+                    string? decoded = null;
+                    try { decoded = enc.My_Decode(row.Api_Authorization.Trim()); }
                     catch (Exception e)
                     {
                         _log?.LogWarning(e, "API_MASTER {Task}: Api_Authorization is not My_Encode text - using MasterApiSettings:Api_Authorization", row.Task_Name);
-                        row.Api_Authorization = master.Api_Authorization;
                     }
+                    if (decoded != null && !IsHeaderSafe(decoded))
+                    {
+                        // My_Decode of text that was not My_Encode-d with this key (a plain token, another key, a copy from
+                        // another system) yields non-ASCII characters, which HttpClient refuses to put in a header.
+                        badTokens.Add(row.Task_Name ?? "?");
+                        decoded = null;
+                    }
+                    row.Api_Authorization = decoded ?? master.Api_Authorization;
                 }
                 else row.Api_Authorization = master.Api_Authorization;
             }
+            if (badTokens.Count > 0)
+                _log?.LogWarning("API_MASTER.Api_Authorization of {Count} task(s) (e.g. {Example}) does not decode to a valid token - it must be " +
+                                 "My_Encode of the static API token, the same text as JwtSettings:SecretKey. Using MasterApiSettings:Api_Authorization " +
+                                 "for them. Fix with: UPDATE dbo.API_MASTER SET Api_Authorization = N'<JwtSettings:SecretKey>'",
+                                 badTokens.Count, badTokens[0]);
             AllApi.ApiDetails = res.ApiData;
             _masterFailure = null;
             _log?.LogInformation("API master: {Count} APIs loaded from {Url}", res.ApiData.Count, master.Api_Url);
@@ -179,6 +193,10 @@ namespace Infrastructure.Services.V1
             return await SendAsync<ApiFileResponse>(api, method, content, null, ct);
         }
 
+        /// <summary>Printable ASCII only — what an HTTP header value may contain.</summary>
+        internal static bool IsHeaderSafe(string? value) =>
+            !string.IsNullOrEmpty(value) && value.All(c => c >= 0x20 && c < 0x7F);
+
         /// <summary>1000 "task not found" — or, while the API master list is missing, why it could not be loaded (e.g. 1003 unreachable).</summary>
         private static RepT NotFound<RepT>(string apiName) =>
             (AllApi.ApiDetails == null || AllApi.ApiDetails.Count == 0) && _masterFailure is { } f
@@ -232,6 +250,10 @@ namespace Infrastructure.Services.V1
                 {
                     var tok = api.Api_Authorization.Trim();
                     if (tok.StartsWith("Bearer ", StringComparison.OrdinalIgnoreCase)) tok = tok[7..].Trim();
+                    if (!IsHeaderSafe(tok))
+                        return Fallback<RepT>(CodeError, $"The API token for '{api.Task_Name}' is not valid: MasterApiSettings:Api_Authorization (Admin) and " +
+                                                         "API_MASTER.Api_Authorization must hold My_Encode of the static API token - the same text as " +
+                                                         "JwtSettings:SecretKey in POGovApi/appsettings.json.");
                     req.Headers.Authorization = new AuthenticationHeaderValue(string.IsNullOrWhiteSpace(api.Api_Authorization_Type) ? "Bearer" : api.Api_Authorization_Type.Trim(), tok);
                 }
                 sessionToken ??= _sessions == null ? null : await _sessions.GetSessionTokenAsync();

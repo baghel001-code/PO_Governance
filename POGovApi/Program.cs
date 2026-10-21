@@ -87,6 +87,7 @@ var app = builder.Build();
 
 // ── pipeline ───────────────────────────────────────────────────────────
 app.UseApiExceptionHandling();
+app.UseDatabaseReadiness();     // 503 + reason until the database is reachable (the API itself always starts)
 app.UseSerilogRequestLogging(o => o.GetLevel = (ctx, _, ex) =>
     ex != null || ctx.Response.StatusCode >= 500 ? Serilog.Events.LogEventLevel.Error
     : ctx.Request.Path.StartsWithSegments("/api/v1/GetStatus") || ctx.Request.Path.StartsWithSegments("/api/v1/AuthMe") ? Serilog.Events.LogEventLevel.Debug

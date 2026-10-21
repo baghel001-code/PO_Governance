@@ -73,6 +73,7 @@ namespace Infrastructure.ServicesConfiguration
                     return h;
                 });
 
+            services.AddSingleton<DatabaseReadiness>();
             services.AddHostedService<StartupService>();
             services.AddHostedService<BackupBackgroundService>();
 
@@ -83,6 +84,9 @@ namespace Infrastructure.ServicesConfiguration
 
         /// <summary>Exception → ApiResponse mapping. Add first in the pipeline.</summary>
         public static IApplicationBuilder UseApiExceptionHandling(this IApplicationBuilder app) => app.UseMiddleware<ExceptionMiddleware>();
+
+        /// <summary>503 with the reason on api/v1/* (except Health) until the start-up work has reached the database.</summary>
+        public static IApplicationBuilder UseDatabaseReadiness(this IApplicationBuilder app) => app.UseMiddleware<DatabaseReadinessMiddleware>();
 
         /// <summary>Static API token (QPS StaticTokenMiddleware, JwtSettings:SecretKey) on api/v1/* except Health. Add before UseAuthentication.</summary>
         public static IApplicationBuilder UseStaticToken(this IApplicationBuilder app) => app.UseMiddleware<StaticTokenMiddleware>();

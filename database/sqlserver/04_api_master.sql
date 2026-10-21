@@ -104,7 +104,7 @@ BEGIN
 END
 GO
 
-/* Seed: one row per POGovApi action (79). Only missing task names are inserted. */
+/* Seed: one row per POGovApi portal action (91; the SAP-facing endpoints under /api/sap/v1 are called by SAP directly, not listed). Only missing task names are inserted. */
 DECLARE @ApiBase  NVARCHAR(400)  = N'http://localhost:5080/';      -- base URL of POGovApi on this server (ends with /)
 DECLARE @ApiToken NVARCHAR(1000) = N'7VmtFgfO7g5YDVUW175UDqe7FIOUFq8cxpTI17P0fJiSHbePHN';   -- My_Encode(static API token) = JwtSettings:SecretKey
 IF RIGHT(@ApiBase, 1) <> N'/' SET @ApiBase = @ApiBase + N'/';
@@ -190,7 +190,19 @@ INSERT INTO @seed (Api_Name, Task_Name, Action_Name, Api_Http_Method, Api_Conten
         (N'IngestFile', N'PO_INGEST_FILE', N'IngestFile', N'POST', N'multipart/form-data', 900, N'Data Setup: one data slot (multipart)'),
         (N'IngestZip', N'PO_INGEST_ZIP', N'IngestZip', N'POST', N'multipart/form-data', 900, N'Data Setup: zip bundle (multipart)'),
         (N'IngestRaw', N'PO_INGEST_RAW', N'IngestRaw', N'POST', N'multipart/form-data', 900, N'Data Setup: raw system exports (multipart)'),
-        (N'IngestGrc', N'PO_INGEST_GRC', N'IngestGrc', N'POST', N'multipart/form-data', 900, N'Data Setup: GRC buying-history file (multipart)');
+        (N'IngestGrc', N'PO_INGEST_GRC', N'IngestGrc', N'POST', N'multipart/form-data', 900, N'Data Setup: GRC buying-history file (multipart)'),
+        (N'SapOverview', N'PO_SAP_OVERVIEW', N'SapOverview', N'POST', N'application/json', 60, N'SAP interface: settings, feed status, decision counts'),
+        (N'SapDecisionList', N'PO_SAP_DECISION_LIST', N'SapDecisionList', N'POST', N'application/json', 120, N'SAP interface: decision log'),
+        (N'SapDecisionGet', N'PO_SAP_DECISION_GET', N'SapDecisionGet', N'POST', N'application/json', 60, N'SAP interface: one decision with items and JSON'),
+        (N'SapEventList', N'PO_SAP_EVENT_LIST', N'SapEventList', N'POST', N'application/json', 120, N'SAP interface: events'),
+        (N'SapEventGet', N'PO_SAP_EVENT_GET', N'SapEventGet', N'POST', N'application/json', 60, N'SAP interface: one event with payload'),
+        (N'SapTechUserList', N'PO_SAP_TECH_USER_LIST', N'SapTechUserList', N'POST', N'application/json', 60, N'SAP interface: technical users'),
+        (N'SapTechUserAdd', N'PO_SAP_TECH_USER_ADD', N'SapTechUserAdd', N'POST', N'application/json', 60, N'SAP interface: add a technical user'),
+        (N'SapTechUserUpdate', N'PO_SAP_TECH_USER_UPDATE', N'SapTechUserUpdate', N'POST', N'application/json', 60, N'SAP interface: enable / disable / unlock / reset password'),
+        (N'SapReasonCodeList', N'PO_SAP_REASON_CODE_LIST', N'SapReasonCodeList', N'POST', N'application/json', 60, N'SAP interface: reason codes'),
+        (N'SapReasonCodeSave', N'PO_SAP_REASON_CODE_SAVE', N'SapReasonCodeSave', N'POST', N'application/json', 60, N'SAP interface: add / change an exception reason code'),
+        (N'SapTestDecision', N'PO_SAP_TEST_DECISION', N'SapTestDecision', N'POST', N'application/json', 60, N'SAP interface: test decision (real decision path, logged as test)'),
+        (N'SapSampleRequest', N'PO_SAP_SAMPLE_REQUEST', N'SapSampleRequest', N'POST', N'application/json', 60, N'SAP interface: sample /decisions request');
 
 INSERT INTO dbo.API_MASTER (Api_Name, Task_Name, Api_Url, Api_Http_Method, Api_Content_Type, Api_Authorization_Type,
                             Api_Authorization, Api_Timeout, Active_Status, Description)

@@ -174,6 +174,32 @@ namespace Domain.Entities.Common
         /// <summary>Data Setup: GRC buying-history file (multipart) — api/v1/IngestGrc (POST).</summary>
         public static string PO_INGEST_GRC { get; set; } = nameof(PO_INGEST_GRC);
 
+        // ── SAP interface monitoring (/admin/sap). The SAP-facing /api/sap/v1/* endpoints are not in the API master.
+        /// <summary>SAP interface settings, feed status, decision counts / latency — api/v1/SapOverview (POST).</summary>
+        public static string PO_SAP_OVERVIEW { get; set; } = nameof(PO_SAP_OVERVIEW);
+        /// <summary>SAP decision log (filters) — api/v1/SapDecisionList (POST).</summary>
+        public static string PO_SAP_DECISION_LIST { get; set; } = nameof(PO_SAP_DECISION_LIST);
+        /// <summary>One SAP decision with items and JSON — api/v1/SapDecisionGet (POST).</summary>
+        public static string PO_SAP_DECISION_GET { get; set; } = nameof(PO_SAP_DECISION_GET);
+        /// <summary>SAP events (filters, lag) — api/v1/SapEventList (POST).</summary>
+        public static string PO_SAP_EVENT_LIST { get; set; } = nameof(PO_SAP_EVENT_LIST);
+        /// <summary>One SAP event with its payload — api/v1/SapEventGet (POST).</summary>
+        public static string PO_SAP_EVENT_GET { get; set; } = nameof(PO_SAP_EVENT_GET);
+        /// <summary>SAP technical users — api/v1/SapTechUserList (POST).</summary>
+        public static string PO_SAP_TECH_USER_LIST { get; set; } = nameof(PO_SAP_TECH_USER_LIST);
+        /// <summary>Add a SAP technical user — api/v1/SapTechUserAdd (POST).</summary>
+        public static string PO_SAP_TECH_USER_ADD { get; set; } = nameof(PO_SAP_TECH_USER_ADD);
+        /// <summary>Enable / disable / unlock / reset password of a technical user — api/v1/SapTechUserUpdate (POST).</summary>
+        public static string PO_SAP_TECH_USER_UPDATE { get; set; } = nameof(PO_SAP_TECH_USER_UPDATE);
+        /// <summary>SAP reason codes (exception + verdict) — api/v1/SapReasonCodeList (POST).</summary>
+        public static string PO_SAP_REASON_CODE_LIST { get; set; } = nameof(PO_SAP_REASON_CODE_LIST);
+        /// <summary>Add / change an exception reason code — api/v1/SapReasonCodeSave (POST).</summary>
+        public static string PO_SAP_REASON_CODE_SAVE { get; set; } = nameof(PO_SAP_REASON_CODE_SAVE);
+        /// <summary>Run a /decisions request through the real decision path (test) — api/v1/SapTestDecision (POST).</summary>
+        public static string PO_SAP_TEST_DECISION { get; set; } = nameof(PO_SAP_TEST_DECISION);
+        /// <summary>Sample /decisions request from the uploaded data — api/v1/SapSampleRequest (POST).</summary>
+        public static string PO_SAP_SAMPLE_REQUEST { get; set; } = nameof(PO_SAP_SAMPLE_REQUEST);
+
         /// <summary>Copies every non-empty ApiNamesSettings value onto the property of the same name (QPS Initialize).</summary>
         public static void Initialize(ApiNames apiNames)
         {

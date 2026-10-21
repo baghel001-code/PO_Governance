@@ -94,6 +94,24 @@ namespace Infrastructure.Repositories
                                "- the portal loads its API list from it (GetAllApi).", _db.Describe());
         }
 
+        /// <summary>
+        /// A schema v2 database (before the SAP interface): 05_sap_interface.sql is run when SqlServerCreateSchema is on,
+        /// otherwise only reported — the portal works, the SAP endpoints fail until the script is run.
+        /// </summary>
+        private async Task EnsureSapInterfaceAsync(string version, CancellationToken ct)
+        {
+            if (_createSchema)
+            {
+                _log?.LogInformation("Upgrading schema v{Version} to v{Expected}: database/sqlserver/05_sap_interface.sql in {Db}",
+                    version, SqlServerSchema.ExpectedVersion, _db.Describe());
+                await SqlServerSchema.ApplyAsync(_db.ConnectionString, new[] { SqlServerSchema.SapInterfaceScript }, null, ApiMasterBaseUrl, ct);
+            }
+            else
+                _log?.LogError("The database {Db} has schema v{Version}: run database/sqlserver/05_sap_interface.sql (schema v{Expected}) - " +
+                               "the SAP interface (/api/sap/v1, /admin/sap) needs its tables and PRO_SAP_* procedures.",
+                    _db.Describe(), version, SqlServerSchema.ExpectedVersion);
+        }
+
         public string Kind => "sqlserver";
 
         public string Describe() => "SQL Server " + _db.Describe();
@@ -244,9 +262,11 @@ namespace Infrastructure.Repositories
                         throw new InvalidOperationException(
                             $"The SQL Server database {_db.Describe()} has no PO Governance schema. Run database/sqlserver/01_tables.sql, " +
                             "02_procedures.sql and 03_seed.sql in it (see database/sqlserver/README.md), or set PoGovSettings:SqlServerCreateSchema = true.");
-                    if (string.CompareOrdinal(v, SqlServerSchema.ExpectedVersion) < 0)
-                        throw new InvalidOperationException($"SQL Server schema version {v} is older than {SqlServerSchema.ExpectedVersion}: run database/sqlserver/01..03 again.");
+                    if (string.CompareOrdinal(v, SqlServerSchema.MinimumVersion) < 0)
+                        throw new InvalidOperationException($"SQL Server schema version {v} is older than {SqlServerSchema.MinimumVersion}: run database/sqlserver/01..05 again.");
                     await EnsureApiMasterAsync(ct);
+                    if (string.CompareOrdinal(v, SqlServerSchema.ExpectedVersion) < 0)
+                        await EnsureSapInterfaceAsync(v, ct);
                     return;
                 }
                 catch (Exception e) when (IsConnectionError(e) && DateTime.UtcNow < deadline && !ct.IsCancellationRequested)

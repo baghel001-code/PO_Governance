@@ -17,6 +17,31 @@ namespace POGovernance.Tests.Architecture
     {
         private static readonly string[] GetActions = { "GetAllApi", "Health" };
 
+        /// <summary>The SAP-facing controllers: routes fixed by the SAP API specification v1.4, not QPS / API master (checked below).</summary>
+        private const string SapNamespace = "POGovApi.Controllers.Sap";
+
+        [Fact]
+        public void The_SAP_controllers_serve_exactly_the_spec_paths_with_the_SapBasic_scheme()
+        {
+            var sap = typeof(POGovApi.Controllers.V1.ApiControllerBase).Assembly.GetTypes()
+                .Where(t => typeof(ControllerBase).IsAssignableFrom(t) && !t.IsAbstract && t.Namespace == SapNamespace).ToList();
+            Assert.NotEmpty(sap);
+            var paths = new List<string>();
+            foreach (var c in sap)
+            {
+                var prefix = c.GetCustomAttribute<RouteAttribute>()!.Template;
+                Assert.Equal("api/sap/v1", prefix);
+                var auth = c.GetCustomAttribute<Microsoft.AspNetCore.Authorization.AuthorizeAttribute>();
+                Assert.Equal(Infrastructure.Authentication.SapBasicAuthenticationHandler.SchemeName, auth?.AuthenticationSchemes);
+                Assert.False(typeof(POGovApi.Controllers.V1.ApiControllerBase).IsAssignableFrom(c));
+                foreach (var m in c.GetMethods(BindingFlags.Public | BindingFlags.Instance | BindingFlags.DeclaredOnly))
+                    foreach (var h in m.GetCustomAttributes<HttpMethodAttribute>())
+                        paths.Add(h.HttpMethods.Single() + " /" + prefix + "/" + h.Template);
+            }
+            Assert.Equal(new[] { "GET /api/sap/v1/ping", "GET /api/sap/v1/reason-codes", "POST /api/sap/v1/decisions", "POST /api/sap/v1/events" }.OrderBy(x => x),
+                         paths.OrderBy(x => x));
+        }
+
         private static string RepoFile(params string[] parts)
         {
             var dir = new DirectoryInfo(AppContext.BaseDirectory);
@@ -27,7 +52,7 @@ namespace POGovernance.Tests.Architecture
 
         private static List<(Type Controller, MethodInfo Action, string Method)> Actions() =>
             typeof(POGovApi.Controllers.V1.ApiControllerBase).Assembly.GetTypes()
-                .Where(t => typeof(ControllerBase).IsAssignableFrom(t) && !t.IsAbstract)
+                .Where(t => typeof(ControllerBase).IsAssignableFrom(t) && !t.IsAbstract && t.Namespace != SapNamespace)
                 .SelectMany(t => t.GetMethods(BindingFlags.Public | BindingFlags.Instance | BindingFlags.DeclaredOnly)
                     .Select(m => (t, m, m.GetCustomAttributes<HttpMethodAttribute>().SelectMany(a => a.HttpMethods).ToList()))
                     .Where(x => x.Item3.Count > 0)

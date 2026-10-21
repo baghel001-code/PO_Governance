@@ -51,6 +51,22 @@ namespace DecisionEngine.Common
             return ResolveMap(data).TryGetValue(code.Trim(), out var i) ? i : null;
         }
 
+        /// <summary>
+        /// True when the trimmed <paramref name="gm"/> is a key of any lookup the tool resolves or routes by:
+        /// the resolve map (Article Master / Universe Master / F2), the Universe Master set or the BSR GM set.
+        /// Used by the SAP input normalisation (<c>DecisionEngine.Sap.SapInputNormalizer</c>).
+        /// </summary>
+        public static bool IsKnownGm(EngineData data, string? gm)
+        {
+            var g = (gm ?? "").Trim();
+            if (g.Length == 0) return false;
+            return ResolveMap(data).ContainsKey(g) || UmSet(data).Contains(g) || BsrGm(data).ContainsKey(g);
+        }
+
+        /// <summary>The BSR colours of a GM (trimmed, as written in the BSR file); empty when the GM is not in BSR.</summary>
+        public static IReadOnlyCollection<string> BsrColours(EngineData data, string gm) =>
+            BsrGm(data).TryGetValue(gm.Trim(), out var s) ? s : (IReadOnlyCollection<string>)Array.Empty<string>();
+
         private static HashSet<string> UmSet(EngineData data) => data.GetOrBuild(UmKey, d =>
         {
             var s = new HashSet<string>(StringComparer.Ordinal);

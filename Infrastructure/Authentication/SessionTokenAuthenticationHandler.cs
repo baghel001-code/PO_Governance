@@ -84,7 +84,8 @@ namespace Infrastructure.Authentication
         public async Task InvokeAsync(HttpContext ctx)
         {
             var path = ctx.Request.Path.Value ?? "";
-            if (path.StartsWith("/api/", StringComparison.OrdinalIgnoreCase))
+            // the SAP interface (/api/sap/*) has its own authentication (SapBasic) and no portal header rules
+            if (path.StartsWith("/api/", StringComparison.OrdinalIgnoreCase) && !SapInterfaceMiddleware.IsSapPath(ctx.Request.Path))
             {
                 if (_cfg.RequireXvmmHeader && !HttpMethods.IsGet(ctx.Request.Method) && !HttpMethods.IsHead(ctx.Request.Method)
                     && !HttpMethods.IsOptions(ctx.Request.Method) && ctx.Request.Headers[AppConstants.RestrictedHeader] != "1")

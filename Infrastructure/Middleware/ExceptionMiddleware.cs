@@ -57,6 +57,14 @@ namespace Infrastructure.Middleware
                     _log.LogError(e, "API error after the response started");
                     throw;
                 }
+                if (SapInterfaceMiddleware.IsSapPath(ctx.Request.Path))
+                {
+                    // the SAP interface answers with the contract's Error body, never the portal envelope
+                    var (sapStatus, code, sapMessage) = SapInterfaceMiddleware.Map(e);
+                    if (sapStatus >= 500) _log.LogError(e, "SAP interface error ({Status})", sapStatus);
+                    await SapInterfaceMiddleware.WriteAsync(ctx, sapStatus, code, sapMessage);
+                    return;
+                }
                 var (status, message, payload) = Map(e);
                 if (status >= 500) _log.LogError(e, "API error ({Status})", status);
                 await WriteAsync(ctx, status, message, payload);

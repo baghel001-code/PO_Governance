@@ -83,5 +83,17 @@ namespace Domain.Entities.Common
         public string? PO_INGEST_ZIP { get; set; }
         public string? PO_INGEST_RAW { get; set; }
         public string? PO_INGEST_GRC { get; set; }
+        public string? PO_SAP_OVERVIEW { get; set; }
+        public string? PO_SAP_DECISION_LIST { get; set; }
+        public string? PO_SAP_DECISION_GET { get; set; }
+        public string? PO_SAP_EVENT_LIST { get; set; }
+        public string? PO_SAP_EVENT_GET { get; set; }
+        public string? PO_SAP_TECH_USER_LIST { get; set; }
+        public string? PO_SAP_TECH_USER_ADD { get; set; }
+        public string? PO_SAP_TECH_USER_UPDATE { get; set; }
+        public string? PO_SAP_REASON_CODE_LIST { get; set; }
+        public string? PO_SAP_REASON_CODE_SAVE { get; set; }
+        public string? PO_SAP_TEST_DECISION { get; set; }
+        public string? PO_SAP_SAMPLE_REQUEST { get; set; }
     }
 }

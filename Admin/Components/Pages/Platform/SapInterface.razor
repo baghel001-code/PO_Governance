@@ -1,0 +1,524 @@
+@page "/admin/sap"
+@* SAP R/3 interface monitoring (admin): settings + feed status, decision log (items, request / response JSON), events,
+   technical users, reason codes and a test decision through the real decision path. API: AllApiNames.PO_SAP_* (QPS). *@
+@using System.Text.Json
+@using System.Text.Json.Nodes
+@using Domain.Entities.Sap
+@inject UserSessionState Session
+@inject ISnackbar Snackbar
+
+<PageTitle>SAP Interface · VMM PO Governance</PageTitle>
+<PlatformStyles />
+
+<PfHeader Icon="🔌" Title="SAP Interface">
+    <Sub>SAP R/3 integration API <code>/api/sap/v1</code> (specification v1.4): decisions asked by the PO release workflow, events pushed by the bgRFC queue, the technical users SAP signs in with, and the reason codes SAP shows to approvers.</Sub>
+</PfHeader>
+
+@if (!_ready)
+{
+    <div class="pf-empty">Loading…</div>
+}
+else if (!Session.IsAdmin)
+{
+    <div class="card pf-err">Admin only</div>
+}
+else
+{
+    <div class="pf-pills">
+        @foreach (var t in Tabs)
+        {
+            <button class="pf-pill @(t.Key == _tab ? "on" : "")" @onclick="() => SetTabAsync(t.Key)" data-testid="sap-tab-@t.Key">@t.Label</button>
+        }
+    </div>
+    @if (_error != null)
+    {
+        <div class="card pf-err" data-testid="sap-error">@_error</div>
+    }
+    @switch (_tab)
+    {
+        case "decisions":
+            @Decisions()
+            break;
+        case "events":
+            @Events()
+            break;
+        case "users":
+            @Users()
+            break;
+        case "codes":
+            @Codes()
+            break;
+        case "test":
+            @Test()
+            break;
+        default:
+            @Overview()
+            break;
+    }
+}
+
+@code {
+    private static readonly (string Key, string Label)[] Tabs =
+    {
+        ("overview", "📡 Overview"), ("decisions", "⚖️ Decisions"), ("events", "📨 Events"), ("users", "🔑 Technical users"),
+        ("codes", "🏷 Reason codes"), ("test", "🧪 Test decision")
+    };
+
+    private static readonly TimeSpan Ist = TimeSpan.FromMinutes(330);
+    private static readonly JsonSerializerOptions Pretty = new() { WriteIndented = true, Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping };
+
+    private bool _ready;
+    private string _tab = "overview";
+    private string? _error;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await Session.InitAsync();
+        _ready = true;
+        if (Session.IsAdmin) await LoadOverviewAsync();
+    }
+
+    private async Task SetTabAsync(string tab)
+    {
+        _tab = tab;
+        _error = null;
+        switch (tab)
+        {
+            case "decisions": await LoadDecisionsAsync(); break;
+            case "events": await LoadEventsAsync(); break;
+            case "users": await LoadUsersAsync(); break;
+            case "codes": await LoadCodesAsync(); break;
+            case "test": if (string.IsNullOrEmpty(_testJson)) await LoadSampleAsync(); break;
+            default: await LoadOverviewAsync(); break;
+        }
+    }
+
+    private bool Ok<T>(ApiDataResponse<T> res)
+    {
+        if (res.IsSuccess && res.Data != null) { _error = null; return true; }
+        _error = res.responseMessage ?? "Error";
+        return false;
+    }
+
+    private static string When(DateTimeOffset? t) => t == null ? "—" : t.Value.ToOffset(Ist).ToString("dd MMM HH:mm:ss");
+    private static string Qty(double? v) => v == null ? "—" : Js.Fmt(v.Value);
+    private static string PrettyJson(string? json)
+    {
+        if (string.IsNullOrWhiteSpace(json)) return "";
+        try { return JsonNode.Parse(json)!.ToJsonString(Pretty); } catch (JsonException) { return json; }
+    }
+    private static string VerdictClass(string? v) => v switch
+    {
+        "ALLOW" => "dp-allow", "REDUCE" => "dp-reduce", "WATCH" => "dp-watch", "HOLD" => "dp-hold", "BLOCK" => "dp-block", _ => "dp-nodata"
+    };
+
+    private RenderFragment Pill(string? verdict, string? fallback = null) => @<span class="pf-dp @VerdictClass(verdict)">@(verdict ?? fallback ?? "—")</span>;
+
+    // ── overview ─────────────────────────────────────────────
+    private SapOverviewResponse? _ov;
+
+    private async Task LoadOverviewAsync()
+    {
+        var res = await ApiMasterService.SapOverviewAsync();
+        if (Ok(res)) _ov = res.Data;
+    }
+
+    private RenderFragment Overview() => __builder =>
+    {
+        if (_ov == null) { <div class="pf-empty">Loading…</div> return; }
+        var e = _ov.Events;
+        var d = _ov.Decisions;
+        var lagBad = e.LagSeconds > _ov.EventsLagLimitSeconds;
+        <div class="card" style="padding:14px 18px;margin-bottom:12px" data-testid="sap-overview">
+            <div style="display:flex;flex-wrap:wrap;gap:22px">
+                <div><div class="pf-lbl">Interface</div><b style="color:@(_ov.Enabled && _ov.Available ? "#15803d" : "#DC2626")">@(!_ov.Available ? _ov.UnavailableReason : _ov.Enabled ? "ON" : "SWITCHED OFF")</b> · @_ov.Environment</div>
+                <div><div class="pf-lbl">Rules version</div>@_ov.RulesVersion</div>
+                <div><div class="pf-lbl">Block sent as</div>@_ov.BlockVerdict</div>
+                <div><div class="pf-lbl">Unknown items</div>@_ov.UnknownItemPolicy</div>
+                <div><div class="pf-lbl">Timeout</div>@_ov.DecisionTimeoutMs ms</div>
+                <div><div class="pf-lbl">Stock file (bw_snapshot)</div>@(_ov.BwSnapshot ?? "—")</div>
+                <div><div class="pf-lbl">Allowed IPs</div><span class="pf-mono pf-small">@(_ov.AllowedIps.Count == 0 ? "none - every call refused" : string.Join(", ", _ov.AllowedIps))</span></div>
+                @if (_ov.OnlyOnPort > 0)
+                {
+                    <div><div class="pf-lbl">Port</div>@_ov.OnlyOnPort only</div>
+                }
+            </div>
+        </div>
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:12px">
+            <div class="card" style="padding:14px 18px" data-testid="sap-ov-decisions">
+                <div style="font-weight:800;margin-bottom:8px">⚖️ Decisions</div>
+                <div class="pf-note">Today <b>@d.Today</b> (NOT_CHECKED answers: <b style="color:@(d.TodayNotChecked > 0 ? "#DC2626" : "inherit")">@d.TodayNotChecked</b>) · total @d.Total · shadow @d.Shadow / live @d.Live</div>
+                <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px">
+                    <span class="pf-dp dp-allow">ALLOW @d.Allow</span><span class="pf-dp dp-reduce">REDUCE @d.Reduce</span>
+                    <span class="pf-dp dp-watch">WATCH @d.Watch</span><span class="pf-dp dp-hold">HOLD @d.Hold</span>
+                    @if (d.Block > 0) { <span class="pf-dp dp-block">BLOCK @d.Block</span> }
+                    <span class="pf-dp dp-nodata">NOT_CHECKED @d.NotChecked</span>
+                </div>
+                <div class="pf-note">Server time per decision (last 1000): p50 <b>@(d.P50Ms?.ToString() ?? "—") ms</b> · p95 @(d.P95Ms?.ToString() ?? "—") ms · max @(d.MaxMs?.ToString() ?? "—") ms (limit @_ov.DecisionTimeoutMs ms)</div>
+            </div>
+            <div class="card" style="padding:14px 18px" data-testid="sap-ov-events">
+                <div style="font-weight:800;margin-bottom:8px">📨 Event feed</div>
+                <div class="pf-note">Last received <b>@When(e.LastReceivedAt)</b> · last seq @(e.LastSeq?.ToString() ?? "—") · lag <b style="color:@(lagBad ? "#DC2626" : "inherit")">@e.LagSeconds s</b> (limit @_ov.EventsLagLimitSeconds s@(lagBad ? " - decisions answer data_delayed = true" : ""))</div>
+                <div class="pf-note">Total @e.Total · today @e.Today · accepted @e.Accepted · parked <b style="color:@(e.Parked > 0 ? "#DC2626" : "inherit")">@e.Parked</b> · late @e.Late · not applied @e.NotApplied</div>
+                <div class="pf-note pf-small pf-muted">Events are stored and de-duplicated; applying them to a live open-PO / stock position is a pending development (handover §8 items 6, 7, 9). Until then decisions use the uploaded files and today's Tool 1 ledger.</div>
+            </div>
+        </div>
+    };
+
+    // ── decisions ────────────────────────────────────────────
+    private SapDecisionListReq _dq = new() { Max = 200 };
+    private SapDecisionListResponse? _dl;
+    private SapDecisionDetailResponse? _dd;
+
+    private async Task LoadDecisionsAsync()
+    {
+        if (string.IsNullOrEmpty(_dq.From)) _dq.From = DateTimeOffset.UtcNow.ToOffset(Ist).AddDays(-6).ToString("yyyy-MM-dd");
+        var res = await ApiMasterService.SapDecisionsAsync(_dq);
+        if (Ok(res)) _dl = res.Data;
+    }
+
+    private async Task OpenDecisionAsync(long id)
+    {
+        var res = await ApiMasterService.SapDecisionAsync(id);
+        if (Ok(res)) _dd = res.Data;
+    }
+
+    private static readonly string[] DecisionHeaders = { "When", "Decision ID", "Request ID", "PO", "Mode", "Verdict", "Route", "Items", "ms", "HTTP", "User / IP" };
+    private static readonly string[] ItemHeaders = { "Item", "Article → GM", "Colour", "Month", "Qty", "Verdict", "Max qty", "Reason", "Engine", "Metrics" };
+
+    private RenderFragment Decisions() => __builder =>
+    {
+        <div class="card" style="padding:12px 14px;margin-bottom:12px;display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end">
+            <div><div class="pf-lbl">From</div><input type="date" class="pf-in" value="@_dq.From" @onchange="e => _dq.From = e.Value?.ToString()" data-testid="sd-from" /></div>
+            <div><div class="pf-lbl">To</div><input type="date" class="pf-in" value="@_dq.To" @onchange="e => _dq.To = e.Value?.ToString()" /></div>
+            <div><div class="pf-lbl">PO / request ID</div><input class="pf-in" @bind="_dq.PoNumber" placeholder="4500099001" data-testid="sd-po" /></div>
+            <div>
+                <div class="pf-lbl">Verdict</div>
+                <select class="pf-in" @bind="_dq.Verdict" data-testid="sd-verdict">
+                    <option value="">All</option><option>ALLOW</option><option>REDUCE</option><option>WATCH</option><option>HOLD</option><option>BLOCK</option>
+                </select>
+            </div>
+            <div>
+                <div class="pf-lbl">Mode</div>
+                <select class="pf-in" @bind="_dq.Mode"><option value="">All</option><option>SHADOW</option><option>LIVE</option></select>
+            </div>
+            <div>
+                <div class="pf-lbl">Answer</div>
+                <select class="pf-in" @bind="_dq.Status"><option value="all">All</option><option value="ok">Verdict (200)</option><option value="error">NOT_CHECKED (4xx / 503)</option></select>
+            </div>
+            <button class="btn-pri" @onclick="LoadDecisionsAsync" data-testid="sd-show">Show</button>
+            @if (_dl != null) { <span class="pf-count" style="margin-left:auto">@_dl.Total decision call(s)@(_dl.Total > _dl.Items.Count ? " (latest " + _dl.Items.Count + ")" : "")</span> }
+        </div>
+        if (_dd?.Decision is { } h)
+        {
+            <div class="card" style="padding:14px 18px;margin-bottom:12px;border-left:4px solid var(--vmm-pink)" data-testid="sd-detail">
+                <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:8px">
+                    <b class="pf-mono">@(h.DecisionId ?? "no decision")</b> @Pill(h.OverallVerdict, "HTTP " + h.HttpStatus)
+                    <span class="pf-small">request <span class="pf-mono">@h.RequestId</span> · PO @h.PoNumber · @h.Mode · route @(h.RouteTo ?? "—") · @h.DurationMs ms · trace @h.TraceId@(h.IsTest ? " · TEST" : "")</span>
+                    @if (h.ErrorCode != null) { <span class="pf-small" style="color:#DC2626">@h.ErrorCode: @h.ErrorMessage</span> }
+                    <button class="btn-sec" style="margin-left:auto" @onclick="() => _dd = null">Close</button>
+                </div>
+                <PfTable Headers="ItemHeaders" Count="_dd.Items.Count" Empty="No items logged.">
+                    @foreach (var i in _dd.Items)
+                    {
+                        <tr>
+                            <td>@i.PoItem</td>
+                            <td class="pf-mono pf-small">@i.GenericArticle<br />→ @(i.Gm ?? "unknown") <span class="pf-muted">(@i.GmMatch)</span></td>
+                            <td class="pf-small">@i.ColourSent → @(i.Colour ?? "—") <span class="pf-muted">(@i.ColourMatch)</span></td>
+                            <td>@i.DeliveryMonth</td>
+                            <td class="pf-nowrap">@Qty(i.OrderQty)@(i.GroupQty > i.OrderQty ? " (group " + Qty(i.GroupQty) + ")" : "")</td>
+                            <td>@Pill(i.Verdict)</td>
+                            <td>@Qty(i.MaxQty)</td>
+                            <td class="pf-small" style="max-width:320px"><b>@i.ReasonCode</b> <span class="pf-muted">@i.RuleId</span><br />@i.ReasonText</td>
+                            <td class="pf-small" style="min-width:260px;max-width:420px"><b>@i.Engine @i.EngineDecision</b><br /><span class="pf-muted">@i.EngineReason</span></td>
+                            <td class="pf-mono pf-small" style="max-width:220px;word-break:break-all">@i.MetricsJson</td>
+                        </tr>
+                    }
+                </PfTable>
+                <div style="display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:10px;margin-top:10px">
+                    <div><div class="pf-lbl">Request JSON (from SAP)</div><pre class="pf-mono pf-small" style="max-height:340px;overflow:auto;background:var(--sur2);padding:8px;border-radius:6px;white-space:pre-wrap;word-break:break-word" data-testid="sd-req">@PrettyJson(h.RequestJson)</pre></div>
+                    <div><div class="pf-lbl">Response JSON (to SAP)</div><pre class="pf-mono pf-small" style="max-height:340px;overflow:auto;background:var(--sur2);padding:8px;border-radius:6px;white-space:pre-wrap;word-break:break-word" data-testid="sd-res">@PrettyJson(h.ResponseJson)</pre></div>
+                </div>
+            </div>
+        }
+        if (_dl == null) { <div class="pf-empty">Loading…</div> return; }
+        <PfTable Headers="DecisionHeaders" Count="_dl.Items.Count" Empty="No decisions in this range.">
+            @foreach (var r in _dl.Items)
+            {
+                var id = r.Id;
+                <tr>
+                    <td class="pf-nowrap">@When(r.DecidedAt)</td>
+                    <td><button class="pf-id" @onclick="() => OpenDecisionAsync(id)" data-testid="sd-open">@(r.DecisionId ?? "#" + r.Id)</button></td>
+                    <td class="pf-mono pf-small">@r.RequestId</td>
+                    <td>@r.PoNumber</td>
+                    <td class="pf-small">@r.Mode@(r.IsTest ? " · test" : "")</td>
+                    <td>@Pill(r.OverallVerdict, r.ErrorCode)</td>
+                    <td class="pf-small">@r.RouteTo</td>
+                    <td>@r.ItemCount</td>
+                    <td>@r.DurationMs</td>
+                    <td style="color:@(r.HttpStatus == 200 ? "inherit" : "#DC2626");font-weight:700">@r.HttpStatus</td>
+                    <td class="pf-small">@r.TechUser<br /><span class="pf-muted">@r.ClientIp</span></td>
+                </tr>
+            }
+        </PfTable>
+    };
+
+    // ── events ───────────────────────────────────────────────
+    private SapEventListReq _eq = new() { Max = 200 };
+    private SapEventListResponse? _el;
+    private SapEventRow? _ed;
+
+    private async Task LoadEventsAsync()
+    {
+        var res = await ApiMasterService.SapEventsAsync(_eq);
+        if (Ok(res)) _el = res.Data;
+    }
+
+    private async Task OpenEventAsync(long id)
+    {
+        var res = await ApiMasterService.SapEventAsync(id);
+        if (Ok(res)) _ed = res.Data;
+    }
+
+    private static readonly string[] EventHeaders = { "Received", "Type", "Message ID", "Seq", "PO / doc", "Status", "Order", "Lag", "Applied", "Dup." };
+
+    private RenderFragment Events() => __builder =>
+    {
+        <div class="card" style="padding:12px 14px;margin-bottom:12px;display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end">
+            <div><div class="pf-lbl">From</div><input type="date" class="pf-in" value="@_eq.From" @onchange="e => _eq.From = e.Value?.ToString()" /></div>
+            <div><div class="pf-lbl">To</div><input type="date" class="pf-in" value="@_eq.To" @onchange="e => _eq.To = e.Value?.ToString()" /></div>
+            <div>
+                <div class="pf-lbl">Type</div>
+                <select class="pf-in" @bind="_eq.EventType" data-testid="se-type">
+                    <option value="">All</option>
+                    @foreach (var t in SapEnums.EventTypes) { <option>@t</option> }
+                </select>
+            </div>
+            <div>
+                <div class="pf-lbl">Status</div>
+                <select class="pf-in" @bind="_eq.Status"><option value="">All</option><option>ACCEPTED</option><option>PARKED</option><option>LATE</option><option>DUPLICATED</option></select>
+            </div>
+            <div><div class="pf-lbl">Search</div><input class="pf-in" @bind="_eq.Q" placeholder="msg id, PO, material doc, decision" /></div>
+            <button class="btn-pri" @onclick="LoadEventsAsync" data-testid="se-show">Show</button>
+            @if (_el != null)
+            {
+                <span class="pf-count" style="margin-left:auto">@_el.Total event(s) · feed lag @_el.Status.LagSeconds s · parked @_el.Status.Parked · not applied @_el.Status.NotApplied</span>
+            }
+        </div>
+        if (_ed != null)
+        {
+            <div class="card" style="padding:14px 18px;margin-bottom:12px;border-left:4px solid var(--vmm-pink)">
+                <div style="display:flex;gap:10px;align-items:center;margin-bottom:6px">
+                    <b class="pf-mono">@_ed.MsgId</b> <span class="pf-small">@_ed.EventType · seq @_ed.Seq · @_ed.Status@(_ed.ErrorMessage != null ? " - " + _ed.ErrorMessage : "") · batch @_ed.BatchId</span>
+                    <button class="btn-sec" style="margin-left:auto" @onclick="() => _ed = null">Close</button>
+                </div>
+                <pre class="pf-mono pf-small" style="max-height:340px;overflow:auto;background:var(--sur2);padding:8px;border-radius:6px;white-space:pre-wrap;word-break:break-word">@PrettyJson(_ed.PayloadJson)</pre>
+            </div>
+        }
+        if (_el == null) { <div class="pf-empty">Loading…</div> return; }
+        <PfTable Headers="EventHeaders" Count="_el.Items.Count" Empty="No events received in this range.">
+            @foreach (var e in _el.Items)
+            {
+                var id = e.Id;
+                <tr>
+                    <td class="pf-nowrap">@When(e.ReceivedAt)</td>
+                    <td class="pf-small"><b>@e.EventType</b></td>
+                    <td><button class="pf-id pf-small" @onclick="() => OpenEventAsync(id)">@e.MsgId</button></td>
+                    <td>@e.Seq</td>
+                    <td class="pf-small">@e.PoNumber@(e.PoItem != null ? "/" + e.PoItem : "") @e.MaterialDoc @e.DecisionId</td>
+                    <td class="pf-small" style="color:@(e.Status == "PARKED" ? "#DC2626" : "#15803d");font-weight:700" title="@e.ErrorMessage">@e.Status@(e.Status == "PARKED" ? ": " + e.ErrorMessage : "")</td>
+                    <td class="pf-small" style="color:@(e.SeqStatus == "LATE" ? "#b45309" : "inherit")">@e.SeqStatus</td>
+                    <td>@e.LagSeconds s</td>
+                    <td class="pf-small">@(e.Applied ? "yes" : "no (pending)")</td>
+                    <td>@(e.DupCount > 0 ? e.DupCount.ToString() : "")</td>
+                </tr>
+            }
+        </PfTable>
+    };
+
+    // ── technical users ──────────────────────────────────────
+    private SapTechUsersResponse? _ul;
+    private SapTechUserAddReq _nu = new();
+    private string? _shownPassword;
+    private string? _shownFor;
+
+    private async Task LoadUsersAsync()
+    {
+        var res = await ApiMasterService.SapTechUsersAsync();
+        if (Ok(res)) _ul = res.Data;
+    }
+
+    private async Task AddUserAsync()
+    {
+        var res = await ApiMasterService.SapTechUserAddAsync(_nu);
+        if (!Ok(res)) return;
+        _shownFor = res.Data!.User?.UserName;
+        _shownPassword = res.Data.GeneratedPassword;
+        Snackbar.Add("Technical user " + _shownFor + " added", Severity.Success);
+        _nu = new SapTechUserAddReq();
+        await LoadUsersAsync();
+    }
+
+    private async Task UpdateUserAsync(string name, string action)
+    {
+        var res = await ApiMasterService.SapTechUserUpdateAsync(name, action);
+        if (!Ok(res)) return;
+        if (action == "reset-password") { _shownFor = name; _shownPassword = res.Data!.GeneratedPassword; }
+        Snackbar.Add(name + ": " + action + " done", Severity.Success);
+        await LoadUsersAsync();
+    }
+
+    private static readonly string[] UserHeaders = { "User", "SAP system", "Description", "Status", "Last call", "Password changed", "" };
+
+    private RenderFragment Users() => __builder =>
+    {
+        <div class="pf-note">One technical account per SAP system (spec §2: e.g. <code>sap_ecq</code> for QA, <code>sap_ecp</code> for production), stored in the SM59 destination ZPOGOV_API (Logon &amp; Security → Basic Authentication). Passwords are stored as PBKDF2 hashes; leave the password empty to generate one (shown once). After 5 wrong passwords in a row the user is locked for 15 minutes (SapInterface:MaxFailedLogins / LockoutMinutes).</div>
+        <div class="card" style="padding:12px 14px;margin-bottom:12px;display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end" data-testid="su-add">
+            <div><div class="pf-lbl">User name</div><input class="pf-in" @bind="_nu.UserName" placeholder="sap_ecp" data-testid="su-name" /></div>
+            <div><div class="pf-lbl">SAP system (SY-SYSID)</div><input class="pf-in" @bind="_nu.SourceSystem" placeholder="ECP" style="width:110px" data-testid="su-system" /></div>
+            <div><div class="pf-lbl">Description</div><input class="pf-in" @bind="_nu.Description" placeholder="SAP production, client 300" style="min-width:220px" /></div>
+            <div><div class="pf-lbl">Password (≥ @(_ul?.MinPasswordLength ?? 24) chars, empty = generate)</div><input class="pf-in" type="password" @bind="_nu.Password" style="min-width:220px" /></div>
+            <button class="btn-pri" @onclick="AddUserAsync" data-testid="su-add-btn">+ Add technical user</button>
+        </div>
+        if (_shownPassword != null)
+        {
+            <div class="card" style="padding:12px 16px;margin-bottom:12px;border-left:4px solid #f59e0b" data-testid="su-password">
+                New password of <b>@_shownFor</b> (shown once - enter it in SM59 now): <code class="pf-mono" style="font-size:13px;user-select:all">@_shownPassword</code>
+                <button class="btn-sec" style="margin-left:12px" @onclick="() => _shownPassword = null">Hide</button>
+            </div>
+        }
+        if (_ul == null) { <div class="pf-empty">Loading…</div> return; }
+        <PfTable Headers="UserHeaders" Count="_ul.Users.Count" Empty="No technical users yet - SAP cannot sign in.">
+            @foreach (var u in _ul.Users)
+            {
+                var name = u.UserName;
+                var locked = u.LockedUntil > DateTimeOffset.UtcNow;
+                <tr>
+                    <td class="pf-mono"><b>@u.UserName</b></td>
+                    <td>@u.SourceSystem</td>
+                    <td class="pf-small">@u.Description</td>
+                    <td class="pf-small" style="font-weight:700;color:@(!u.Active || locked ? "#DC2626" : "#15803d")">@(!u.Active ? "disabled" : locked ? "locked until " + When(u.LockedUntil) : "active")@(u.FailedCount > 0 ? " · " + u.FailedCount + " failed" : "")</td>
+                    <td class="pf-small">@When(u.LastCallAt)<br /><span class="pf-muted">@u.LastCallIp</span></td>
+                    <td class="pf-small">@When(u.PasswordChangedAt)</td>
+                    <td class="pf-nowrap">
+                        <button class="btn-sec" @onclick='() => UpdateUserAsync(name, "reset-password")'>Reset password</button>
+                        @if (u.Active) { <button class="btn-sec btn-danger" @onclick='() => UpdateUserAsync(name, "disable")'>Disable</button> }
+                        else { <button class="btn-sec" @onclick='() => UpdateUserAsync(name, "enable")'>Enable</button> }
+                        @if (locked || u.FailedCount > 0) { <button class="btn-sec" @onclick='() => UpdateUserAsync(name, "unlock")'>Unlock</button> }
+                    </td>
+                </tr>
+            }
+        </PfTable>
+    };
+
+    // ── reason codes ─────────────────────────────────────────
+    private SapReasonCodesListResponse? _cl;
+    private SapReasonCodeSaveReq _nc = new();
+
+    private async Task LoadCodesAsync()
+    {
+        var res = await ApiMasterService.SapReasonCodesAsync();
+        if (Ok(res)) _cl = res.Data;
+    }
+
+    private async Task SaveCodeAsync(SapReasonCodeSaveReq req)
+    {
+        var res = await ApiMasterService.SapReasonCodeSaveAsync(req);
+        if (!Ok(res)) return;
+        Snackbar.Add("Reason code " + res.Data!.Code + " saved", Severity.Success);
+        _nc = new SapReasonCodeSaveReq();
+        await LoadCodesAsync();
+    }
+
+    private static readonly string[] ExcHeaders = { "Code", "Text", "Active", "Changed", "" };
+    private static readonly string[] VerdictHeaders = { "Reason code", "Verdict", "Rule IDs", "Meaning" };
+
+    private RenderFragment Codes() => __builder =>
+    {
+        if (_cl == null) { <div class="pf-empty">Loading…</div> return; }
+        var exc = _cl.Items.Where(c => c.CodeType == "EXCEPTION").ToList();
+        var ver = _cl.Items.Where(c => c.CodeType == "VERDICT").ToList();
+        <div style="font-weight:800;margin:4px 0 6px">Exception reason codes <span class="pf-small pf-muted">(GET /api/sap/v1/reason-codes - the approver's dropdown in SAP; code ≤ 4, text ≤ 60 characters)</span></div>
+        <div class="card" style="padding:12px 14px;margin-bottom:10px;display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end">
+            <div><div class="pf-lbl">Code</div><input class="pf-in" @bind="_nc.Code" maxlength="4" style="width:80px" data-testid="sc-code" /></div>
+            <div><div class="pf-lbl">Text</div><input class="pf-in" @bind="_nc.Text" maxlength="60" style="min-width:300px" data-testid="sc-text" /></div>
+            <label class="pf-small"><input type="checkbox" @bind="_nc.Active" /> Active</label>
+            <button class="btn-pri" @onclick="() => SaveCodeAsync(_nc)" data-testid="sc-save">Save code</button>
+        </div>
+        <PfTable Headers="ExcHeaders" Count="exc.Count" Empty="No exception codes.">
+            @foreach (var c in exc)
+            {
+                var row = c;
+                <tr>
+                    <td class="pf-mono"><b>@c.Code</b></td>
+                    <td>@c.Text</td>
+                    <td>@(c.Active ? "yes" : "no")</td>
+                    <td class="pf-small">@When(c.UpdatedAt) @c.UpdatedBy</td>
+                    <td><button class="btn-sec" @onclick="() => SaveCodeAsync(new SapReasonCodeSaveReq { Code = row.Code, Text = row.Text, Active = !row.Active, SortOrder = row.SortOrder })">@(c.Active ? "Deactivate" : "Activate")</button></td>
+                </tr>
+            }
+        </PfTable>
+        <div style="font-weight:800;margin:16px 0 6px">Verdict reason codes <span class="pf-small pf-muted">(items[].reason_code / rule_id of POST /decisions - fixed by the rules, SapVerdictMap)</span></div>
+        <PfTable Headers="VerdictHeaders" Count="ver.Count" Empty="">
+            @foreach (var c in ver)
+            {
+                <tr>
+                    <td class="pf-mono"><b>@c.Code</b></td>
+                    <td>@foreach (var v in (c.Verdict ?? "").Split('/', '|')) { @Pill(v) <span> </span> }</td>
+                    <td class="pf-mono pf-small">@c.RuleIds</td>
+                    <td class="pf-small">@c.Text</td>
+                </tr>
+            }
+        </PfTable>
+    };
+
+    // ── test decision ────────────────────────────────────────
+    private string _testJson = "";
+    private SapTestDecisionResponse? _tr;
+    private bool _testing;
+
+    private async Task LoadSampleAsync()
+    {
+        var res = await ApiMasterService.SapSampleRequestAsync();
+        if (Ok(res)) _testJson = res.Data!.SampleRequestJson;
+    }
+
+    private async Task RunTestAsync()
+    {
+        _testing = true;
+        try
+        {
+            var res = await ApiMasterService.SapTestDecisionAsync(_testJson);
+            if (Ok(res)) _tr = res.Data;
+        }
+        finally { _testing = false; }
+    }
+
+    private RenderFragment Test() => __builder =>
+    {
+        <div class="pf-note">Runs a <code>POST /decisions</code> body through the real decision path (same rules, same data, same log) as a test: the request_id is prefixed <code>TEST-</code>, the call is logged with the test flag and the mode as written in the body (the sample uses SHADOW). Repeating the same body shows the idempotent answer; changing the body under the same request_id gives 409.</div>
+        <div style="display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:12px">
+            <div>
+                <div class="pf-lbl">Request (DecisionRequest JSON)</div>
+                <textarea class="pf-in pf-mono" rows="26" style="width:100%;font-size:11.5px" @bind="_testJson" @bind:event="oninput" data-testid="st-json"></textarea>
+                <div style="display:flex;gap:8px;margin-top:8px">
+                    <button class="btn-sec" @onclick="LoadSampleAsync">Load sample</button>
+                    <button class="btn-pri" disabled="@_testing" @onclick="RunTestAsync" data-testid="st-run">@(_testing ? "Deciding…" : "Run test decision")</button>
+                </div>
+            </div>
+            <div>
+                <div class="pf-lbl">Answer @(_tr != null ? "- HTTP " + _tr.HttpStatus + " in " + _tr.DurationMs + " ms" : "")</div>
+                @if (_tr != null)
+                {
+                    var j = JsonNode.Parse(_tr.ResponseJson) as JsonObject;
+                    <div style="margin-bottom:6px">@Pill(j?["overall_verdict"]?.GetValue<string>(), j?["error_code"]?.GetValue<string>()) <span class="pf-small">@(j?["summary_text"]?.GetValue<string>() ?? j?["message"]?.GetValue<string>())</span></div>
+                    <pre class="pf-mono pf-small" style="max-height:520px;overflow:auto;background:var(--sur2);padding:8px;border-radius:6px;white-space:pre-wrap;word-break:break-word" data-testid="st-answer">@PrettyJson(_tr.ResponseJson)</pre>
+                }
+                else
+                {
+                    <div class="card pf-empty">No test run yet.</div>
+                }
+            </div>
+        </div>
+    };
+}

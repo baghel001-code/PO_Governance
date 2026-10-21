@@ -41,6 +41,8 @@ builder.Services.AddTool2Services();
 builder.Services.AddTool2Excel();
 builder.Services.AddAnalyticsServices();
 builder.Services.AddAnalyticsAdapters();
+// ── SAP R/3 interface (/api/sap/v1, spec v1.4): SapInterface settings, PRO_SAP_* repository, SapBasic scheme ─
+builder.Services.AddSapInterface(builder.Configuration);
 builder.Services.AddAuthorization();
 
 builder.Services.AddControllers()
@@ -87,6 +89,7 @@ var app = builder.Build();
 
 // ── pipeline ───────────────────────────────────────────────────────────
 app.UseApiExceptionHandling();
+app.UseSapInterface();          // /api/sap/*: trace id, IP allow-list, enabled / storage / database checks, SAP error bodies
 app.UseDatabaseReadiness();     // 503 + reason until the database is reachable (the API itself always starts)
 app.UseSerilogRequestLogging(o => o.GetLevel = (ctx, _, ex) =>
     ex != null || ctx.Response.StatusCode >= 500 ? Serilog.Events.LogEventLevel.Error

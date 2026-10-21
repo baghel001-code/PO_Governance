@@ -28,6 +28,8 @@ namespace Application.DIResolver
             services.TryAddSingleton<IInsightsEngine, InsightsEngine>();
             services.TryAddSingleton<IHelpContentEngine, HelpContentEngine>();
             services.TryAddSingleton<IAiAssistantEngine, AiAssistantEngine>();
+            services.TryAddSingleton<DecisionEngine.Sap.ISapDecisionEngine>(sp =>
+                new DecisionEngine.Sap.SapDecisionEngine(sp.GetRequiredService<ITool1DecisionEngine>()));
             return services;
         }
     }

@@ -13,10 +13,16 @@ namespace Infrastructure.Utilitys
     public static class SqlServerSchema
     {
         /// <summary>Scripts run in the application database, in order (00_create_database.sql runs in master).</summary>
-        public static readonly string[] DatabaseScripts = { "01_tables.sql", "02_procedures.sql", "03_seed.sql", ApiMasterScript };
+        public static readonly string[] DatabaseScripts = { "01_tables.sql", "02_procedures.sql", "03_seed.sql", ApiMasterScript, SapInterfaceScript };
 
         /// <summary>API_MASTER + PRO_GET_ALL_API + seed (QPS API master list the portal loads at start-up).</summary>
         public const string ApiMasterScript = "04_api_master.sql";
+
+        /// <summary>SAP R/3 interface tables + PRO_SAP_* procedures + reason-code seed; sets schema_info version 3.</summary>
+        public const string SapInterfaceScript = "05_sap_interface.sql";
+
+        /// <summary>The schema version before the SAP interface (01..04 only): still usable by the portal.</summary>
+        public const string MinimumVersion = "2";
 
         private static readonly Regex ApiBaseLine = new(@"(DECLARE @ApiBase\s+NVARCHAR\(400\)\s*=\s*N')[^']*(')", RegexOptions.Compiled);
 
@@ -30,7 +36,7 @@ namespace Infrastructure.Utilitys
             return ApiBaseLine.Replace(sql, m => m.Groups[1].Value + b.Replace("'", "''") + m.Groups[2].Value, 1);
         }
 
-        public const string ExpectedVersion = "2";
+        public const string ExpectedVersion = "3";
 
         private static readonly Regex GoLine = new(@"^\s*GO\s*(?:--.*)?$", RegexOptions.Multiline | RegexOptions.IgnoreCase | RegexOptions.Compiled);
 
@@ -54,7 +60,7 @@ namespace Infrastructure.Utilitys
             return noLine.Trim().Length == 0;
         }
 
-        /// <summary>Runs 01..04 against the database of <paramref name="connectionString"/> (the API_MASTER seed with <paramref name="apiBaseUrl"/> when given).</summary>
+        /// <summary>Runs 01..05 against the database of <paramref name="connectionString"/> (the API_MASTER seed with <paramref name="apiBaseUrl"/> when given).</summary>
         public static Task ApplyAsync(string connectionString, Action<string>? say = null, CancellationToken ct = default) =>
             ApplyAsync(connectionString, DatabaseScripts, say, null, ct);
 

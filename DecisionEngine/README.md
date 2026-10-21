@@ -38,6 +38,7 @@ tests reference what they need.
 | `Analytics.Insights.IInsightsEngine` | `InsightsEngine` | Category Insights dashboard (Tool 1 requests), Planner dashboard (Tool 2 run rows) |
 | `Analytics.Ai.IAiAssistantEngine` | `AiAssistantEngine` | Chat context / system prompt, AI Insights summary + prompt, response parsing (no transport) |
 | `Analytics.Help.IHelpContentEngine` | `HelpContentEngine` | Parameter-dependent "How it works" values |
+| `Sap.ISapDecisionEngine` | `SapDecisionEngine` | SAP `/decisions` verdict of a PO: normalises the SAP items (GM without leading zeros, Colour Master code / description, delivery month), decides each GM + colour + month with `ITool1DecisionEngine.Decide` (read-only same-day ledger), maps by `SapVerdictMap` (ALLOW / REDUCE / WATCH / HOLD, Block → HOLD or BLOCK), overall verdict, route, summary, metrics |
 
 All implementations are stateless and thread-safe; construct them directly (`new Tool1DecisionEngine()`) or let the
 host register them (the API does it in `Application/DIResolver/DecisionEngineRegistration.cs`).
@@ -93,6 +94,7 @@ Every class keeps an XML doc comment naming the original function in `legacy/pyt
 | `Analytics/Ai/` | `sendAIChat` + `_aiBuildContext*` (lines 8859–9046), `_aiBuildSummary` … `renderAIInsights` (lines 11516–11732) |
 | `Analytics/Help/` | `renderEngineBHelp` / `computeFor` (lines 1948–1985) |
 | `Analytics/Common/` | Shared analytics helpers (`AnalyticsJs`, dashboard math) |
+| `Sap/` | Not a port: the SAP R/3 verdict layer over Tool 1 (`SapVerdictMap` = the owner-approved tool → SAP mapping table, `SapInputNormalizer`, `SapDecisionEngine`) — see `docs/sap/README.md` |
 | `Results/<Area>/` | The result models the engines return (and the request / query models they take); JSON names match the v1.1.4 objects |
 
 **Engine A** (`runEngineA`) exists once: `Tool1/Tool1EngineA.cs`. Tool 1 and Tool 2 call the same JS function, so Tool 2

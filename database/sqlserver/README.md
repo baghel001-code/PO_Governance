@@ -13,16 +13,22 @@ JSON text, same IDs), so data moves both ways with the migration tool.
 | `01_tables.sql` | `POGovernance` | the 13 tables of schema v2 + index `request_events_day (req_date, id)` |
 | `02_procedures.sql` | `POGovernance` | the 14 `PRO_POGOV_*` procedures (`CREATE OR ALTER`) |
 | `03_seed.sql` | `POGovernance` | `schema_info`: `version = 2` |
-| `04_api_master.sql` | `POGovernance` | QPS API master: table `API_MASTER`, procedure `PRO_GET_ALL_API` (`@Cmd` `ALL` / `BY_TASK`), one row per POGovApi action |
+| `04_api_master.sql` | `POGovernance` | QPS API master: table `API_MASTER`, procedure `PRO_GET_ALL_API` (`@Cmd` `ALL` / `BY_TASK`), one row per POGovApi portal action |
+| `05_sap_interface.sql` | `POGovernance` | SAP R/3 interface (schema **v3**): tables `SAP_TECH_USERS`, `SAP_DECISION_LOG`, `SAP_DECISION_ITEMS`, `SAP_EVENTS`, `SAP_REASON_CODES` (seeded), sequence `SAP_DECISION_SEQ`, the 6 `PRO_SAP_*` procedures; `schema_info.version = 3` |
 
-All five are idempotent — run them again after an upgrade (04 only inserts missing task names; it never overwrites a row).
+All six are idempotent — run them again after an upgrade (04 only inserts missing task names; it never overwrites a row;
+05 inserts missing exception reason codes and refreshes the verdict reason codes).
 
 ## 1. Create the database
 
 ```bat
 sqlcmd -S <server> -E -i 00_create_database.sql
-sqlcmd -S <server> -E -d POGovernance -i 01_tables.sql -i 02_procedures.sql -i 03_seed.sql -i 04_api_master.sql
+sqlcmd -S <server> -E -d POGovernance -i 01_tables.sql -i 02_procedures.sql -i 03_seed.sql -i 04_api_master.sql -i 05_sap_interface.sql
 ```
+
+**Upgrade of an existing v2 database:** run `04_api_master.sql` (new PO_SAP_* rows) and `05_sap_interface.sql`. Until 05 is run
+the API starts and the portal works, but it logs "run database/sqlserver/05_sap_interface.sql" and the SAP endpoints fail
+(with `SqlServerCreateSchema = true` the API runs 05 itself at start-up).
 
 Before running `04_api_master.sql`, set `@ApiBase` at the top of its seed to the URL of POGovApi on this server
 (default `http://localhost:5080/`) and `@ApiToken` to the `My_Encode`d static token (= `JwtSettings:SecretKey`).
@@ -34,8 +40,8 @@ The API needs only `EXECUTE` on the procedures (they own the table access throug
 `GRANT EXECUTE ON SCHEMA::dbo TO vmm_app;` (see the end of `00_create_database.sql`). The migration tool
 additionally reads the tables (row counts) — run it as `db_owner` or `sa`.
 
-Instead of running 01..04 yourself you can set `PoGovSettings:SqlServerCreateSchema = true`: the API then runs the
-embedded copies of 01..04 at start-up when `schema_info` is missing, and 04 alone when only `API_MASTER` is missing
+Instead of running 01..05 yourself you can set `PoGovSettings:SqlServerCreateSchema = true`: the API then runs the
+embedded copies of 01..05 at start-up when `schema_info` is missing, 05 alone on a v2 database, and 04 alone when only `API_MASTER` is missing
 (it needs `CREATE TABLE` / `CREATE PROCEDURE` rights for that; the seed gets `ApiMaster:BaseUrl` as its base URL).
 Without it, a database without the schema stops the start-up with a message naming the scripts; a database without
 `API_MASTER` only logs an error (the portal cannot load its API list until 04 is run).
@@ -155,6 +161,12 @@ password.
 | `PRO_POGOV_TRUNCATE_ALL` | (`@Confirm = 'TRUNCATE ALL'`) | empty all data tables (migration `--force`) |
 | `PRO_POGOV_APP_LOCK` | `GET`, `RELEASE`, `STATE` | LockAsync (the server-wide write lock) |
 | `PRO_GET_ALL_API` | `ALL`, `BY_TASK` | API master list (`APIService.GetAllApi` / `GetSpecificApiData`, not IStore) |
+| `PRO_SAP_TECH_USER` | `GET`, `LIST`, `ADD`, `SET_PASSWORD`, `SET_ACTIVE`, `UNLOCK`, `LOGIN_OK`, `LOGIN_FAIL` | SAP technical users (Basic auth, lockout, last call) — `SapSqlServerRepository` |
+| `PRO_SAP_DECISION_SAVE` | `NEXT_ID`, `INSERT` | decision id from `SAP_DECISION_SEQ`; log row + items (`@Items` JSON) in one transaction; a second HTTP-200 row for a request_id → 50409 (filtered unique index `UX_SAP_DECISION_LOG_Request`, no range locks) |
+| `PRO_SAP_DECISION_GET` | `BY_REQUEST`, `BY_ID`, `LIST`, `STATS` | idempotency lookup (body hash + stored response), detail with items, filtered list, counts + latency percentiles |
+| `PRO_SAP_EVENTS_SAVE` | — | one /events batch in one transaction: de-duplication by msg_id (Dup_Count), LATE flag by queue seq, parked events stored with their error, `Applied = 0` |
+| `PRO_SAP_EVENTS_GET` | `STATUS`, `LIST`, `BY_ID` | feed status (lag, last seq, counts), filtered list, one event with payload |
+| `PRO_SAP_REASON_CODES` | `LIST`, `ACTIVE`, `SAVE` | reason codes; active exception codes + version (GET /reason-codes); add / change an exception code |
 
 * **Types:** PostgreSQL `json` → `NVARCHAR(MAX)` with `CHECK (ISJSON(…) = 1)` (text kept exactly as the API
   writes it, Python `json.dumps` format); `bytea` → `VARBINARY(MAX)`; `timestamptz` → `DATETIMEOFFSET(7)`
@@ -172,6 +184,9 @@ password.
   users (a sign-in / sign-out on one instance is seen by the others on their next request).
 * **Errors:** connection failures are retried once on a fresh connection (pool cleared), deadlocks up to three
   times; while the server is unreachable the API answers 503 "The database is not reachable right now".
+* **SAP decisions in parallel:** `PRO_SAP_DECISION_SAVE` takes no range locks and `SAP_DECISION_ITEMS` has no foreign key
+  (a multi-row FK check scans the log under S locks): 50 parallel decisions all answer in well under a second. The API never
+  cancels a PRO_SAP write half-way (a cancelled command would leave its transaction open on the pooled connection).
 * **Tests:** `tests/POGovernance.Tests/SqlServer` runs every store scenario (documents, users map, logs, audit,
   blobs incl. a 20 MB blob, lock exclusivity between two store instances) against a real server when the
   environment variable `POGOV_SQLSERVER_TEST` holds a connection string (each run creates and drops its own

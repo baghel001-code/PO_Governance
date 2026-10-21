@@ -3,7 +3,8 @@
 This is the .NET rebuild of the VMM PO Governance tool (Python + browser version v1.1.4, kept unchanged in
 `legacy/python-app/` for reference). It follows the clean-architecture layout of the QPS solution:
 **two web applications** — the portal (`Admin`, Blazor Server) and the API (`POGovApi`) — on top of
-`Domain`, `DecisionEngine`, `Application` and `Infrastructure` class libraries.
+`Domain`, `DecisionEngine`, `Application` and `Infrastructure` class libraries. The API also serves the **SAP R/3
+integration API** (`/api/sap/v1`, SAP API specification v1.4) — see `docs/sap/README.md`.
 
 The main change from v1.1.4: **the decision rules now run on the server**, not in each user's browser.
 They were ported function by function, and the C# results are checked against the original JavaScript (see Testing).
@@ -12,11 +13,11 @@ They were ported function by function, and the C# results are checked against th
 
 | Project | What it holds |
 |---|---|
-| `Domain` | Constants (roles, app constants), store entities, exceptions, records, settings — no business rules |
-| `DecisionEngine` | **The core business-logic layer, BCL only (no project / package references).** Every verdict algorithm as synchronous, side-effect-free engines: `Tool1` (New Request decisions), `Tool2` (PO Assessment), `Recommendation`, `Grc` (back-testing, season selection), `Analytics` (attribute analysis, insights dashboards, AI prompt context, help values); the data model (`Model`: `EngineData`, `EngineParams`, `SheetRow`, dataset keys, decision labels), JS-semantics helpers (`Common`: `Js`, `JsObjectMap` …) and the result models (`Results`). See `DecisionEngine/README.md` |
-| `Application` | Interfaces for IO (`Interfaces/V1`: dataset cache, request ledger, clock, store …), the use-case services in `Services/V1` that load data and call the engines (`Tool1`, `Tool2`, `Recommendation`, `Analytics`), `Ingest` (Excel / ZIP / raw-export import), `Platform` (accounts, requests ledger, approvals, history, runs, params, feedback, audit, backups), DI registration (`DIResolver`) |
-| `Infrastructure` | SQL Server store (`Utilitys/DapperHelper` + `PRO_*` procedures) and PostgreSQL store, dataset cache, password hashing, Excel reader / writers, AI client, backups, middleware (`StaticTokenMiddleware`, exceptions), the portal's HTTP client (`Services/V1/APICallService`, QPS), DI registration |
-| `POGovApi` | REST API, `Controllers/V1/*`, QPS routes `api/v1/[Action]` (Swagger at `/swagger` in Development) — see *API conventions* |
+| `Domain` | Constants (roles, app constants), store entities, exceptions, records, settings — no business rules; `Entities/Sap` = the SAP contract classes (snake_case, as the YAML) and the SAP monitoring DTOs, `AppSettings/SapInterfaceSettings` |
+| `DecisionEngine` | **The core business-logic layer, BCL only (no project / package references).** Every verdict algorithm as synchronous, side-effect-free engines: `Tool1` (New Request decisions), `Tool2` (PO Assessment), `Recommendation`, `Grc` (back-testing, season selection), `Analytics` (attribute analysis, insights dashboards, AI prompt context, help values); the data model (`Model`: `EngineData`, `EngineParams`, `SheetRow`, dataset keys, decision labels), JS-semantics helpers (`Common`: `Js`, `JsObjectMap` …) and the result models (`Results`); `Sap` = the SAP /decisions verdict (`SapDecisionEngine` over Tool 1, `SapVerdictMap`, input normalisation). See `DecisionEngine/README.md` |
+| `Application` | Interfaces for IO (`Interfaces/V1`: dataset cache, request ledger, clock, store …), the use-case services in `Services/V1` that load data and call the engines (`Tool1`, `Tool2`, `Recommendation`, `Analytics`), `Ingest` (Excel / ZIP / raw-export import), `Platform` (accounts, requests ledger, approvals, history, runs, params, feedback, audit, backups), `Sap` (decisions, events, technical-user Basic auth, monitoring — `Interfaces/V1/Sap`, `Services/V1/Sap`), DI registration (`DIResolver`) |
+| `Infrastructure` | SQL Server store (`Utilitys/DapperHelper` + `PRO_*` procedures) and PostgreSQL store, dataset cache, password hashing, Excel reader / writers, AI client, backups, middleware (`StaticTokenMiddleware`, exceptions, `SapInterfaceMiddleware`: IP allow-list / SAP error bodies), the `SapBasic` authentication scheme, `Repositories/SapSqlServerRepository` (`PRO_SAP_*`), the portal's HTTP client (`Services/V1/APICallService`, QPS), DI registration |
+| `POGovApi` | REST API, `Controllers/V1/*`, QPS routes `api/v1/[Action]` (Swagger at `/swagger` in Development) — see *API conventions*; `Controllers/Sap/SapController` = the SAP-facing `/api/sap/v1/{ping, reason-codes, events, decisions}` (routes fixed by the spec, Basic auth, not in the API master) |
 | `Admin` | The portal (MudBlazor). Talks only to the API, by task name through the API master (`IAPICall.CallingAPI(AllApiNames.X, req)`); uses the `DecisionEngine.Results` models as its view models |
 | `tests/POGovernance.Tests` | xUnit unit + parity tests; `tests/parity/*` are the Node harnesses that run the original JavaScript |
 
@@ -33,6 +34,7 @@ They were ported function by function, and the C# results are checked against th
 | Category | 📄 Today's requests, 📊 Insights, 🎬 Video, ❓ How it works | `/category/requests`, `/category/insights`, `/category/video`, `/category/how-it-works` |
 | Both | ✅ Approvals, 🗂 History | `/approvals`, `/history` |
 | Admin | 👥 Users & Security (users, SCR import, audit, backups, feedback) | `/admin/users`, `/admin/audit`, `/admin/backups`, `/admin/feedback` |
+| Admin | 🔌 SAP Interface (overview / feed lag, decisions with items + JSON, events, technical users, reason codes, test decision) — user menu | `/admin/sap` |
 
 Roles are the same as v1.1.4: admin, planner, cathead, buyer. The API enforces them; the portal only hides what a role can't use.
 
@@ -43,10 +45,11 @@ procedures from `database/sqlserver/*.sql`, QPS style — see `database/sqlserve
 database on .37) still works with `PoGovSettings:Storage = postgres`; `tools/PgToSqlServer` migrates it to SQL Server.
 
 ```bash
-# 0. Database (once): database/sqlserver/00_create_database.sql in master, then 01..04 in POGovernance
-#    (04_api_master.sql = the API master list; set @ApiBase in it to this server's API URL first)
+# 0. Database (once): database/sqlserver/00_create_database.sql in master, then 01..05 in POGovernance
+#    (04_api_master.sql = the API master list; set @ApiBase in it to this server's API URL first;
+#     05_sap_interface.sql = the SAP R/3 interface tables + PRO_SAP_* procedures, schema v3)
 sqlcmd -S . -E -i database/sqlserver/00_create_database.sql
-sqlcmd -S . -E -d POGovernance -i database/sqlserver/01_tables.sql -i database/sqlserver/02_procedures.sql -i database/sqlserver/03_seed.sql -i database/sqlserver/04_api_master.sql
+sqlcmd -S . -E -d POGovernance -i database/sqlserver/01_tables.sql -i database/sqlserver/02_procedures.sql -i database/sqlserver/03_seed.sql -i database/sqlserver/04_api_master.sql -i database/sqlserver/05_sap_interface.sql
 
 # 1. API — set the connection string (appsettings.json, environment variable or user secrets)
 export ConnectionStrings__DefaultConnection="Server=.;Database=POGovernance;User Id=vmm_app;Password=<My_Encode(pw)>;TrustServerCertificate=True"
@@ -80,6 +83,11 @@ On SQL Server the write lock is a database application lock (`sp_getapplock`), s
 - `ConnectionStrings:DefaultConnection` — SQL Server (QPS name); its password is decoded with `MyNewEncDec` (`New_Enc_Dec.My_Decode`) when `PoGovSettings:EncryptedDbPassword` is `true`.
 - `PoGovSettings:Storage` — `sqlserver` (default) or `postgres` (then `ConnectionStrings:PoGov`); `PoGovSettings:SqlServerCreateSchema` — create the SQL Server schema at start-up when missing.
 - `PoGovSettings` — the old `config.json` settings: `AdminEmail`, `DefaultPassword`, `PasswordMinLength`, `SessionIdleHours`, `MaxFailedLogins`, `LockoutMinutes`, `RestrictToOwnMcs`, `BackupDir` / `BackupHour` / `BackupKeepDays`, `MaxUploadMb`, `HistoryRetentionDays`, `AnthropicApiKey` / `AnthropicModel`, `GroqApiKey` / `GroqModel`, `OutboundProxy`, `BusinessTimeZone` (Asia/Kolkata).
+- `SapInterface` — the SAP R/3 interface (`/api/sap/v1`): `Enabled`, `Environment`, `AllowedIps` (CIDR allow-list of the SAP
+  application servers; empty = nobody), `TrustedProxies`, `OnlyOnPort`, `RulesVersion`, `DecisionTimeoutMs` (2500),
+  `EventsLagLimitSeconds` (60), `DefaultMode`, `BlockVerdict` (`HOLD` | `BLOCK`), `UnknownItemPolicy` (`REJECT` | `WATCH`),
+  `BmHead`, lockout / password length / batch limits. HTTPS on 8443: `_KestrelHttpsExample` (rename to `Kestrel` in production).
+  Technical users are managed on `/admin/sap`. Full description: `docs/sap/README.md`.
 - `Tool1:ReducedLabel` — `false` (default) labels breaches exactly like the running v1.1.4 page; `true` uses "Recommend Reduced Qty" as described in the v1.1.4 README.
 
 `Admin/appsettings.json`: `MasterApiSettings` (GetAllApi URL + encoded static token), `ApiNamesSettings` (task names),
@@ -93,7 +101,9 @@ reachable from the portal only (bind it to localhost or firewall it). Nightly ba
 
 ## API conventions (QPS)
 
-The portal and the API talk exactly like QPS:
+The portal and the API talk exactly like QPS (the only exception is the SAP-facing `/api/sap/v1/*`, whose paths, snake_case
+JSON, Basic authentication and error body are fixed by the SAP API specification — `docs/sap/README.md`; StaticTokenMiddleware,
+X-Session-Token and the API master do not apply there):
 
 * **Routes:** every controller is `[Route("api/v1/[Action]")]` with `[ApiController]`; each action is a `POST` taking a
   typed request object (ids, dates, filters, version… are properties — no route or query-string parameters) and returns
@@ -139,7 +149,8 @@ The portal and the API talk exactly like QPS:
 5. Call it from the portal: `ApiMasterService.CallingAPI<ApiDataResponse<T>, TReq>(AllApiNames.PO_<NAME>, req)` and restart
    the portal (it reads API_MASTER at start-up).
 
-`tests/POGovernance.Tests/Architecture/ApiMasterConventionTests` fails when one of steps 1–4 is missing.
+`tests/POGovernance.Tests/Architecture/ApiMasterConventionTests` fails when one of steps 1–4 is missing (it also checks that
+`POGovApi/Controllers/Sap` serves exactly the four spec paths with the `SapBasic` scheme).
 
 ## Testing
 
@@ -153,11 +164,15 @@ Most tests are **parity tests**: a Node script in `tests/parity/<area>/` runs th
 from `legacy/python-app/app/index.html` on a fixture dataset and writes the expected results; the xUnit tests check that the C# port
 (the `DecisionEngine` layer) returns the same decisions, quantities, reasons, texts and Excel output. To regenerate the expected results after a deliberate rule change, run the
 harness again (each harness has the command in its header comment). `tests/POGovernance.Tests/Architecture` checks that
-`DecisionEngine` stays dependency-free.
+`DecisionEngine` stays dependency-free. `tests/POGovernance.Tests/Sap` covers the SAP interface: the verdict mapping (every engine
+outcome, Block → HOLD / BLOCK), input normalisation, idempotency / 409 / timeout → 503, events (parking, duplicates, LATE), the
+IP allow-list, and contract tests that compare the classes and real answers with `po-governance-sap-api.yaml` (YamlDotNet, test
+project only); `tests/POGovernance.Tests/SqlServer/SapSqlServerTests` runs the PRO_SAP_* procedures on SQL Server.
 
 ## Documents
 
 - `docs/CONVERSION-GUIDE.md` — conventions used for the port.
 - `docs/ui/*.md` — screen specifications (what each screen shows and where it comes from).
+- `docs/sap/README.md` — the SAP R/3 interface for the SAP / ABAP team and admins (connection, technical users, IP allow-list, examples, verdict mapping, reason codes, shadow / live, timing, pending items).
 - `database/README.md` — database setup and moving from v1.1.4.
 - `legacy/python-app/DEVELOPER-HANDOVER.md` — the v1.1.4 handover (business rules, SAP / BW plans).

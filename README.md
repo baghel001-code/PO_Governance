@@ -90,7 +90,7 @@ On SQL Server the write lock is a database application lock (`sp_getapplock`), s
   Technical users are managed on `/admin/sap`. Full description: `docs/sap/README.md`.
 - `Tool1:ReducedLabel` — `false` (default) labels breaches exactly like the running v1.1.4 page; `true` uses "Recommend Reduced Qty" as described in the v1.1.4 README.
 
-`Admin/appsettings.json`: `MasterApiSettings` (GetAllApi URL + encoded static token), `ApiNamesSettings` (task names),
+`Admin/appsettings.json`: `PortalSettings:UseHttps` (`false` for plain `http://host:port`; `true` once the portal is served over https — Secure cookie, HSTS, http→https redirect), `MasterApiSettings` (GetAllApi URL + encoded static token), `ApiNamesSettings` (task names),
 `AppConfigurationSettings:ProxyValue` (1 = use the API_MASTER proxy columns) / `UserRevalidateInSeconds`, `PortalSettings:SessionIdleHours`, `StatusPollSeconds`; `Analytics:HowToVideoPath` for the how-to video (`wwwroot/video/how-to.mp4` by default — copy the video there).
 
 ### Deployment (Windows VM / IIS)

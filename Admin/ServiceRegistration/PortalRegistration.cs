@@ -26,7 +26,8 @@ namespace Admin.ServiceRegistration
                     o.Cookie.Name = AppConstants.PortalCookie;
                     o.Cookie.HttpOnly = true;
                     o.Cookie.SameSite = SameSiteMode.Strict;
-                    o.Cookie.SecurePolicy = env.IsDevelopment() ? CookieSecurePolicy.SameAsRequest : CookieSecurePolicy.Always;
+                    // Secure cookie only over https (PortalSettings:UseHttps); over plain http the browser would not store it.
+                    o.Cookie.SecurePolicy = settings.UseHttps ? CookieSecurePolicy.Always : CookieSecurePolicy.SameAsRequest;
                     o.LoginPath = "/Account/Login";
                     o.ReturnUrlParameter = "next";   // Login.razor / AccountEndpoints read ?next=
                     o.LogoutPath = "/Account/Logout";

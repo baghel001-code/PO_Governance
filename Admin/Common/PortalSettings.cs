@@ -7,6 +7,11 @@ namespace Admin.Common
         public double SessionIdleHours { get; set; } = 12;
         /// <summary>How often an open page re-checks the server status (seconds).</summary>
         public int StatusPollSeconds { get; set; } = 30;
+        /// <summary>
+        /// true once the portal is served over https:// (company certificate on Kestrel / IIS): sign-in cookie marked
+        /// Secure, HSTS, http → https redirect. false (default, like v1.1.4 cookie_secure) for plain http://host:port.
+        /// </summary>
+        public bool UseHttps { get; set; }
     }
 
     /// <summary>appsettings "AppConfigurationSettings" (QPS names).</summary>

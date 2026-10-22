@@ -57,8 +57,11 @@ app.Use(async (ctx, next) =>
 });
 
 if (!app.Environment.IsDevelopment())
-{
     app.UseExceptionHandler("/Error", createScopeForErrors: true);
+// HTTPS only when the portal really is served over https (PortalSettings:UseHttps). On plain http://host:port the
+// redirect has no https port ("Failed to determine the https port for redirect") and a Secure cookie would be dropped.
+if (builder.Configuration.GetValue<bool>("PortalSettings:UseHttps"))
+{
     app.UseHsts();
     app.UseHttpsRedirection();
 }

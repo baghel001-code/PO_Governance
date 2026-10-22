@@ -83,8 +83,8 @@ On SQL Server the write lock is a database application lock (`sp_getapplock`), s
 - `ConnectionStrings:DefaultConnection` — SQL Server (QPS name); its password is decoded with `MyNewEncDec` (`New_Enc_Dec.My_Decode`) when `PoGovSettings:EncryptedDbPassword` is `true`.
 - `PoGovSettings:Storage` — `sqlserver` (default) or `postgres` (then `ConnectionStrings:PoGov`); `PoGovSettings:SqlServerCreateSchema` — create the SQL Server schema at start-up when missing.
 - `PoGovSettings` — the old `config.json` settings: `AdminEmail`, `DefaultPassword`, `PasswordMinLength`, `SessionIdleHours`, `MaxFailedLogins`, `LockoutMinutes`, `RestrictToOwnMcs`, `BackupDir` / `BackupHour` / `BackupKeepDays`, `MaxUploadMb`, `HistoryRetentionDays`, `AnthropicApiKey` / `AnthropicModel`, `GroqApiKey` / `GroqModel`, `OutboundProxy`, `BusinessTimeZone` (Asia/Kolkata).
-- `SapInterface` — the SAP R/3 interface (`/api/sap/v1`): `Enabled`, `Environment`, `AllowedIps` (CIDR allow-list of the SAP
-  application servers; empty = nobody), `TrustedProxies`, `OnlyOnPort`, `RulesVersion`, `DecisionTimeoutMs` (2500),
+- `SapInterface` — the SAP R/3 interface (`/api/sap/v1`): `Enabled`, `Environment`, `EnforceIpAllowList` (optional IP check, default `false` =
+  technical user + password only) and `AllowedIps` (required when the check is on: CIDR list of the SAP application servers), `TrustedProxies`, `OnlyOnPort`, `RulesVersion`, `DecisionTimeoutMs` (2500),
   `EventsLagLimitSeconds` (60), `DefaultMode`, `BlockVerdict` (`HOLD` | `BLOCK`), `UnknownItemPolicy` (`REJECT` | `WATCH`),
   `BmHead`, lockout / password length / batch limits. HTTPS on 8443: `_KestrelHttpsExample` (rename to `Kestrel` in production).
   Technical users are managed on `/admin/sap`. Full description: `docs/sap/README.md`.

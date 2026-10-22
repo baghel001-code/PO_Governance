@@ -115,6 +115,25 @@ namespace POGovernance.Tests.Sap
         }
 
         [Fact]
+        public async Task With_the_allow_list_switched_off_any_caller_ip_passes_to_authentication()
+        {
+            var (status, _, ctx, next) = await Run(c => c.EnforceIpAllowList = false, peer: "10.9.9.9");
+            Assert.True(next);
+            Assert.Equal(200, status);
+            Assert.Equal("10.9.9.9", ctx.Items[SapInterfaceMiddleware.ClientIpItem]);
+        }
+
+        [Fact]
+        public async Task With_the_allow_list_switched_on_but_empty_every_caller_is_refused()
+        {
+            var (status, body, _, next) = await Run(c => { c.EnforceIpAllowList = true; c.AllowedIps.Clear(); });
+            Assert.False(next);
+            Assert.Equal(401, status);
+            Assert.Equal("IP_NOT_ALLOWED", body!["error_code"]!.GetValue<string>());
+            Assert.Contains("lists no addresses", body["message"]!.GetValue<string>());
+        }
+
+        [Fact]
         public async Task Disabled_storage_readiness_port_and_body_size_answer_with_the_SAP_error_body()
         {
             Assert.Equal((503, "SAP_INTERFACE_DISABLED"), Code(await Run(c => c.Enabled = false)));

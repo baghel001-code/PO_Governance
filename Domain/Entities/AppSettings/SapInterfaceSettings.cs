@@ -18,8 +18,15 @@ namespace Domain.Entities.AppSettings
         public string ApiVersion { get; set; } = "1.0.0";
 
         /// <summary>
-        /// IP allow-list of the SAP application servers: single addresses or CIDR ranges (IPv4 / IPv6), e.g.
-        /// "10.10.20.15", "10.10.21.0/24". Empty = nobody (every call is refused with 401 IP_NOT_ALLOWED).
+        /// Optional IP check (default off). false: any caller with a valid technical user + password is accepted
+        /// (Basic auth is still required). true: the caller must also be in <see cref="AllowedIps"/> — the list is then
+        /// required, and an empty list refuses every call.
+        /// </summary>
+        public bool EnforceIpAllowList { get; set; }
+
+        /// <summary>
+        /// IP allow-list of the SAP application servers, used only when <see cref="EnforceIpAllowList"/> is true: single
+        /// addresses or CIDR ranges (IPv4 / IPv6), e.g. "10.10.20.15", "10.10.21.0/24".
         /// </summary>
         public List<string> AllowedIps { get; set; } = new();
 

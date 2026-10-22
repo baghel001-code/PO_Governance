@@ -87,7 +87,7 @@ namespace Application.Services.V1.Sap
                 Enabled = _cfg.Enabled, Available = _repo.Available, UnavailableReason = _repo.UnavailableReason,
                 Environment = _cfg.Environment, BlockVerdict = _cfg.BlockVerdict, UnknownItemPolicy = _cfg.UnknownItemPolicy,
                 DecisionTimeoutMs = _cfg.DecisionTimeoutMs, EventsLagLimitSeconds = _cfg.EventsLagLimitSeconds,
-                AllowedIps = _cfg.AllowedIps.ToList(), TrustedProxies = _cfg.TrustedProxies.ToList(), OnlyOnPort = _cfg.OnlyOnPort
+                EnforceIpAllowList = _cfg.EnforceIpAllowList, AllowedIps = _cfg.AllowedIps.ToList(), TrustedProxies = _cfg.TrustedProxies.ToList(), OnlyOnPort = _cfg.OnlyOnPort
             };
             var data = await _cache.GetCurrentAsync(ct);
             o.RulesVersion = string.IsNullOrWhiteSpace(_cfg.RulesVersion) ? "R-P" + data.ParamsVersion.ToString(CultureInfo.InvariantCulture) : _cfg.RulesVersion;

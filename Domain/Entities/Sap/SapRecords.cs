@@ -261,6 +261,7 @@ namespace Domain.Entities.Sap
         public string UnknownItemPolicy { get; set; } = "";
         public int DecisionTimeoutMs { get; set; }
         public int EventsLagLimitSeconds { get; set; }
+        public bool EnforceIpAllowList { get; set; }
         public List<string> AllowedIps { get; set; } = new();
         public List<string> TrustedProxies { get; set; } = new();
         public int OnlyOnPort { get; set; }

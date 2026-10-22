@@ -166,7 +166,7 @@ namespace POGovernance.Tests.Sap
 
         public static IOptions<SapInterfaceSettings> Options(Action<SapInterfaceSettings>? change = null)
         {
-            var s = new SapInterfaceSettings { AllowedIps = new() { "127.0.0.1" }, DecisionTimeoutMs = 30000 };   // tests run in parallel: no accidental timeouts
+            var s = new SapInterfaceSettings { EnforceIpAllowList = true, AllowedIps = new() { "127.0.0.1" }, DecisionTimeoutMs = 30000 };   // tests run in parallel: no accidental timeouts
             change?.Invoke(s);
             return Microsoft.Extensions.Options.Options.Create(s);
         }

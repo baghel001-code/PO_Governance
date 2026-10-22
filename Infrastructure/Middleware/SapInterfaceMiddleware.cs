@@ -42,8 +42,11 @@ namespace Infrastructure.Middleware
             _repo = repo;
             _readiness = readiness;
             _log = log;
-            if (_allowed.Count == 0)
-                _log.LogWarning("SapInterface:AllowedIps is empty - every /api/sap call is refused (401 IP_NOT_ALLOWED)");
+            if (!_cfg.EnforceIpAllowList)
+                _log.LogInformation("SAP interface: IP allow-list is off (SapInterface:EnforceIpAllowList = false) - callers are checked by technical user + password only");
+            else if (_allowed.Count == 0)
+                _log.LogError("SapInterface:EnforceIpAllowList is true but SapInterface:AllowedIps is empty - every /api/sap call is refused (401 IP_NOT_ALLOWED). " +
+                              "Add the SAP application servers' addresses, or set EnforceIpAllowList to false.");
         }
 
         public static bool IsSapPath(PathString path) => path.StartsWithSegments(PathPrefix, StringComparison.OrdinalIgnoreCase);
@@ -70,11 +73,13 @@ namespace Infrastructure.Middleware
                 var ip = IpAllowList.ClientAddress(ctx.Connection.RemoteIpAddress, ctx.Request.Headers["X-Forwarded-For"].ToString(), _proxies);
                 var ipText = ip?.ToString() ?? "";
                 ctx.Items[ClientIpItem] = ipText;
-                if (!_allowed.Contains(ip))
+                if (_cfg.EnforceIpAllowList && !_allowed.Contains(ip))
                 {
                     _log.LogWarning("SAP call from {Ip} refused: not in SapInterface:AllowedIps ({Method} {Path}, trace {TraceId})",
                         ipText, ctx.Request.Method, ctx.Request.Path, trace);
-                    await WriteAsync(ctx, 401, SapErrorCodes.IpNotAllowed, "Caller IP " + ipText + " is not allowed");
+                    await WriteAsync(ctx, 401, SapErrorCodes.IpNotAllowed, _allowed.Count == 0
+                        ? "Caller IP " + ipText + " is not allowed: the IP allow-list is switched on (SapInterface:EnforceIpAllowList) but lists no addresses"
+                        : "Caller IP " + ipText + " is not allowed");
                     return;
                 }
                 if (!_cfg.Enabled)

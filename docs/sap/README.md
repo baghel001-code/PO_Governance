@@ -25,7 +25,7 @@ as today; `/events` must be retried until 200.
 | Base URL | `https://<vm-dns-name>:8443/api/sap/v1` (test copy: the test VM, connected to SAP QA only) |
 | TLS | Kestrel HTTPS endpoint with the company certificate — see *HTTPS on 8443* below |
 | Authentication | HTTP Basic with a **technical user** per SAP system (`sap_ecq`, `sap_ecp`), password ≥ 24 characters |
-| Network | SAP application servers → VM, TCP 8443, plus the tool's **IP allow-list** (`SapInterface:AllowedIps`) |
+| Network | SAP application servers → VM, TCP 8443, plus, optionally, the tool's **IP allow-list** (`SapInterface:EnforceIpAllowList` + `AllowedIps`) |
 | SM59 | Type G destination `ZPOGOV_API` (`ZPOGOV_API_TEST` in QA), path prefix `/api/sap/v1`, Basic auth, SSL active; connection test = `GET /ping` → 200 |
 | Timeouts | `/decisions`: SAP waits 3 s; the tool answers 503 `DECISION_TIMEOUT` after `SapInterface:DecisionTimeoutMs` (2500 ms). `/events`: 10 s |
 
@@ -42,13 +42,30 @@ Portal → user menu → **🔌 SAP Interface** (`/admin/sap`) → *Technical us
   lockouts, user changes and password resets are written to the audit trail (`sap-login-fail`, `sap-locked`,
   `sap-user-add`, `sap-user-update`, `sap-password-reset`). The last call time and IP are shown per user.
 
-### IP allow-list
+### IP allow-list (optional)
 
-`SapInterface:AllowedIps` in `POGovApi/appsettings.json` (or `appsettings.Production.json`): single addresses or CIDR
-ranges, IPv4 or IPv6 — e.g. `["10.10.20.15", "10.10.21.0/24"]`. **Empty = nobody** (every call is refused). A caller
-outside the list gets **401** `IP_NOT_ALLOWED` (spec §9: "401 Wrong credentials / IP not allowed"). `X-Forwarded-For` is
-used only when the TCP peer is listed in `SapInterface:TrustedProxies` (a reverse proxy / load balancer in front of the
-API); otherwise it is ignored and the peer address is checked. Development allows `127.0.0.1` and `::1`.
+The IP check is **optional** and **off by default** (`SapInterface:EnforceIpAllowList = false`): every caller must still
+sign in with a valid **technical user + password** (Basic auth), but its IP address is not checked. Use this when the
+callers' addresses are hard to collect.
+
+To switch it on, set both in `POGovApi/appsettings.json` (or `appsettings.Production.json`) and restart the API:
+
+```json
+"SapInterface": {
+  "EnforceIpAllowList": true,
+  "AllowedIps": [ "10.10.20.15", "10.10.21.0/24" ]
+}
+```
+
+With `EnforceIpAllowList = true` the list is **required**: single addresses or CIDR ranges, IPv4 or IPv6. A caller
+outside it gets **401** `IP_NOT_ALLOWED` (spec §9: "401 Wrong credentials / IP not allowed"), and an empty list refuses
+every call (the API logs an error at start-up saying so). `X-Forwarded-For` is used only when the TCP peer is listed in
+`SapInterface:TrustedProxies` (a reverse proxy / load balancer in front of the API); otherwise it is ignored and the peer
+address is checked. The current setting is shown on **🔌 SAP Interface** → *Overview* ("Allowed IPs").
+
+The calls come from the **SAP application servers** (the release-workflow step and the bgRFC queue run there), not
+from the users' terminals, so when you do switch the check on, the list is usually just those few servers — ask SAP
+Basis for their addresses.
 
 ### HTTPS on 8443
 

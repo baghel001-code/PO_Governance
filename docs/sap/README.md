@@ -1,6 +1,6 @@
 # SAP R/3 interface — `/api/sap/v1` (specification v1.4)
 
-For the SAP ABAP / workflow / Basis teams and the tool's administrators. The binding contract is
+For the SAP ABAP / workflow / Basis teams and the tool's administrators. **SAP programmers: start with [SAP-API-Reference.md](SAP-API-Reference.md)** — every endpoint with request / response fields and captured examples. The binding contract is
 `legacy/python-app/docs/po-governance-sap-api.yaml` (OpenAPI 3.0, v1.4) with
 `PO_Governance_SAP_API_Specification_v1.4.pdf`; this page describes how the tool side implements it, what is
 configurable and what is still pending.

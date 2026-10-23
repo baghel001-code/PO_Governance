@@ -78,6 +78,12 @@ builder.Services.AddSwaggerGen(c =>
         Type = SecuritySchemeType.ApiKey, Name = AppConstants.SessionHeader, In = ParameterLocation.Header,
         Description = "The user's session token from POST api/v1/AuthLogin (Data.token)"
     });
+    c.AddSecurityDefinition(POGovApi.Swagger.SapSwaggerFilter.SchemeName, new OpenApiSecurityScheme
+    {
+        Type = SecuritySchemeType.Http, Scheme = "basic",
+        Description = "SAP technical user (api/sap/v1 only) - user name and password from the portal's SAP Interface page"
+    });
+    c.OperationFilter<POGovApi.Swagger.SapSwaggerFilter>();
     c.AddSecurityRequirement(new OpenApiSecurityRequirement
     {
         [new OpenApiSecurityScheme { Reference = new OpenApiReference { Type = ReferenceType.SecurityScheme, Id = "Bearer" } }] = Array.Empty<string>(),

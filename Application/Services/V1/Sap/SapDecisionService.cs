@@ -68,6 +68,7 @@ namespace Application.Services.V1.Sap
                 {
                     throw new SapApiException(400, SapErrorCodes.InvalidJson, "Invalid JSON: " + ex.Message);
                 }
+                SapRequestValidator.ApplyDefaults(req, hash, _clock.Today, caller.SourceSystem);
                 var problem = SapRequestValidator.Validate(req);
                 if (problem != null) throw new SapApiException(400, SapErrorCodes.ValidationFailed, problem);
 
@@ -154,7 +155,7 @@ namespace Application.Services.V1.Sap
             // 3. decide (CPU: off the request thread so the timeout can answer)
             var items = req.PurchaseOrder!.Items!.Select(i => new SapItemInput
             {
-                PoItem = i.PoItem!.Value, Article = i.Article!, GenericArticle = i.GenericArticle, Colour = i.Colour, OrderQty = i.OrderQty!.Value,
+                PoItem = i.PoItem!.Value, Article = i.Article ?? "", GenericArticle = i.GenericArticle, Colour = i.Colour, OrderQty = i.OrderQty!.Value,
                 Uom = i.Uom, DeliveryDate = i.DeliveryDate, NetValue = i.NetValue
             }).ToList();
             var options = Options();

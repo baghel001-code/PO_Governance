@@ -59,7 +59,7 @@ namespace DecisionEngine.Sap
                 if (gm == null)
                     d.Problem = "Article " + Display(it.GenericArticle ?? it.Article) + " is unknown to the tool (not in Article / Universe Master, F2 or BSR)";
                 else if (colour == null)
-                    d.Problem = "No colour sent for article " + Display(it.Article);
+                    d.Problem = "No colour sent for article " + Display(it.GenericArticle ?? it.Article);
                 else if (d.Month == null)
                     d.Problem = "No valid delivery_date for item " + it.PoItem;
                 else if (d.OrderQty <= 0)

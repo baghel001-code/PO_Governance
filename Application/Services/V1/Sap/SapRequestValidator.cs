@@ -4,31 +4,58 @@ using Domain.Entities.Sap;
 namespace Application.Services.V1.Sap
 {
     /// <summary>
-    /// The mandatory fields and enums of the SAP contract (po-governance-sap-api.yaml). A failing /decisions request is
+    /// The mandatory fields and enums of the SAP contract (po-governance-sap-api.yaml; for /decisions narrowed by the business
+    /// to the four decision inputs, see <see cref="ApplyDefaults"/>). A failing /decisions request is
     /// answered 400 VALIDATION_FAILED with the first problem as message (e.g. "purchase_order.items[0].order_qty must be &gt; 0");
     /// a failing event is parked with it.
     /// </summary>
     public static class SapRequestValidator
     {
-        /// <summary>Null when the decision request is valid, else the first problem.</summary>
+        /// <summary>Default po_item numbering when SAP leaves it out: 10, 20, 30 … in the order sent.</summary>
+        public const int PoItemStep = 10;
+
+        /// <summary>
+        /// Business rule: only <c>generic_article</c>, <c>colour</c>, <c>order_qty</c> and <c>delivery_date</c> per item are
+        /// mandatory in a /decisions request; every other field is optional and filled here when left out:
+        /// request_id = <c>AUTO-yyyyMMdd-&lt;body hash&gt;</c> (an identical body on the same day replays the same decision),
+        /// mode = SHADOW, source_system = the technical user's system, otb_check / depth_check = PASSED,
+        /// po_item = 10, 20, 30 … by position. Runs before <see cref="Validate(SapDecisionRequest?)"/>.
+        /// </summary>
+        public static void ApplyDefaults(SapDecisionRequest? r, string bodyHash, string today, string callerSystem)
+        {
+            if (r == null) return;
+            if (string.IsNullOrWhiteSpace(r.RequestId))
+                r.RequestId = "AUTO-" + today.Replace("-", "") + "-" + bodyHash[..Math.Min(24, bodyHash.Length)];
+            if (string.IsNullOrWhiteSpace(r.Mode)) r.Mode = "SHADOW";
+            if (string.IsNullOrWhiteSpace(r.SourceSystem) && !string.IsNullOrWhiteSpace(callerSystem)) r.SourceSystem = callerSystem;
+            if (string.IsNullOrWhiteSpace(r.OtbCheck)) r.OtbCheck = "PASSED";
+            if (string.IsNullOrWhiteSpace(r.DepthCheck)) r.DepthCheck = "PASSED";
+            var items = r.PurchaseOrder?.Items;
+            if (items == null) return;
+            var taken = new HashSet<int>(items.Where(i => i?.PoItem != null).Select(i => i!.PoItem!.Value));
+            var next = PoItemStep;
+            for (var i = 0; i < items.Count; i++)
+            {
+                if (items[i] == null || items[i].PoItem != null) continue;
+                var n = (i + 1) * PoItemStep;
+                if (taken.Contains(n)) { while (taken.Contains(next)) next += PoItemStep; n = next; }
+                items[i].PoItem = n;
+                taken.Add(n);
+            }
+        }
+
+        /// <summary>Null when the decision request is valid, else the first problem (call <see cref="ApplyDefaults"/> first).</summary>
         public static string? Validate(SapDecisionRequest? r)
         {
             if (r == null) return "The body must be a JSON object";
-            if (string.IsNullOrWhiteSpace(r.RequestId)) return "request_id is required";
-            if (r.RequestId.Length > 80) return "request_id must be at most 80 characters";
-            if (string.IsNullOrWhiteSpace(r.Mode)) return "mode is required";
-            if (!SapEnums.Modes.Contains(r.Mode)) return "mode must be one of " + string.Join(", ", SapEnums.Modes);
-            if (string.IsNullOrWhiteSpace(r.SourceSystem)) return "source_system is required";
-            if (string.IsNullOrWhiteSpace(r.OtbCheck)) return "otb_check is required";
-            if (!SapEnums.OtbCheck.Contains(r.OtbCheck)) return "otb_check must be PASSED";
-            if (string.IsNullOrWhiteSpace(r.DepthCheck)) return "depth_check is required";
-            if (!SapEnums.DepthCheck.Contains(r.DepthCheck)) return "depth_check must be one of " + string.Join(", ", SapEnums.DepthCheck);
+            if (r.RequestId != null && r.RequestId.Length > 80) return "request_id must be at most 80 characters";
+            if (r.Mode != null && !SapEnums.Modes.Contains(r.Mode)) return "mode must be one of " + string.Join(", ", SapEnums.Modes);
+            if (r.OtbCheck != null && !SapEnums.OtbCheck.Contains(r.OtbCheck)) return "otb_check must be PASSED";
+            if (r.DepthCheck != null && !SapEnums.DepthCheck.Contains(r.DepthCheck)) return "depth_check must be one of " + string.Join(", ", SapEnums.DepthCheck);
             if (r.RequestedAt != null && !SapJson.TryParseTimestamp(r.RequestedAt, out _))
                 return "requested_at must be an ISO 8601 timestamp with offset, e.g. 2026-10-01T11:50:00+05:30";
             var po = r.PurchaseOrder;
             if (po == null) return "purchase_order is required";
-            if (string.IsNullOrWhiteSpace(po.PoNumber)) return "purchase_order.po_number is required";
-            if (string.IsNullOrWhiteSpace(po.BuyerUser)) return "purchase_order.buyer_user is required";
             if (po.Items == null || po.Items.Count == 0) return "purchase_order.items must contain at least one item";
             var seen = new HashSet<int>();
             for (var i = 0; i < po.Items.Count; i++)
@@ -36,13 +63,13 @@ namespace Application.Services.V1.Sap
                 var it = po.Items[i];
                 var p = "purchase_order.items[" + i + "]";
                 if (it == null) return p + " must be an object";
-                if (it.PoItem == null) return p + ".po_item is required";
-                if (!seen.Add(it.PoItem.Value)) return p + ".po_item " + it.PoItem + " appears more than once";
-                if (string.IsNullOrWhiteSpace(it.Article)) return p + ".article is required";
+                if (it.PoItem != null && !seen.Add(it.PoItem.Value)) return p + ".po_item " + it.PoItem + " appears more than once";
+                if (string.IsNullOrWhiteSpace(it.GenericArticle)) return p + ".generic_article is required";
+                if (string.IsNullOrWhiteSpace(it.Colour)) return p + ".colour is required";
                 if (it.OrderQty == null) return p + ".order_qty is required";
                 if (!(it.OrderQty > 0) || !double.IsFinite(it.OrderQty.Value)) return p + ".order_qty must be > 0";
-                if (string.IsNullOrWhiteSpace(it.Uom)) return p + ".uom is required";
-                if (it.DeliveryDate != null && !SapInputNormalizer.TryParseDate(it.DeliveryDate, out _))
+                if (string.IsNullOrWhiteSpace(it.DeliveryDate)) return p + ".delivery_date is required";
+                if (!SapInputNormalizer.TryParseDate(it.DeliveryDate, out _))
                     return p + ".delivery_date must be a date YYYY-MM-DD";
             }
             return null;

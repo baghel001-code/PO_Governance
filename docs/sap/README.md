@@ -89,6 +89,11 @@ company CA chain in STRUST. With IIS instead of Kestrel, bind 8443 with the cert
 
 ## 2. `POST /decisions`
 
+**Mandatory fields (business rule, narrower than the YAML):** only `items[].generic_article`, `colour`, `order_qty`
+and `delivery_date`. Everything else is optional; when left out the tool fills `request_id` = `AUTO-yyyyMMdd-<body hash>`,
+`mode` = `SHADOW`, `source_system` = the technical user's system, `otb_check` / `depth_check` = `PASSED` and
+`po_item` = 10, 20, 30 … (`SapRequestValidator.ApplyDefaults`). Optional fields that are sent are still validated.
+
 Request (the YAML example, adapted to test data):
 
 ```json

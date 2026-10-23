@@ -46,7 +46,7 @@ today. All examples below were captured from the running interface.
 | `USER_LOCKED` | 401 | Too many wrong passwords, or user disabled | Ask the tool admin to unlock |
 | `IP_NOT_ALLOWED` | 401 | Caller IP not in the allow-list (only when switched on) | Ask the tool admin to add the IP |
 | `INVALID_JSON` | 400 | Body is not valid JSON | Fix the program; do not resend unchanged |
-| `VALIDATION_FAILED` | 400 | Mandatory field missing, wrong value, quantity ≤ 0, bad date (`message` names the field) | Fix the program; do not resend unchanged |
+| `VALIDATION_FAILED` | 400 | Mandatory field missing (`/decisions`: generic_article, colour, order_qty, delivery_date), wrong value, quantity ≤ 0, bad date (`message` names the field) | Fix the program; do not resend unchanged |
 | `REQUEST_ID_CONFLICT` | 409 | `/decisions`: same `request_id` already used with a different body | Generate a new `request_id` |
 | `CANNOT_DECIDE` | 422 | `/decisions`: an item cannot be decided (e.g. article unknown to the tool) | Treat as **NOT_CHECKED**, continue as today |
 | `BATCH_TOO_LARGE` | 413 | `/events`: more than 500 events or 5 MB | Split the batch and resend |
@@ -143,9 +143,26 @@ the tool answers with a verdict per item.
   routes on `route_to`. Control it in SAP, e.g. switch `ZPOGOV_ACTIVE` per division.
 - **Idempotency:** `request_id` identifies one check (e.g. work-item ID + PO + version). Repeating the same `request_id`
   with the same body returns the **same answer** (same `decision_id`). The same `request_id` with a different body →
-  `409 REQUEST_ID_CONFLICT`.
+  `409 REQUEST_ID_CONFLICT`. If SAP leaves `request_id` out, the tool builds one (`AUTO-yyyyMMdd-<body hash>`), so the
+  same body sent again on the same day also returns the same answer.
 
 ### Request
+
+**Business rule: only four fields per item are mandatory** — `generic_article`, `colour`, `order_qty` and
+`delivery_date` (Generic Material + Colour + Delivery Month + Proposed Qty). Everything else is optional. The smallest
+valid request:
+
+```json
+{
+  "purchase_order": {
+    "items": [
+      { "generic_article": "000000001101000101", "colour": "WHT", "order_qty": 50000, "delivery_date": "2026-11-15" }
+    ]
+  }
+}
+```
+
+The full request, with every optional field SAP may send for audit and reporting:
 
 ```json
 {
@@ -186,44 +203,45 @@ the tool answers with a verdict per item.
 }
 ```
 
-| Field | Type | Req. | SAP source / meaning |
-|---|---|---|---|
-| `request_id` | string, max 80 | **yes** | Unique per check, e.g. work-item ID + PO + version |
-| `mode` | `SHADOW` \| `LIVE` | **yes** | See above |
-| `source_system` | string | **yes** | `SY-SYSID` |
-| `client` | string | no | `SY-MANDT` |
-| `otb_check` | `PASSED` | **yes** | Assertion that OTB passed (the tool is only called after it) |
-| `depth_check` | `PASSED` \| `BYPASSED` | **yes** | `BYPASSED` only for a quantity reduced under a previous REDUCE decision |
-| `previous_decision_id` | string \| null | no | On resubmission after a REDUCE: the `decision_id` it was reduced under |
-| `requested_at` | date-time | no | When SAP sent the check |
-| `purchase_order.po_number` | string | **yes** | `EKKO-EBELN` |
-| `purchase_order.doc_type` | string | no | `EKKO-BSART` |
-| `purchase_order.vendor` | string | no | `EKKO-LIFNR` |
-| `purchase_order.purch_org` | string | no | `EKKO-EKORG` |
-| `purchase_order.purch_group` | string | no | `EKKO-EKGRP` |
-| `purchase_order.buyer_user` | string | **yes** | Buyer's SAP user |
-| `purchase_order.buyer_email` | string \| null | no | Buyer's e-mail |
-| `purchase_order.division` | string | no | Division (per-division rules and routing) |
-| `purchase_order.currency` | string | no | `EKKO-WAERS` |
-| `items[]` | array, min 1 | **yes** | One entry per PO item |
-| `items[].po_item` | integer | **yes** | `EKPO-EBELP` |
-| `items[].article` | string | **yes** | `EKPO-MATNR` (variant / single article), leading zeros kept |
-| `items[].generic_article` | string \| null | **needed** | `MARA-SATNR` (generic article). The tool decides on the generic article; if empty it uses `article` |
-| `items[].colour` | string \| null | **needed** | Colour characteristic of the variant: Colour Master **code** preferred (description also accepted) |
-| `items[].merch_category` | string | no | `EKPO-MATKL` |
-| `items[].season` | string \| null | no | Season |
-| `items[].site` | string \| null | no | `EKPO-WERKS` (informational; the tool works at company level) |
-| `items[].order_qty` | number, > 0 | **yes** | `EKPO-MENGE` in base unit |
-| `items[].uom` | string | **yes** | `EKPO-MEINS` |
-| `items[].net_value` | number | no | Item net value |
-| `items[].delivery_date` | date | **needed** | First schedule line `EKET-EINDT` — the tool uses its month |
+| Field | Type | Req. | SAP source / meaning | When left out |
+|---|---|---|---|---|
+| `purchase_order.items[]` | array, min 1 | **yes** | One entry per PO item | — |
+| `items[].generic_article` | string | **yes** | `MARA-SATNR` (generic article), leading zeros kept | — |
+| `items[].colour` | string | **yes** | Colour characteristic of the variant: Colour Master **code** preferred (description also accepted) | — |
+| `items[].order_qty` | number, > 0 | **yes** | `EKPO-MENGE` in base unit (proposed quantity) | — |
+| `items[].delivery_date` | date | **yes** | First schedule line `EKET-EINDT` — the tool uses its month | — |
+| `request_id` | string, max 80 | no | Unique per check, e.g. work-item ID + PO + version | `AUTO-yyyyMMdd-<body hash>` |
+| `mode` | `SHADOW` \| `LIVE` | no | See above | `SHADOW` |
+| `source_system` | string | no | `SY-SYSID` | System of the technical user (`ECQ` / `ECP`) |
+| `client` | string | no | `SY-MANDT` | — |
+| `otb_check` | `PASSED` | no | Assertion that OTB passed | `PASSED` |
+| `depth_check` | `PASSED` \| `BYPASSED` | no | `BYPASSED` only for a quantity reduced under a previous REDUCE decision | `PASSED` |
+| `previous_decision_id` | string \| null | no | On resubmission after a REDUCE: the `decision_id` it was reduced under | — |
+| `requested_at` | date-time | no | When SAP sent the check | — |
+| `purchase_order.po_number` | string | no | `EKKO-EBELN` (recommended: shown in the audit log and matched with `GOV_OUTCOME`) | — |
+| `purchase_order.doc_type` | string | no | `EKKO-BSART` | — |
+| `purchase_order.vendor` | string | no | `EKKO-LIFNR` | — |
+| `purchase_order.purch_org` | string | no | `EKKO-EKORG` | — |
+| `purchase_order.purch_group` | string | no | `EKKO-EKGRP` | — |
+| `purchase_order.buyer_user` | string | no | Buyer's SAP user | — |
+| `purchase_order.buyer_email` | string \| null | no | Buyer's e-mail | — |
+| `purchase_order.division` | string | no | Division | — |
+| `purchase_order.currency` | string | no | `EKKO-WAERS` | — |
+| `items[].po_item` | integer | no | `EKPO-EBELP` (recommended, so SAP can match the answer to its item) | 10, 20, 30 … in the order sent |
+| `items[].article` | string | no | `EKPO-MATNR` (variant); used only when the generic article is not known to the tool | — |
+| `items[].merch_category` | string | no | `EKPO-MATKL` | — |
+| `items[].season` | string | no | Season | — |
+| `items[].site` | string | no | `EKPO-WERKS` (informational; the tool works at company level) | — |
+| `items[].uom` | string | no | `EKPO-MEINS` | — |
+| `items[].net_value` | number | no | Item net value | — |
 
-**"needed"** means the specification allows the field to be empty, but the tool cannot decide an item without it.
-It then answers `422 CANNOT_DECIDE` (see below), so please always send these fields.
+An optional field that **is** sent must still be valid (e.g. `mode` must be `SHADOW` or `LIVE`, `po_item` must not
+repeat), otherwise the answer is `400 VALIDATION_FAILED`. The answer always echoes `request_id`, `mode` and every
+`po_item`, including the ones the tool filled in.
 
 **How the tool reads an item:**
 - **Article:** the generic article with its leading zeros removed (`000000001101000101` → `1101000101`), looked up in
-  the tool's Article Master / Universe Master.
+  the tool's Article Master / Universe Master (then `article`, if sent).
 - **Colour:** matched by Colour Master code first, then by description.
 - **Month:** the delivery month is taken from `delivery_date`. A date in the past counts as the current month.
 - **Size variants:** items of one PO with the same generic article, colour and delivery month are decided **together**
@@ -391,6 +409,7 @@ domain value. This is switched in the tool's settings and will be agreed with yo
 |---|---|---|
 | Article unknown to the tool (whole PO not decided) | 422 | `{"error_code":"CANNOT_DECIDE","message":"Item 10: Article 9999999999 is unknown to the tool (not in Article / Universe Master, F2 or BSR)","trace_id":"T-a1490d"}` |
 | Same `request_id`, different body | 409 | `{"error_code":"REQUEST_ID_CONFLICT","message":"request_id WI-ALLOW-0001 was already used with a different body (decision D-20261022-000001) - generate a new request_id","trace_id":"T-a4d243"}` |
+| `colour` missing | 400 | `{"error_code":"VALIDATION_FAILED","message":"purchase_order.items[0].colour is required","trace_id":"…"}` |
 | `order_qty` = 0 | 400 | `{"error_code":"VALIDATION_FAILED","message":"purchase_order.items[0].order_qty must be > 0","trace_id":"T-a19102"}` |
 | Broken JSON | 400 | `{"error_code":"INVALID_JSON","message":"Invalid JSON: …","trace_id":"T-1e66c8"}` |
 | No / wrong credentials | 401 | `{"error_code":"UNAUTHORIZED","message":"Missing or wrong credentials","trace_id":"T-809985"}` |

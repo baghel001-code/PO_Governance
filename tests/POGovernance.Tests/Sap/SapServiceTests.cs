@@ -113,22 +113,58 @@ namespace POGovernance.Tests.Sap
             Assert.Single(k.Repo.Decisions.Where(d => d.Row.HttpStatus == 200));
         }
 
+        [Fact]
+        public async Task Only_the_four_business_fields_are_mandatory()
+        {
+            var k = new Kit();
+            var svc = k.Service();
+            var body = "{\"purchase_order\":{\"items\":[" +
+                       "{\"generic_article\":\"000000001101000101\",\"colour\":\"WHT\",\"order_qty\":100,\"delivery_date\":\"2026-11-15\"}," +
+                       "{\"generic_article\":\"1101000101\",\"colour\":\"RED\",\"order_qty\":50,\"delivery_date\":\"2026-11-15\"}]}}";
+            var r = await svc.DecideAsync(body, SapKit.Caller);
+            Assert.Equal(200, r.Status);
+            var j = Parse(r);
+            Assert.StartsWith("AUTO-", j["request_id"]!.GetValue<string>());
+            Assert.Equal("SHADOW", j["mode"]!.GetValue<string>());
+            Assert.Equal(new[] { 10, 20 }, j["items"]!.AsArray().Select(i => i!["po_item"]!.GetValue<int>()));
+            var again = await svc.DecideAsync(body, SapKit.Caller);
+            Assert.True(again.Replayed);
+            Assert.Equal(j["decision_id"]!.GetValue<string>(), Parse(again)["decision_id"]!.GetValue<string>());
+        }
+
+        [Fact]
+        public void Default_po_items_skip_numbers_SAP_already_sent()
+        {
+            var req = new SapDecisionRequest
+            {
+                PurchaseOrder = new SapDecisionPurchaseOrder
+                {
+                    Items = new() { new SapDecisionRequestItem(), new SapDecisionRequestItem { PoItem = 10 }, new SapDecisionRequestItem() }
+                }
+            };
+            SapRequestValidator.ApplyDefaults(req, "abcdef", "2026-10-23", "ECQ");
+            Assert.Equal(new int?[] { 20, 10, 30 }, req.PurchaseOrder.Items.Select(i => i.PoItem));
+            Assert.Equal("AUTO-20261023-abcdef", req.RequestId);
+            Assert.Equal("ECQ", req.SourceSystem);
+            Assert.Equal("PASSED", req.DepthCheck);
+        }
+
         public static IEnumerable<object[]> BadRequests()
         {
             JsonObject R() => SapKit.Request("WI-BAD", SapKit.Item(10, "1101000101", "WHT", 100));
             JsonObject With(Action<JsonObject> f) { var r = R(); f(r); return r; }
-            yield return new object[] { With(r => r.Remove("request_id")), "request_id is required" };
             yield return new object[] { With(r => r["request_id"] = new string('x', 81)), "request_id must be at most 80 characters" };
             yield return new object[] { With(r => r["mode"] = "TEST"), "mode must be one of SHADOW, LIVE" };
-            yield return new object[] { With(r => r.Remove("source_system")), "source_system is required" };
             yield return new object[] { With(r => r["otb_check"] = "FAILED"), "otb_check must be PASSED" };
             yield return new object[] { With(r => r["depth_check"] = "FAILED"), "depth_check must be one of PASSED, BYPASSED" };
             yield return new object[] { With(r => r["requested_at"] = "2026-10-21 11:50"), "requested_at must be an ISO 8601 timestamp" };
             yield return new object[] { With(r => r.Remove("purchase_order")), "purchase_order is required" };
-            yield return new object[] { With(r => r["purchase_order"]!.AsObject().Remove("buyer_user")), "purchase_order.buyer_user is required" };
             yield return new object[] { With(r => r["purchase_order"]!["items"] = new JsonArray()), "purchase_order.items must contain at least one item" };
             yield return new object[] { With(r => r["purchase_order"]!["items"]![0]!["order_qty"] = 0), "purchase_order.items[0].order_qty must be > 0" };
-            yield return new object[] { With(r => r["purchase_order"]!["items"]![0]!.AsObject().Remove("uom")), "purchase_order.items[0].uom is required" };
+            yield return new object[] { With(r => r["purchase_order"]!["items"]![0]!.AsObject().Remove("generic_article")), "purchase_order.items[0].generic_article is required" };
+            yield return new object[] { With(r => r["purchase_order"]!["items"]![0]!["colour"] = " "), "purchase_order.items[0].colour is required" };
+            yield return new object[] { With(r => r["purchase_order"]!["items"]![0]!.AsObject().Remove("order_qty")), "purchase_order.items[0].order_qty is required" };
+            yield return new object[] { With(r => r["purchase_order"]!["items"]![0]!.AsObject().Remove("delivery_date")), "purchase_order.items[0].delivery_date is required" };
             yield return new object[] { With(r => r["purchase_order"]!["items"]![0]!["delivery_date"] = "20.11.2026"), "purchase_order.items[0].delivery_date must be a date YYYY-MM-DD" };
             yield return new object[] { With(r => r["purchase_order"]!["items"]!.AsArray().Add(SapKit.Item(10, "1101000101", "RED", 5))), "purchase_order.items[1].po_item 10 appears more than once" };
         }

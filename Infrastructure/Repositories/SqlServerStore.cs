@@ -74,6 +74,9 @@ namespace Infrastructure.Repositories
         /// <summary>Base URL written into the API_MASTER seed when this store creates it (ApiMaster:BaseUrl); null = the script's default.</summary>
         public string? ApiMasterBaseUrl { get; set; }
 
+        /// <summary>Environment whose API_BASE_URL row gets <see cref="ApiMasterBaseUrl"/> when this store creates the API master.</summary>
+        public string? ApiMasterEnvironment { get; set; }
+
         /// <summary>
         /// The API master (04_api_master.sql) of a database created before it existed: created with the rest of the schema when
         /// SqlServerCreateSchema is on, otherwise only reported (the portal cannot start without it).
@@ -81,16 +84,17 @@ namespace Infrastructure.Repositories
         private async Task EnsureApiMasterAsync(CancellationToken ct)
         {
             var exists = await _db.QueryFirstOrDefaultAsync<int?>(
-                "SELECT CASE WHEN OBJECT_ID(N'dbo.PRO_GET_ALL_API', N'P') IS NOT NULL AND OBJECT_ID(N'dbo.API_MASTER', N'U') IS NOT NULL THEN 1 ELSE 0 END",
+                "SELECT CASE WHEN OBJECT_ID(N'dbo.PRO_GET_ALL_API', N'P') IS NOT NULL AND OBJECT_ID(N'dbo.API_MASTER', N'U') IS NOT NULL " +
+                "AND OBJECT_ID(N'dbo.API_BASE_URL', N'U') IS NOT NULL AND COL_LENGTH(N'dbo.API_MASTER', N'Base_Url_Key') IS NOT NULL THEN 1 ELSE 0 END",
                 null, CommandType.Text, ct: ct) == 1;
             if (exists) return;
             if (_createSchema)
             {
-                _log?.LogInformation("Creating the API master (database/sqlserver/04_api_master.sql) in {Db}", _db.Describe());
-                await SqlServerSchema.ApplyAsync(_db.ConnectionString, new[] { SqlServerSchema.ApiMasterScript }, null, ApiMasterBaseUrl, ct);
+                _log?.LogInformation("Creating / upgrading the API master (database/sqlserver/04_api_master.sql: API_MASTER + API_BASE_URL) in {Db}", _db.Describe());
+                await SqlServerSchema.ApplyAsync(_db.ConnectionString, new[] { SqlServerSchema.ApiMasterScript }, null, ApiMasterBaseUrl, ct, ApiMasterEnvironment);
             }
             else
-                _log?.LogError("The database {Db} has no API master (API_MASTER / PRO_GET_ALL_API): run database/sqlserver/04_api_master.sql " +
+                _log?.LogError("The database {Db} has no API master or an old one (API_MASTER / API_BASE_URL / PRO_GET_ALL_API): run database/sqlserver/04_api_master.sql " +
                                "- the portal loads its API list from it (GetAllApi).", _db.Describe());
         }
 
@@ -104,7 +108,7 @@ namespace Infrastructure.Repositories
             {
                 _log?.LogInformation("Upgrading schema v{Version} to v{Expected}: database/sqlserver/05_sap_interface.sql in {Db}",
                     version, SqlServerSchema.ExpectedVersion, _db.Describe());
-                await SqlServerSchema.ApplyAsync(_db.ConnectionString, new[] { SqlServerSchema.SapInterfaceScript }, null, ApiMasterBaseUrl, ct);
+                await SqlServerSchema.ApplyAsync(_db.ConnectionString, new[] { SqlServerSchema.SapInterfaceScript }, null, ApiMasterBaseUrl, ct, ApiMasterEnvironment);
             }
             else
                 _log?.LogError("The database {Db} has schema v{Version}: run database/sqlserver/05_sap_interface.sql (schema v{Expected}) - " +
@@ -255,7 +259,7 @@ namespace Infrastructure.Repositories
                     if (v == null && _createSchema)
                     {
                         _log?.LogInformation("Creating the SQL Server schema (database/sqlserver 01..04) in {Db}", _db.Describe());
-                        await SqlServerSchema.ApplyAsync(_db.ConnectionString, SqlServerSchema.DatabaseScripts, null, ApiMasterBaseUrl, ct);
+                        await SqlServerSchema.ApplyAsync(_db.ConnectionString, SqlServerSchema.DatabaseScripts, null, ApiMasterBaseUrl, ct, ApiMasterEnvironment);
                         v = await SchemaVersionAsync(ct);
                     }
                     if (v == null)

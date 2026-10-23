@@ -124,8 +124,10 @@ namespace POGovernance.Tests.Architecture
         [Fact]
         public void The_embedded_04_script_gets_the_configured_api_base()
         {
-            var sql = SqlServerSchema.ApiMasterSql("https://pogov.example/api-host");
+            var sql = SqlServerSchema.ApiMasterSql("https://pogov.example/api-host", "Staging");
             Assert.Contains("DECLARE @ApiBase  NVARCHAR(400)  = N'https://pogov.example/api-host/';", sql);
+            Assert.Contains("DECLARE @ApiEnv   NVARCHAR(30)   = N'Staging';", sql);
+            Assert.Contains("DECLARE @ApiEnv   NVARCHAR(30)   = N'Development';", SqlServerSchema.ApiMasterSql(null));
             Assert.Contains(SqlServerSchema.ApiMasterScript, SqlServerSchema.DatabaseScripts);
             Assert.Equal(Seed().Count, APIService.ParseSeed(SqlServerSchema.ReadScript("04_api_master.sql"), "http://x/", null).Count);
         }

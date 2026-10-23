@@ -1,5 +1,5 @@
 import math, html, sys
-W,H=3550,2380
+W,H=3550,2700
 GREEN="#108a2e"; LINE="#6b6f75"; BG="#202124"
 # entity: name -> (x,y, [(attr, angle_deg)], radius); key attrs start with '*'; 0 deg = right, 90 = up
 E={
@@ -14,7 +14,8 @@ E={
  "UPLOAD_LOG":      (950, 150, [("*id",180),("rec",225),("created_at",5)], 185),
  "DATASET_VERSION": (1950, 800, [("*dkey",200),("*version",235),("data",270),("bytes",15),("created_at",50)], 205),
  "APP_SETTINGS":    (1950, 200, [("*name",150),("value",30),("updated_at",90)], 160),
- "API_MASTER":      (2050, 1960, [("*Api_Id",90),("Api_Name",140),("Task_Name",190),("Api_Url",240),("Api_Http_Method",300),("Api_Authorization",350),("Active_Status",40)], 215),
+ "API_MASTER":      (2050, 1960, [("*Api_Id",90),("Api_Name",140),("Task_Name",190),("Api_Url",232),("Api_Http_Method",302),("Api_Authorization",350),("Active_Status",40),("Base_Url_Key",328)], 235),
+ "API_BASE_URL":    (2050, 2480, [("*Base_Url_Id",180),("Base_Url_Key",215),("Environment",325),("Base_Url",0),("Active_Status",145)], 200),
  "SAP_TECH_USERS":  (2650, 350, [("*Id",90),("User_Name",130),("Source_System",170),("Password_Hash",210),("Active",55),("Locked_Until",20)], 205),
  "SAP_DECISION_LOG":(2650, 1020, [("*Id",125),("Decision_Id",155),("Request_Id",185),("Po_Number",215),("Mode",245),("Overall_Verdict",-35),("Route_To",-70)], 225),
  "SAP_DECISION_ITEMS":(2650,1720,[("*Id",118),("Decision_Log_Id",183),("Po_Item",213),("Generic_Article",240),("Colour",273),("Order_Qty",305),("Verdict",28),("Max_Qty",58)], 275),
@@ -38,6 +39,7 @@ R=[
  ("Outcome of","SAP_DECISION_LOG","SAP_EVENTS","1","M",None),
  ("Explained by","SAP_DECISION_ITEMS","SAP_REASON_CODES","M","1",None),
  ("Decided on","SAP_DECISION_ITEMS","DATASET_VERSION","M","M",(2250,1330)),
+ ("Gives base URL","API_BASE_URL","API_MASTER","1","M",None),
 ]
 def tw(s,size): return len(s)*size*0.58
 out=[]; lines=[]; shapes=[]
@@ -77,7 +79,7 @@ for (lab,a,b,ca,cb,pos) in R:
 for n,(x,y,w,h) in ebox.items():
     shapes.append(f'<rect x="{x-w/2:.0f}" y="{y-h/2:.0f}" width="{w:.0f}" height="{h}" fill="#fff" stroke="{GREEN}" stroke-width="2.5"/>'
                   f'<text x="{x}" y="{y+8}" font-size="22">{html.escape(n.replace("_"," "))}</text>')
-title=('<text x="40" y="2355" font-size="20" fill="#9aa0a6" font-weight="400" text-anchor="start">VMM PO Governance — database entity diagram (SQL Server). '
+title=('<text x="40" y="2675" font-size="20" fill="#9aa0a6" font-weight="400" text-anchor="start">VMM PO Governance — database entity diagram (SQL Server). '
        'Left: portal tables (01_tables.sql, 04_api_master.sql). Right: SAP interface tables (05_sap_interface.sql). '
        'Underlined = key. Links are logical (by e-mail / IDs / JSON), not FOREIGN KEY constraints.</text>')
 svg=(f'<svg xmlns="http://www.w3.org/2000/svg" width="{W}" height="{H}" viewBox="0 0 {W} {H}">'

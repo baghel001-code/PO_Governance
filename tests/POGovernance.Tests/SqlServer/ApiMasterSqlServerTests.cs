@@ -6,13 +6,23 @@ using Microsoft.Extensions.Configuration;
 
 namespace POGovernance.Tests.SqlServer
 {
-    /// <summary>04_api_master.sql against a real server: API_MASTER seed, PRO_GET_ALL_API (ALL / BY_TASK) through APIService.</summary>
+    /// <summary>
+    /// 04_api_master.sql against a real server: API_MASTER + API_BASE_URL seed, PRO_GET_ALL_API (ALL / BY_TASK) through
+    /// APIService, the base URL of each environment.
+    /// </summary>
     public class ApiMasterSqlServerTests : IClassFixture<SqlServerFixture>
     {
         private readonly SqlServerFixture _fx;
         public ApiMasterSqlServerTests(SqlServerFixture fx) => _fx = fx;
 
-        private APIService Service() => new(new DapperHelper(_fx.ConnectionString), new ConfigurationBuilder().Build());
+        private APIService Service(string environment = "Development") =>
+            new(new DapperHelper(_fx.ConnectionString), new ConfigurationBuilder().Build(), environment: environment);
+
+        private async Task Sql(string sql)
+        {
+            await using var c = new SqlConnection(_fx.ConnectionString);
+            await c.ExecuteAsync(sql);
+        }
 
         [SqlServerFact]
         public async Task GetAllApi_returns_every_seed_row_and_GetSpecificApi_one()
@@ -39,20 +49,71 @@ namespace POGovernance.Tests.SqlServer
         }
 
         [SqlServerFact]
+        public async Task Each_environment_gets_its_own_base_url()
+        {
+            var staging = (await Service("Staging").GetAllApi()).ApiData!;
+            Assert.Equal("http://192.168.0.175:8178/api/v1/AuthLogin", staging.Single(r => r.Task_Name == "PO_AUTH_LOGIN").Api_Url);
+            Assert.All(staging, r => Assert.StartsWith("http://192.168.0.175:8178/api/v1/", r.Api_Url));
+
+            // Production is seeded inactive: GetAllApi says so instead of returning wrong URLs
+            var prod = await Service("Production").GetAllApi();
+            Assert.Equal(50424, prod.responseCode);
+            Assert.Contains("environment Production", prod.responseMessage);
+
+            await Sql("UPDATE dbo.API_BASE_URL SET Base_Url = N'https://pogov.example', Active_Status = 1 WHERE Base_Url_Key = N'POGOV_API' AND Environment = N'Production'");
+            try
+            {
+                var p = (await Service("Production").GetAllApi()).ApiData!;
+                Assert.Equal("https://pogov.example/api/v1/AuthLogin", p.Single(r => r.Task_Name == "PO_AUTH_LOGIN").Api_Url);   // final / added
+            }
+            finally
+            {
+                await Sql("UPDATE dbo.API_BASE_URL SET Base_Url = N'https://pogov-api.change-me.local/', Active_Status = 0 WHERE Base_Url_Key = N'POGOV_API' AND Environment = N'Production'");
+            }
+        }
+
+        [SqlServerFact]
         public async Task Rerunning_the_script_keeps_changed_urls_and_inactive_rows_are_hidden()
         {
-            await using (var c = new SqlConnection(_fx.ConnectionString))
+            await Sql("UPDATE dbo.API_MASTER SET Base_Url_Key = NULL, Api_Url = N'https://help.example/api/v1/HelpParams' WHERE Task_Name = N'PO_HELP_PARAMS'");
+            await Sql("UPDATE dbo.API_MASTER SET Active_Status = 0 WHERE Task_Name = N'PO_AI_CHAT'");
+            await Sql("UPDATE dbo.API_BASE_URL SET Base_Url = N'http://dev-box:5080/' WHERE Base_Url_Key = N'POGOV_API' AND Environment = N'Development'");
+            try
             {
-                await c.ExecuteAsync("UPDATE dbo.API_MASTER SET Api_Url = REPLACE(Api_Url, N'http://localhost:5080/', N'https://api.example/') WHERE Task_Name = N'PO_HELP_PARAMS'");
-                await c.ExecuteAsync("UPDATE dbo.API_MASTER SET Active_Status = 0 WHERE Task_Name = N'PO_AI_CHAT'");
+                await SqlServerSchema.ApplyAsync(_fx.ConnectionString, new[] { SqlServerSchema.ApiMasterScript }, null, "http://other:1/");
+                var all = (await Service().GetAllApi()).ApiData!;
+                Assert.Equal("https://help.example/api/v1/HelpParams", all.Single(r => r.Task_Name == "PO_HELP_PARAMS").Api_Url);   // full URL, as is
+                Assert.DoesNotContain(all, r => r.Task_Name == "PO_AI_CHAT");
+                Assert.All(all.Where(r => r.Task_Name != "PO_HELP_PARAMS"), r => Assert.StartsWith("http://dev-box:5080/api/v1/", r.Api_Url));
             }
-            await SqlServerSchema.ApplyAsync(_fx.ConnectionString, new[] { SqlServerSchema.ApiMasterScript }, null, "http://other:1/");
-            var all = (await Service().GetAllApi()).ApiData!;
-            Assert.Equal("https://api.example/api/v1/HelpParams", all.Single(r => r.Task_Name == "PO_HELP_PARAMS").Api_Url);
-            Assert.DoesNotContain(all, r => r.Task_Name == "PO_AI_CHAT");
-            Assert.All(all.Where(r => r.Task_Name != "PO_HELP_PARAMS"), r => Assert.StartsWith("http://localhost:5080/api/v1/", r.Api_Url));
-            await using (var c = new SqlConnection(_fx.ConnectionString))
-                await c.ExecuteAsync("UPDATE dbo.API_MASTER SET Active_Status = 1, Api_Url = REPLACE(Api_Url, N'https://api.example/', N'http://localhost:5080/')");
+            finally
+            {
+                await Sql("UPDATE dbo.API_MASTER SET Active_Status = 1");
+                await Sql("UPDATE dbo.API_MASTER SET Base_Url_Key = N'POGOV_API', Api_Url = N'api/v1/HelpParams' WHERE Task_Name = N'PO_HELP_PARAMS'");
+                await Sql("UPDATE dbo.API_BASE_URL SET Base_Url = N'http://localhost:5080/' WHERE Base_Url_Key = N'POGOV_API' AND Environment = N'Development'");
+            }
+        }
+
+        [SqlServerFact]
+        public async Task Full_urls_from_before_API_BASE_URL_move_to_the_base_url_table()
+        {
+            await Sql("UPDATE dbo.API_MASTER SET Base_Url_Key = NULL, Api_Url = N'http://192.168.0.175:8178/' + Api_Url");
+            await Sql("DELETE FROM dbo.API_BASE_URL WHERE Base_Url_Key = N'POGOV_API' AND Environment = N'QA'");
+            try
+            {
+                await SqlServerSchema.ApplyAsync(_fx.ConnectionString, new[] { SqlServerSchema.ApiMasterScript }, null, null, default, "QA");
+                await using var c = new SqlConnection(_fx.ConnectionString);
+                Assert.Equal(0, await c.ExecuteScalarAsync<int>("SELECT COUNT(*) FROM dbo.API_MASTER WHERE Base_Url_Key IS NULL"));
+                Assert.Equal("http://192.168.0.175:8178/", await c.ExecuteScalarAsync<string>(
+                    "SELECT Base_Url FROM dbo.API_BASE_URL WHERE Base_Url_Key = N'POGOV_API' AND Environment = N'QA'"));
+                var qa = (await Service("QA").GetAllApi()).ApiData!;
+                Assert.Equal("http://192.168.0.175:8178/api/v1/Health", qa.Single(r => r.Task_Name == "PO_HEALTH").Api_Url);
+                Assert.Equal("http://localhost:5080/api/v1/Health", (await Service().GetAllApi()).ApiData!.Single(r => r.Task_Name == "PO_HEALTH").Api_Url);
+            }
+            finally
+            {
+                await Sql("DELETE FROM dbo.API_BASE_URL WHERE Environment = N'QA'");
+            }
         }
     }
 }

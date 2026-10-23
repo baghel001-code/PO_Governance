@@ -13,6 +13,7 @@ namespace Infrastructure.Services.V1
 {
     /// <summary>
     /// QPS APIService: the API master list (API_MASTER) through <c>PRO_GET_ALL_API</c> (database/sqlserver/04_api_master.sql).
+    /// The URLs are those of <see cref="Environment"/> (API_BASE_URL base URL + API_MASTER path, resolved by the procedure).
     /// With <c>PoGovSettings:Storage = postgres</c> there is no SQL Server: the list is then built from the seed rows of the
     /// embedded 04_api_master.sql, with <c>ApiMaster:BaseUrl</c> as the base URL and <c>JwtSettings:SecretKey</c> as the token.
     /// </summary>
@@ -26,18 +27,23 @@ namespace Infrastructure.Services.V1
         private readonly IConfiguration _cfg;
         private readonly ILogger<APIService>? _log;
 
-        public APIService(DapperHelper? db, IConfiguration cfg, ILogger<APIService>? log = null)
+        public APIService(DapperHelper? db, IConfiguration cfg, ILogger<APIService>? log = null, string? environment = null)
         {
             _db = db;
             _cfg = cfg;
             _log = log;
+            Environment = string.IsNullOrWhiteSpace(environment) ? "Production" : environment.Trim();
         }
+
+        /// <summary>Development / Staging / Production: the API_BASE_URL rows used for the URLs.</summary>
+        public string Environment { get; }
 
         public async Task<ApiMasterRes> GetAllApi(CancellationToken ct = default)
         {
             if (_db == null) return FromSeed(null);
             var p = DapperHelper.AddErrorOutputs(new DynamicParameters());
             p.Add("@Cmd", "ALL", DbType.String);
+            p.Add("@Environment", Environment, DbType.String);
             return await RunAsync(p, ct);
         }
 
@@ -49,6 +55,7 @@ namespace Infrastructure.Services.V1
             p.Add("@Cmd", "BY_TASK", DbType.String);
             p.Add("@Task_Name", taskName, DbType.String);
             p.Add("@Parm", param ?? "", DbType.String);
+            p.Add("@Environment", Environment, DbType.String);
             return await RunAsync(p, ct);
         }
 
@@ -59,12 +66,13 @@ namespace Infrastructure.Services.V1
             {
                 rows = (await _db!.ExecuteStoredProcedureListAsync<ApiData>("PRO_GET_ALL_API", p, commandTimeout: null, ct: ct)).ToList();
             }
-            catch (SqlException e) when (e.Number == 2812)   // could not find stored procedure
+            catch (SqlException e) when (e.Number is 2812 or 8144)   // procedure missing, or the old one without @Environment
             {
                 _log?.LogError("PRO_GET_ALL_API is missing: run database/sqlserver/04_api_master.sql (or set PoGovSettings:SqlServerCreateSchema = true).");
                 return new ApiMasterRes { responseCode = 1, responseMessage = "The API master is not installed: run database/sqlserver/04_api_master.sql" };
             }
             var code = DapperHelper.ErrorCode(p);
+            if (code == 50424) _log?.LogError("API master: {Message}", DapperHelper.ErrorMessage(p));
             if (code != 0) return new ApiMasterRes { responseCode = code == 50404 ? 404 : code, responseMessage = DapperHelper.ErrorMessage(p), ApiData = rows };
             if (rows.Count == 0) return new ApiMasterRes { responseCode = 1, responseMessage = "No data found", ApiData = rows };
             return new ApiMasterRes { ApiData = rows };

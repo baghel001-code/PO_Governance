@@ -13,7 +13,7 @@ JSON text, same IDs), so data moves both ways with the migration tool.
 | `01_tables.sql` | `POGovernance` | the 13 tables of schema v2 + index `request_events_day (req_date, id)` |
 | `02_procedures.sql` | `POGovernance` | the 14 `PRO_POGOV_*` procedures (`CREATE OR ALTER`) |
 | `03_seed.sql` | `POGovernance` | `schema_info`: `version = 2` |
-| `04_api_master.sql` | `POGovernance` | QPS API master: table `API_MASTER`, procedure `PRO_GET_ALL_API` (`@Cmd` `ALL` / `BY_TASK`), one row per POGovApi portal action |
+| `04_api_master.sql` | `POGovernance` | QPS API master: tables `API_MASTER` (one row per POGovApi portal action, path only) and `API_BASE_URL` (base URL per environment), procedure `PRO_GET_ALL_API` (`@Cmd` `ALL` / `BY_TASK`, `@Environment`) |
 | `05_sap_interface.sql` | `POGovernance` | SAP R/3 interface (schema **v3**): tables `SAP_TECH_USERS`, `SAP_DECISION_LOG`, `SAP_DECISION_ITEMS`, `SAP_EVENTS`, `SAP_REASON_CODES` (seeded), sequence `SAP_DECISION_SEQ`, the 6 `PRO_SAP_*` procedures; `schema_info.version = 3` |
 
 All six are idempotent — run them again after an upgrade (04 only inserts missing task names; it never overwrites a row;
@@ -30,8 +30,10 @@ sqlcmd -S <server> -E -d POGovernance -i 01_tables.sql -i 02_procedures.sql -i 0
 the API starts and the portal works, but it logs "run database/sqlserver/05_sap_interface.sql" and the SAP endpoints fail
 (with `SqlServerCreateSchema = true` the API runs 05 itself at start-up).
 
-Before running `04_api_master.sql`, set `@ApiBase` at the top of its seed to the URL of POGovApi on this server
-(default `http://localhost:5080/`) and `@ApiToken` to the `My_Encode`d static token (= `JwtSettings:SecretKey`).
+Before running `04_api_master.sql`, set at the top of its seed `@ApiEnv` (the environment of this server: `Development`,
+`Staging` or `Production`), `@ApiBase` (the URL of POGovApi there, default `http://localhost:5080/`) and `@ApiToken` (the
+`My_Encode`d static token = `JwtSettings:SecretKey`). Running it on a database from before `API_BASE_URL` moves the full
+URLs of `API_MASTER` into `API_BASE_URL` once (their base URL becomes the `@ApiEnv` row), so the URLs keep working.
 
 (`-E` = Windows login; with a SQL login use `-U sa -P <pw>`; add `-C` to trust a self-signed server certificate.)
 In SSMS: open each file, choose the database (`master` for 00, `POGovernance` for the others), Execute.
@@ -41,8 +43,8 @@ The API needs only `EXECUTE` on the procedures (they own the table access throug
 additionally reads the tables (row counts) — run it as `db_owner` or `sa`.
 
 Instead of running 01..05 yourself you can set `PoGovSettings:SqlServerCreateSchema = true`: the API then runs the
-embedded copies of 01..05 at start-up when `schema_info` is missing, 05 alone on a v2 database, and 04 alone when only `API_MASTER` is missing
-(it needs `CREATE TABLE` / `CREATE PROCEDURE` rights for that; the seed gets `ApiMaster:BaseUrl` as its base URL).
+embedded copies of 01..05 at start-up when `schema_info` is missing, 05 alone on a v2 database, and 04 alone when `API_MASTER` or `API_BASE_URL` is missing
+(it needs `CREATE TABLE` / `CREATE PROCEDURE` rights for that; the seed gets `ApiMaster:BaseUrl` as the base URL of the API's own environment).
 Without it, a database without the schema stops the start-up with a message naming the scripts; a database without
 `API_MASTER` only logs an error (the portal cannot load its API list until 04 is run).
 
@@ -57,11 +59,30 @@ QPS's `ApiData`: `Api_Name`, `Task_Name` (unique), `Api_Url`, `Api_Username`, `A
 `My_Encode`d), `Api_Timeout`, `Token_Api_Name`, `Api_Token_Expiry_Time`, `Api_Token_Status`, `Active_Status`
 (0 = hidden from the portal) + `Description`, `Created_At`, `Updated_At`.
 
-Move the API to another server / port / https — one UPDATE, then restart the portal:
+**Base URL per environment (`API_BASE_URL`).** `API_MASTER.Api_Url` holds only the path (`api/v1/Tool1Validate`) and
+`API_MASTER.Base_Url_Key` names the host (`POGOV_API`); `API_BASE_URL` holds one base URL per key and environment.
+`PRO_GET_ALL_API @Environment` returns *base URL of that environment + path*. The environment is POGovApi's
+`ASPNETCORE_ENVIRONMENT` (`Development` when run from Visual Studio; set `Staging` / `Production` on the servers);
+`ApiMaster:Environment` in `POGovApi/appsettings.json` overrides it. A row with `Base_Url_Key = NULL` keeps a full URL in
+`Api_Url` and is returned as is (an API on another host).
+
+| Base_Url_Key | Environment | Base_Url (seed) | Active |
+|---|---|---|---|
+| POGOV_API | Development | `http://localhost:5080/` | 1 |
+| POGOV_API | Staging | `http://192.168.0.175:8178/` | 1 |
+| POGOV_API | Production | `https://pogov-api.change-me.local/` | 0, set the real URL first |
+
+When the environment has no active row, `GetAllApi` answers `50424 No active base URL in API_BASE_URL for environment …`
+(the portal log shows it) instead of handing out wrong URLs. Change a base URL, then restart the portal:
 
 ```sql
-UPDATE dbo.API_MASTER SET Api_Url = REPLACE(Api_Url, N'http://localhost:5080/', N'https://pogov-api.company.local/'), Updated_At = SYSDATETIME();
+UPDATE dbo.API_BASE_URL SET Base_Url = N'https://pogov-api.company.local/', Active_Status = 1, Updated_At = SYSDATETIME()
+WHERE Base_Url_Key = N'POGOV_API' AND Environment = N'Production';
+SELECT Base_Url_Key, Environment, Base_Url, Active_Status FROM dbo.API_BASE_URL;   -- what each environment resolves to
 ```
+
+The portal's own first call (`GetAllApi`) uses `MasterApiSettings:Api_Url` from its appsettings: set it per environment in
+`Admin/appsettings.<Environment>.json` (`appsettings.Staging.json` is included).
 
 New static token: `UPDATE dbo.API_MASTER SET Api_Authorization = N'<My_Encode(token)>'` and the same text in
 `JwtSettings:SecretKey` (API) and `MasterApiSettings:Api_Authorization` (portal). `GRANT EXECUTE ON SCHEMA::dbo` (below)

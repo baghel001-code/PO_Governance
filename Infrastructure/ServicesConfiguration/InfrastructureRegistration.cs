@@ -24,6 +24,14 @@ namespace Infrastructure.ServicesConfiguration
         /// AI client (named HttpClient with outbound_proxy), backups (+ nightly loop), start-up
         /// maintenance and the session-token authentication scheme.
         /// </summary>
+        /// <summary>
+        /// The environment whose API_BASE_URL rows build the API master URLs: ApiMaster:Environment when set, else the
+        /// host's ASPNETCORE_ENVIRONMENT (Development / Staging / Production).
+        /// </summary>
+        public static string ApiEnvironment(IConfiguration configuration, IServiceProvider sp) =>
+            configuration["ApiMaster:Environment"] is { Length: > 0 } e ? e.Trim()
+            : sp.GetService<Microsoft.Extensions.Hosting.IHostEnvironment>()?.EnvironmentName ?? "Production";
+
         public static IServiceCollection AddInfrastructure(this IServiceCollection services, IConfiguration configuration)
         {
             services.Configure<PoGovSettings>(configuration.GetSection(PoGovSettings.SectionName));
@@ -47,13 +55,15 @@ namespace Infrastructure.ServicesConfiguration
                 services.AddSingleton<IStore>(sp => new SqlServerStore(sp.GetRequiredService<DapperHelper>(), sp.GetService<ILogger<SqlServerStore>>(),
                     configuration.GetValue<bool>(PoGovSettings.SectionName + ":SqlServerCreateSchema"))
                 {
-                    ApiMasterBaseUrl = configuration["ApiMaster:BaseUrl"]
+                    ApiMasterBaseUrl = configuration["ApiMaster:BaseUrl"],
+                    ApiMasterEnvironment = ApiEnvironment(configuration, sp)
                 });
             }
             else
                 throw new InvalidOperationException($"PoGovSettings:Storage = '{storage}': use 'sqlserver' or 'postgres'.");
             // API master list (GetAllApi): API_MASTER via PRO_GET_ALL_API; without SQL Server, the 04_api_master.sql seed
-            services.AddSingleton<IAPI>(sp => new APIService(sp.GetService<DapperHelper>(), configuration, sp.GetService<ILogger<APIService>>()));
+            services.AddSingleton<IAPI>(sp => new APIService(sp.GetService<DapperHelper>(), configuration, sp.GetService<ILogger<APIService>>(),
+                                                             ApiEnvironment(configuration, sp)));
             services.AddSingleton<IAppClock, AppClock>();
             services.AddSingleton<IPasswordHasher, PasswordHasher>();
             services.AddSingleton<IDatasetCache, DatasetCache>();

@@ -46,7 +46,7 @@ database on .37) still works with `PoGovSettings:Storage = postgres`; `tools/PgT
 
 ```bash
 # 0. Database (once): database/sqlserver/00_create_database.sql in master, then 01..05 in POGovernance
-#    (04_api_master.sql = the API master list; set @ApiBase in it to this server's API URL first;
+#    (04_api_master.sql = the API master list; set @ApiEnv / @ApiBase in it to this server's environment and API URL first;
 #     05_sap_interface.sql = the SAP R/3 interface tables + PRO_SAP_* procedures, schema v3)
 sqlcmd -S . -E -i database/sqlserver/00_create_database.sql
 sqlcmd -S . -E -d POGovernance -i database/sqlserver/01_tables.sql -i database/sqlserver/02_procedures.sql -i database/sqlserver/03_seed.sql -i database/sqlserver/04_api_master.sql -i database/sqlserver/05_sap_interface.sql
@@ -64,8 +64,9 @@ dotnet run --project Admin --urls http://localhost:5090
 set **POGovApi** and **Admin** to *Start*. Both launch profiles use fixed ports: the API on `http://localhost:5080`
 (`https://localhost:7080`, Swagger at `/swagger`) and the portal on `http://localhost:5090` (`https://localhost:7090`).
 The portal finds the API through `MasterApiSettings:Api_Url` in `Admin/appsettings.json` (default
-`http://localhost:5080/api/v1/GetAllApi`) and then uses the URLs of the `API_MASTER` rows; if the API runs anywhere else,
-change that value and the rows (one `UPDATE`, see `database/sqlserver/README.md`). "Cannot reach the server (…)" on the
+`http://localhost:5080/api/v1/GetAllApi`; `Admin/appsettings.Staging.json` for staging) and then uses the URLs of the
+`API_MASTER` rows: path of the row + base URL of the API's environment from `API_BASE_URL` (Development = localhost,
+Staging, Production — see *Base URL per environment* in `database/sqlserver/README.md`). "Cannot reach the server (…)" on the
 sign-in page means the portal got no answer from that address — the API isn't running, or the URL is wrong (the portal log
 says "Could not load the API master list …" at start-up). If the API is running but the database isn't reachable, the
 message is "The database is not reachable right now" instead: check `ConnectionStrings:DefaultConnection`.
@@ -79,7 +80,7 @@ On SQL Server the write lock is a database application lock (`sp_getapplock`), s
 ### Configuration
 
 `POGovApi/appsettings.json`:
-- `JwtSettings:SecretKey` — the static API token, `My_Encode`d (QPS); the same text goes into `MasterApiSettings:Api_Authorization` (portal) and `API_MASTER.Api_Authorization`. Change it for production (`StaticTokenMiddleware.EncodeToken("<new token>")`). `Cors:AllowBlazorApp` — browser origins allowed to call the API. `ApiMaster:BaseUrl` — the base URL written into API_MASTER when the API creates the schema.
+- `JwtSettings:SecretKey` — the static API token, `My_Encode`d (QPS); the same text goes into `MasterApiSettings:Api_Authorization` (portal) and `API_MASTER.Api_Authorization`. Change it for production (`StaticTokenMiddleware.EncodeToken("<new token>")`). `Cors:AllowBlazorApp` — browser origins allowed to call the API. `ApiMaster:BaseUrl` — the base URL written into API_BASE_URL (for the API's environment) when the API creates the schema; `ApiMaster:Environment` — overrides `ASPNETCORE_ENVIRONMENT` for choosing the API_BASE_URL rows.
 - `ConnectionStrings:DefaultConnection` — SQL Server (QPS name); its password is decoded with `MyNewEncDec` (`New_Enc_Dec.My_Decode`) when `PoGovSettings:EncryptedDbPassword` is `true`.
 - `PoGovSettings:Storage` — `sqlserver` (default) or `postgres` (then `ConnectionStrings:PoGov`); `PoGovSettings:SqlServerCreateSchema` — create the SQL Server schema at start-up when missing.
 - `PoGovSettings` — the old `config.json` settings: `AdminEmail`, `DefaultPassword`, `PasswordMinLength`, `SessionIdleHours`, `MaxFailedLogins`, `LockoutMinutes`, `RestrictToOwnMcs`, `BackupDir` / `BackupHour` / `BackupKeepDays`, `MaxUploadMb`, `HistoryRetentionDays`, `AnthropicApiKey` / `AnthropicModel`, `GroqApiKey` / `GroqModel`, `OutboundProxy`, `BusinessTimeZone` (Asia/Kolkata).

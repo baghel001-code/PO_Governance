@@ -25,15 +25,24 @@ namespace Infrastructure.Utilitys
         public const string MinimumVersion = "2";
 
         private static readonly Regex ApiBaseLine = new(@"(DECLARE @ApiBase\s+NVARCHAR\(400\)\s*=\s*N')[^']*(')", RegexOptions.Compiled);
+        private static readonly Regex ApiEnvLine = new(@"(DECLARE @ApiEnv\s+NVARCHAR\(30\)\s*=\s*N')[^']*(')", RegexOptions.Compiled);
 
-        /// <summary>04_api_master.sql with another API base URL in its seed (e.g. PoGovSettings:ApiBaseUrl).</summary>
-        public static string ApiMasterSql(string? apiBaseUrl)
+        /// <summary>
+        /// 04_api_master.sql with another API base URL (ApiMaster:BaseUrl) and environment (the API's environment) in its
+        /// seed: @ApiBase becomes the API_BASE_URL row of @ApiEnv.
+        /// </summary>
+        public static string ApiMasterSql(string? apiBaseUrl, string? apiEnvironment = null)
         {
             var sql = ReadScript(ApiMasterScript);
-            if (string.IsNullOrWhiteSpace(apiBaseUrl)) return sql;
-            var b = apiBaseUrl.Trim();
-            if (!b.EndsWith('/')) b += "/";
-            return ApiBaseLine.Replace(sql, m => m.Groups[1].Value + b.Replace("'", "''") + m.Groups[2].Value, 1);
+            if (!string.IsNullOrWhiteSpace(apiBaseUrl))
+            {
+                var b = apiBaseUrl.Trim();
+                if (!b.EndsWith('/')) b += "/";
+                sql = ApiBaseLine.Replace(sql, m => m.Groups[1].Value + b.Replace("'", "''") + m.Groups[2].Value, 1);
+            }
+            if (!string.IsNullOrWhiteSpace(apiEnvironment))
+                sql = ApiEnvLine.Replace(sql, m => m.Groups[1].Value + apiEnvironment.Trim().Replace("'", "''") + m.Groups[2].Value, 1);
+            return sql;
         }
 
         public const string ExpectedVersion = "3";
@@ -66,13 +75,13 @@ namespace Infrastructure.Utilitys
 
         /// <summary>Runs the given scripts (in order) against the database of <paramref name="connectionString"/>.</summary>
         public static async Task ApplyAsync(string connectionString, IEnumerable<string> scripts, Action<string>? say = null, string? apiBaseUrl = null,
-                                            CancellationToken ct = default)
+                                            CancellationToken ct = default, string? apiEnvironment = null)
         {
             await using var c = new SqlConnection(connectionString);
             await c.OpenAsync(ct);
             foreach (var file in scripts)
             {
-                var batches = SplitBatches(file == ApiMasterScript ? ApiMasterSql(apiBaseUrl) : ReadScript(file));
+                var batches = SplitBatches(file == ApiMasterScript ? ApiMasterSql(apiBaseUrl, apiEnvironment) : ReadScript(file));
                 foreach (var b in batches)
                     await c.ExecuteAsync(new CommandDefinition(b, commandTimeout: 300, cancellationToken: ct));
                 say?.Invoke($"  {file}: {batches.Count} batches");

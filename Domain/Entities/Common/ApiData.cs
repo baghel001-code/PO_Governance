@@ -21,6 +21,8 @@ namespace Domain.Entities.Common
         public DateTime? Api_Token_Expiry_Time { get; set; }
         public string? Api_Token_Status { get; set; }
         public bool Active_Status { get; set; } = true;
+        /// <summary>Where Api_Authorization comes from: TASK / ENVIRONMENT (API_AUTHORIZATION rows of the environment) or MASTER.</summary>
+        public string? Auth_Source { get; set; }
 
         public ApiData Clone() => (ApiData)MemberwiseClone();
     }

@@ -21,5 +21,10 @@ namespace Admin.Common
         public int ProxyValue { get; set; }
         /// <summary>How often an open page re-checks the signed-in user's session with the API (PO_AUTH_ME), seconds.</summary>
         public int UserRevalidateInSeconds { get; set; } = 60;
+        /// <summary>
+        /// How often the portal reloads its API list (GetAllApi), minutes: URL and token changes in API_BASE_URL /
+        /// API_AUTHORIZATION reach it without a restart (POGovApi accepts a replaced token for 15 more minutes). 0 = only at start-up.
+        /// </summary>
+        public int ApiMasterReloadMinutes { get; set; } = 5;
     }
 }

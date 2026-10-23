@@ -13,7 +13,7 @@ JSON text, same IDs), so data moves both ways with the migration tool.
 | `01_tables.sql` | `POGovernance` | the 13 tables of schema v2 + index `request_events_day (req_date, id)` |
 | `02_procedures.sql` | `POGovernance` | the 14 `PRO_POGOV_*` procedures (`CREATE OR ALTER`) |
 | `03_seed.sql` | `POGovernance` | `schema_info`: `version = 2` |
-| `04_api_master.sql` | `POGovernance` | QPS API master: tables `API_MASTER` (one row per POGovApi portal action, path only) and `API_BASE_URL` (base URL per environment), procedure `PRO_GET_ALL_API` (`@Cmd` `ALL` / `BY_TASK`, `@Environment`) |
+| `04_api_master.sql` | `POGovernance` | QPS API master: tables `API_MASTER` (one row per POGovApi portal action, path only) and `API_BASE_URL` (base URL per environment), `API_AUTHORIZATION` (token per API per environment), procedure `PRO_GET_ALL_API` (`@Cmd` `ALL` / `BY_TASK`, `@Environment`) |
 | `05_sap_interface.sql` | `POGovernance` | SAP R/3 interface (schema **v3**): tables `SAP_TECH_USERS`, `SAP_DECISION_LOG`, `SAP_DECISION_ITEMS`, `SAP_EVENTS`, `SAP_REASON_CODES` (seeded), sequence `SAP_DECISION_SEQ`, the 6 `PRO_SAP_*` procedures; `schema_info.version = 3` |
 
 All six are idempotent — run them again after an upgrade (04 only inserts missing task names; it never overwrites a row;
@@ -83,6 +83,27 @@ SELECT Base_Url_Key, Environment, Base_Url, Active_Status FROM dbo.API_BASE_URL;
 
 The portal's own first call (`GetAllApi`) uses `MasterApiSettings:Api_Url` from its appsettings: set it per environment in
 `Admin/appsettings.<Environment>.json` (`appsettings.Staging.json` is included).
+
+**Token per API per environment (`API_AUTHORIZATION`).** A row (`Task_Name`, `Environment`, `Api_Authorization` =
+`My_Encode` of the token, optional `Api_Authorization_Type`) gives one API its own token in one environment;
+`Task_Name = '*'` gives every API of that environment the same token. `PRO_GET_ALL_API` resolves *task row > `*` row >
+`API_MASTER.Api_Authorization`* and returns `Auth_Source` (`TASK` / `ENVIRONMENT` / `MASTER`). Both sides use the answer:
+the portal sends that token, and POGovApi (which reads the same list for its own environment every 60 s) accepts per path
+exactly that token, or `JwtSettings:SecretKey` where no row applies. `PO_GET_ALL_API` is never overridden: the portal's
+start-up call always uses `MasterApiSettings:Api_Authorization` (= `JwtSettings:SecretKey` of that environment).
+
+```sql
+-- own token for Tool 1 validation in production; then every production API gets one token ('*'):
+INSERT INTO dbo.API_AUTHORIZATION (Task_Name, Environment, Api_Authorization, Description)
+VALUES (N'PO_TOOL1_VALIDATE', N'Production', N'<My_Encode(token)>', N'Tool 1 validation'),
+       (N'*',                 N'Production', N'<My_Encode(token)>', N'every production API');
+SELECT Task_Name, Environment, Active_Status, Updated_At FROM dbo.API_AUTHORIZATION;
+```
+
+Changing a token needs no restart: POGovApi picks it up within 60 s and still accepts the previous token for 15 minutes,
+and the portal reloads its API list every `AppConfigurationSettings:ApiMasterReloadMinutes` (5) minutes. A token that does
+not decode (not `My_Encode` text) is ignored on both sides with a warning in the logs, and the static token is used.
+`My_Encode` a token with `StaticTokenMiddleware.EncodeToken("<token>")` (same as for `JwtSettings:SecretKey`).
 
 New static token: `UPDATE dbo.API_MASTER SET Api_Authorization = N'<My_Encode(token)>'` and the same text in
 `JwtSettings:SecretKey` (API) and `MasterApiSettings:Api_Authorization` (portal). `GRANT EXECUTE ON SCHEMA::dbo` (below)

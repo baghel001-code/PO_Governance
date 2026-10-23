@@ -26,6 +26,8 @@
      -- the API of one environment moved (another server / port / https):
      UPDATE dbo.API_BASE_URL SET Base_Url = N'https://pogov-api.company.local/', Active_Status = 1, Updated_At = SYSDATETIME()
      WHERE Base_Url_Key = N'POGOV_API' AND Environment = N'Production';
+     -- another token for one API in one environment (My_Encode of it; '*' instead of the task = every API there):
+     INSERT INTO dbo.API_AUTHORIZATION (Task_Name, Environment, Api_Authorization) VALUES (N'PO_TOOL1_VALIDATE', N'Production', N'<My_Encode(token)>');
      -- what every environment resolves to:
      SELECT Base_Url_Key, Environment, Base_Url, Active_Status FROM dbo.API_BASE_URL ORDER BY Base_Url_Key, Environment;
      -- a new static token (My_Encode of it, same value in both appsettings files):
@@ -89,6 +91,26 @@ GO
 IF COL_LENGTH(N'dbo.API_MASTER', N'Base_Url_Key') IS NULL
     ALTER TABLE dbo.API_MASTER ADD Base_Url_Key NVARCHAR(50) NULL;   -- API_BASE_URL.Base_Url_Key; NULL = Api_Url is a full URL
 GO
+/* Authorization token per API per environment. Task_Name = an API_MASTER task, or '*' = every API of the environment
+   (except PO_GET_ALL_API, which always uses the start-up token MasterApiSettings:Api_Authorization = JwtSettings:SecretKey).
+   Resolution: the task's row > the '*' row > API_MASTER.Api_Authorization. Api_Authorization = My_Encode of the token. */
+IF OBJECT_ID(N'dbo.API_AUTHORIZATION', N'U') IS NULL
+BEGIN
+    CREATE TABLE dbo.API_AUTHORIZATION
+    (
+        Auth_Id                 INT IDENTITY(1, 1) NOT NULL CONSTRAINT PK_API_AUTHORIZATION PRIMARY KEY,
+        Task_Name               NVARCHAR(100)  NOT NULL,     -- API_MASTER.Task_Name or '*'
+        Environment             NVARCHAR(30)   NOT NULL,     -- Development / Staging / Production
+        Api_Authorization_Type  NVARCHAR(50)   NULL,         -- NULL = API_MASTER.Api_Authorization_Type (Bearer)
+        Api_Authorization       NVARCHAR(1000) NOT NULL,     -- My_Encode(token)
+        Active_Status           BIT            NOT NULL CONSTRAINT DF_API_AUTHORIZATION_Active DEFAULT (1),
+        Description             NVARCHAR(300)  NULL,
+        Created_At              DATETIME2(0)   NOT NULL CONSTRAINT DF_API_AUTHORIZATION_Created DEFAULT (SYSDATETIME()),
+        Updated_At              DATETIME2(0)   NULL,
+        CONSTRAINT UQ_API_AUTHORIZATION_Task_Env UNIQUE (Task_Name, Environment)
+    );
+END
+GO
 
 /* The API master list, with the URLs of one environment.
    @Cmd ALL     (default) -> every active row, ordered by Task_Name
@@ -96,7 +118,9 @@ GO
    @Environment             Development / Staging / Production (NULL = Production). Api_Url of a row with a Base_Url_Key =
                             the active API_BASE_URL base URL of that key and environment + the row's path; without a key = Api_Url.
    @Error_Code / @Error_Message OUTPUT: 0 / '' = success; 50001 unknown @Cmd; 50404 no row for @Task_Name;
-   50424 a row needs a base URL that has no active API_BASE_URL row for @Environment. */
+   50424 a row needs a base URL that has no active API_BASE_URL row for @Environment.
+   Api_Authorization(_Type) = the API_AUTHORIZATION row of the task and @Environment, else its '*' row, else API_MASTER's;
+   Auth_Source = TASK / ENVIRONMENT / MASTER says which (POGovApi accepts per path the token resolved here). */
 CREATE OR ALTER PROCEDURE dbo.PRO_GET_ALL_API
     @Cmd            NVARCHAR(20)  = NULL,
     @Task_Name      NVARCHAR(100) = NULL,
@@ -143,11 +167,20 @@ BEGIN
                          + CASE WHEN LEFT(m.Api_Url, 1) = N'/' THEN STUFF(m.Api_Url, 1, 1, N'') ELSE m.Api_Url END
                END AS Api_Url,
                m.Api_Username, m.Api_Pwd, m.Api_Proxy, m.Api_Port, m.Api_Http_Method,
-               m.Api_Content_Type, m.Api_Authorization_Type, m.Api_Authorization, m.Api_Timeout, m.Token_Api_Name,
-               m.Api_Token_Expiry_Time, m.Api_Token_Status, m.Active_Status
+               m.Api_Content_Type,
+               COALESCE(t.Api_Authorization_Type, m.Api_Authorization_Type) AS Api_Authorization_Type,
+               COALESCE(t.Api_Authorization, m.Api_Authorization) AS Api_Authorization,
+               m.Api_Timeout, m.Token_Api_Name, m.Api_Token_Expiry_Time, m.Api_Token_Status, m.Active_Status,
+               ISNULL(t.Src, N'MASTER') AS Auth_Source
         FROM dbo.API_MASTER m
         JOIN @rows r ON r.Task_Name = m.Task_Name
         LEFT JOIN dbo.API_BASE_URL b ON b.Base_Url_Key = m.Base_Url_Key AND b.Environment = @Environment AND b.Active_Status = 1
+        OUTER APPLY (SELECT TOP 1 a.Api_Authorization_Type, a.Api_Authorization,
+                            CASE WHEN a.Task_Name = N'*' THEN N'ENVIRONMENT' ELSE N'TASK' END AS Src
+                     FROM dbo.API_AUTHORIZATION a
+                     WHERE a.Environment = @Environment AND a.Active_Status = 1 AND m.Task_Name <> N'PO_GET_ALL_API'
+                       AND (a.Task_Name = m.Task_Name OR a.Task_Name = N'*')
+                     ORDER BY CASE WHEN a.Task_Name = N'*' THEN 1 ELSE 0 END) t
         ORDER BY m.Task_Name;
     END TRY
     BEGIN CATCH

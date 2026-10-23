@@ -73,6 +73,33 @@ namespace POGovernance.Tests.SqlServer
         }
 
         [SqlServerFact]
+        public async Task Tokens_resolve_per_task_then_per_environment_then_from_API_MASTER()
+        {
+            var task = Infrastructure.Middleware.StaticTokenMiddleware.EncodeToken("tool1-staging");
+            var env = Infrastructure.Middleware.StaticTokenMiddleware.EncodeToken("all-staging");
+            await Sql($"INSERT INTO dbo.API_AUTHORIZATION (Task_Name, Environment, Api_Authorization) VALUES (N'PO_TOOL1_VALIDATE', N'Staging', N'{task}'), (N'*', N'Staging', N'{env}')");
+            try
+            {
+                var staging = (await Service("Staging").GetAllApi()).ApiData!;
+                var t1 = staging.Single(r => r.Task_Name == "PO_TOOL1_VALIDATE");
+                Assert.Equal((task, "TASK", "Bearer"), (t1.Api_Authorization, t1.Auth_Source, t1.Api_Authorization_Type));
+                var login = staging.Single(r => r.Task_Name == "PO_AUTH_LOGIN");
+                Assert.Equal((env, "ENVIRONMENT"), (login.Api_Authorization, login.Auth_Source));
+                var master = staging.Single(r => r.Task_Name == "PO_GET_ALL_API");   // start-up call: never overridden
+                Assert.Equal("MASTER", master.Auth_Source);
+                Assert.NotEqual(env, master.Api_Authorization);
+
+                var dev = (await Service().GetAllApi()).ApiData!;                     // another environment: untouched
+                Assert.All(dev, r => Assert.Equal("MASTER", r.Auth_Source));
+                Assert.Equal(master.Api_Authorization, dev.Single(r => r.Task_Name == "PO_TOOL1_VALIDATE").Api_Authorization);
+            }
+            finally
+            {
+                await Sql("DELETE FROM dbo.API_AUTHORIZATION");
+            }
+        }
+
+        [SqlServerFact]
         public async Task Rerunning_the_script_keeps_changed_urls_and_inactive_rows_are_hidden()
         {
             await Sql("UPDATE dbo.API_MASTER SET Base_Url_Key = NULL, Api_Url = N'https://help.example/api/v1/HelpParams' WHERE Task_Name = N'PO_HELP_PARAMS'");

@@ -1,5 +1,6 @@
 using System.Security.Cryptography;
 using System.Text;
+using Infrastructure.Services.V1;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Configuration;
 using MyNewEncDec;
@@ -12,7 +13,8 @@ namespace Infrastructure.Middleware
     /// MyNewEncDec (<c>New_Enc_Dec.My_Decode</c>); the portal gets the same token from its API master rows.
     /// This identifies the calling application only — the user is identified by the session token in
     /// <c>X-Session-Token</c> (SessionTokenAuthenticationHandler), which still decides every role check.
-    /// Differences from QPS: constant-time comparison, JSON 401 body, health and pre-flight requests pass.
+    /// Differences from QPS: constant-time comparison, JSON 401 body, health and pre-flight requests pass, and a path
+    /// can have its own token per environment (API_AUTHORIZATION, through <see cref="ApiTokenRegistry"/>).
     /// </summary>
     public class StaticTokenMiddleware
     {
@@ -20,9 +22,11 @@ namespace Infrastructure.Middleware
 
         private readonly RequestDelegate _next;
         private readonly byte[] _expected;
+        private readonly ApiTokenRegistry? _registry;
 
-        public StaticTokenMiddleware(RequestDelegate next, IConfiguration configuration)
+        public StaticTokenMiddleware(RequestDelegate next, IConfiguration configuration, ApiTokenRegistry? registry = null)
         {
+            _registry = registry;
             _next = next;
             var encoded = configuration.GetSection("JwtSettings")["SecretKey"];
             if (string.IsNullOrWhiteSpace(encoded))
@@ -52,8 +56,9 @@ namespace Infrastructure.Middleware
             var authHeader = context.Request.Headers.Authorization.ToString();
             if (authHeader.StartsWith("Bearer ", StringComparison.OrdinalIgnoreCase))
             {
-                var token = Encoding.UTF8.GetBytes(authHeader["Bearer ".Length..].Trim());
-                if (CryptographicOperations.FixedTimeEquals(token, _expected))
+                var plain = authHeader["Bearer ".Length..].Trim();
+                if (_registry != null ? _registry.IsValid(context.Request.Path, plain)
+                                      : CryptographicOperations.FixedTimeEquals(Encoding.UTF8.GetBytes(plain), _expected))
                 {
                     await _next(context);
                     return;

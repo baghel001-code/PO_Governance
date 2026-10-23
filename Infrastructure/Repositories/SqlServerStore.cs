@@ -85,7 +85,7 @@ namespace Infrastructure.Repositories
         {
             var exists = await _db.QueryFirstOrDefaultAsync<int?>(
                 "SELECT CASE WHEN OBJECT_ID(N'dbo.PRO_GET_ALL_API', N'P') IS NOT NULL AND OBJECT_ID(N'dbo.API_MASTER', N'U') IS NOT NULL " +
-                "AND OBJECT_ID(N'dbo.API_BASE_URL', N'U') IS NOT NULL AND COL_LENGTH(N'dbo.API_MASTER', N'Base_Url_Key') IS NOT NULL THEN 1 ELSE 0 END",
+                "AND OBJECT_ID(N'dbo.API_BASE_URL', N'U') IS NOT NULL AND OBJECT_ID(N'dbo.API_AUTHORIZATION', N'U') IS NOT NULL AND COL_LENGTH(N'dbo.API_MASTER', N'Base_Url_Key') IS NOT NULL THEN 1 ELSE 0 END",
                 null, CommandType.Text, ct: ct) == 1;
             if (exists) return;
             if (_createSchema)

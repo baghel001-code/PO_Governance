@@ -87,6 +87,9 @@ namespace Infrastructure.ServicesConfiguration
             services.AddHostedService<StartupService>();
             services.AddHostedService<BackupBackgroundService>();
             services.AddHostedService<DecisionWarmUpService>();
+            // API token per path and environment (API_AUTHORIZATION) for StaticTokenMiddleware; default = JwtSettings:SecretKey
+            services.AddSingleton(_ => new ApiTokenRegistry(configuration["JwtSettings:SecretKey"] is { Length: > 0 } k ? StaticTokenMiddleware.DecodeToken(k) : ""));
+            services.AddHostedService<ApiTokenRefreshService>();
 
             services.AddAuthentication(AppConstants.AuthScheme)
                 .AddScheme<AuthenticationSchemeOptions, SessionTokenAuthenticationHandler>(AppConstants.AuthScheme, _ => { });

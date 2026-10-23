@@ -19,6 +19,7 @@ namespace Admin.ServiceRegistration
             // QPS: IAPICall = Infrastructure APICallService (task name → API_MASTER row); the user's session token from the auth state.
             services.AddApiCallService(config.GetValue<int>("AppConfigurationSettings:ProxyValue"));
             services.AddScoped<ISessionTokenAccessor, SessionTokenAccessor>();
+            services.AddHostedService<ApiMasterReloadService>();
 
             services.AddAuthentication(AppConstants.PortalAuthScheme)
                 .AddCookie(AppConstants.PortalAuthScheme, o =>

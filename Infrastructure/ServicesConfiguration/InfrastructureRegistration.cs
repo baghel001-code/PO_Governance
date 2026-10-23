@@ -76,6 +76,7 @@ namespace Infrastructure.ServicesConfiguration
             services.AddSingleton<DatabaseReadiness>();
             services.AddHostedService<StartupService>();
             services.AddHostedService<BackupBackgroundService>();
+            services.AddHostedService<DecisionWarmUpService>();
 
             services.AddAuthentication(AppConstants.AuthScheme)
                 .AddScheme<AuthenticationSchemeOptions, SessionTokenAuthenticationHandler>(AppConstants.AuthScheme, _ => { });

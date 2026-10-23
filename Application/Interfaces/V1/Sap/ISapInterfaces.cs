@@ -70,6 +70,13 @@ namespace Application.Interfaces.V1.Sap
     {
         /// <summary>Validates, de-duplicates by request_id, decides within SapInterface:DecisionTimeoutMs, logs, and returns the answer.</summary>
         Task<SapCallResult> DecideAsync(string body, SapCallContext caller, CancellationToken ct = default);
+
+        /// <summary>
+        /// Loads the current data snapshot and runs one in-memory decision on it (nothing is logged or stored), so the first
+        /// SAP call after a start or an upload does not pay for loading the files and building the lookups. Returns the time
+        /// taken in ms, or null when the snapshot was already warm.
+        /// </summary>
+        Task<long?> WarmUpAsync(CancellationToken ct = default);
     }
 
     /// <summary>POST /events (spec v1.4 §5).</summary>

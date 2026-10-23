@@ -144,7 +144,9 @@ namespace Application.Services.V1.Sap
 
             // 2. data: snapshot, today's Tool 1 ledger (read only), manifest (upload times), feed status
             var today = _clock.Today;
-            var data = await _cache.GetCurrentAsync(ct);
+            // not cancelled by the decision timeout: a cold load (first call after a start or an upload) runs to the end,
+            // so the calls after it find the snapshot ready instead of timing out the same way again
+            var data = await _cache.GetCurrentAsync(CancellationToken.None);
             // read-only snapshot of today's Tool 1 requests: no server-wide write lock (that would serialise parallel SAP calls);
             // SQL Server READ_COMMITTED_SNAPSHOT gives a consistent read. SAP decisions are never written into this ledger.
             var (ledger, _) = await _store.ReadRequestsAsync(today, false, ct);
@@ -234,6 +236,32 @@ namespace Application.Services.V1.Sap
                 if (stored == null) throw;
                 return Replay(stored, hash, req.RequestId!, caller);
             }
+        }
+
+        private long _warmData = -1, _warmParams = -1;
+
+        public async Task<long?> WarmUpAsync(CancellationToken ct = default)
+        {
+            var sw = Stopwatch.StartNew();
+            var data = await _cache.GetCurrentAsync(ct);
+            if (data.DataVersion == _warmData && data.ParamsVersion == _warmParams) return null;
+            var row = data.F1?.FirstOrDefault(r => r.Col("Generic Material", "GENERIC MATERIAL").Trim().Length > 0);
+            if (row != null)
+            {
+                var today = _clock.Today;
+                var (ledger, _) = await _store.ReadRequestsAsync(today, false, ct);
+                var now = _clock.Now;
+                var item = new SapItemInput
+                {
+                    PoItem = 10, Article = "", GenericArticle = row.Col("Generic Material", "GENERIC MATERIAL").Trim(),
+                    Colour = row.Col("Color", "Colour", "COLOR", "COLOUR").Trim(), OrderQty = 1,
+                    DeliveryDate = new DateTime(now.Year, now.Month, 1).AddMonths(1).ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)
+                };
+                await Task.Run(() => _engine.Decide(data, ledger, today, new[] { item }, Options()), ct);
+            }
+            _warmData = data.DataVersion;
+            _warmParams = data.ParamsVersion;
+            return sw.ElapsedMilliseconds;
         }
 
         private static SapCallResult Replay(SapDecisionLogRow existing, string hash, string requestId, SapCallContext caller)

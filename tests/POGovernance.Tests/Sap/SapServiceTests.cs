@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.Text.Json.Nodes;
+using Application.Interfaces.V1;
 using Application.Interfaces.V1.Sap;
 using Application.Services.V1.Platform;
 using Application.Services.V1.Sap;
@@ -228,6 +229,56 @@ namespace POGovernance.Tests.Sap
             await Task.Delay(1800);   // the late engine run finishes: nothing answered 200 is stored for the timed-out call
             Assert.DoesNotContain(k.Repo.Decisions, d => d.Row.HttpStatus == 200);
             Assert.Contains(k.Repo.Decisions, d => d.Row.HttpStatus == 503 && d.Row.ErrorCode == "DECISION_TIMEOUT");
+        }
+
+        private sealed class SlowCache : IDatasetCache
+        {
+            public EngineData Data = null!;
+            public int Completed;
+            public async Task<EngineData> GetCurrentAsync(CancellationToken ct = default)
+            {
+                await Task.Delay(600, ct);   // a cold load of the uploaded files; honours the token like the real cache
+                Interlocked.Increment(ref Completed);
+                return Data;
+            }
+            public Task<EngineData> GetForVersionsAsync(IReadOnlyDictionary<string, string> versions, EngineParams p, CancellationToken ct = default) => Task.FromResult(Data);
+            public void Invalidate() { }
+        }
+
+        [Fact]
+        public async Task A_timed_out_call_does_not_abort_the_data_load()
+        {
+            var k = new Kit();
+            k.Cfg.DecisionTimeoutMs = 200;
+            var cache = new SlowCache { Data = SapKit.Data };
+            var svc = new SapDecisionService(k.Repo, cache, k.Store, k.Clock, new SapDecisionEngine(new Tool1DecisionEngine()), k.Events,
+                                             Microsoft.Extensions.Options.Options.Create(k.Cfg), NullLogger<SapDecisionService>.Instance);
+            var r = await svc.DecideAsync(SapKit.Request("WI-COLD", SapKit.Item(10, "1101000101", "WHT", 100)).ToJsonString(), SapKit.Caller);
+            Assert.Equal("DECISION_TIMEOUT", Parse(r)["error_code"]!.GetValue<string>());
+            await Task.Delay(900);
+            Assert.Equal(1, cache.Completed);   // the load ran to the end, so the next call finds the snapshot ready
+        }
+
+        private sealed class CountingEngine : ISapDecisionEngine
+        {
+            public int Calls;
+            public SapDecisionResult Decide(EngineData data, IReadOnlyList<JsonObject> todayLedger, string today, IReadOnlyList<SapItemInput> items, SapDecisionOptions options)
+            {
+                Interlocked.Increment(ref Calls);
+                return new SapDecisionEngine(new Tool1DecisionEngine()).Decide(data, todayLedger, today, items, options);
+            }
+        }
+
+        [Fact]
+        public async Task Warm_up_decides_once_per_data_version_and_stores_nothing()
+        {
+            var k = new Kit();
+            var engine = new CountingEngine();
+            var svc = k.Service(engine);
+            Assert.NotNull(await svc.WarmUpAsync());
+            Assert.Null(await svc.WarmUpAsync());
+            Assert.Equal(1, engine.Calls);
+            Assert.Empty(k.Repo.Decisions);
         }
 
         [Fact]

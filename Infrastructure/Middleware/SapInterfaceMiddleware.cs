@@ -121,6 +121,14 @@ namespace Infrastructure.Middleware
             _ => (503, SapErrorCodes.InternalError, "Server error: " + ex.Message)
         };
 
+        /// <summary>
+        /// A call made from the Swagger page (its Referer is …/swagger/…). Its 401 goes without <c>WWW-Authenticate</c>: with
+        /// that header the browser opens its own sign-in box over Swagger instead of showing the 401 answer (log in with
+        /// Swagger's Authorize button, SapBasic). SAP and every other caller still get the header the contract requires.
+        /// </summary>
+        public static bool FromSwaggerUi(HttpContext ctx) =>
+            ctx.Request.Headers.Referer.ToString().Contains("/swagger/", StringComparison.OrdinalIgnoreCase);
+
         /// <summary>The contract's Error body with the request's trace id.</summary>
         public static async Task WriteAsync(HttpContext ctx, int status, string errorCode, string message)
         {
@@ -130,7 +138,7 @@ namespace Infrastructure.Middleware
             ctx.Response.Headers.CacheControl = "no-store";
             var trace = TraceId(ctx);
             if (trace.Length > 0) ctx.Response.Headers["X-Trace-Id"] = trace;
-            if (status == 401) ctx.Response.Headers.WWWAuthenticate = "Basic realm=\"PO Governance SAP interface\", charset=\"UTF-8\"";
+            if (status == 401 && !FromSwaggerUi(ctx)) ctx.Response.Headers.WWWAuthenticate = "Basic realm=\"PO Governance SAP interface\", charset=\"UTF-8\"";
             await ctx.Response.WriteAsync(SapJson.Error(errorCode, message, trace.Length > 0 ? trace : null));
         }
     }

@@ -114,6 +114,19 @@ namespace POGovernance.Tests.Sap
             Assert.StartsWith("Basic", ctx.Response.Headers.WWWAuthenticate.ToString());
         }
 
+        [Theory]
+        [InlineData(null, true)]
+        [InlineData("http://localhost:5080/swagger/index.html", false)]
+        public async Task A_401_challenges_with_Basic_except_on_the_Swagger_page(string? referer, bool challenged)
+        {
+            var ctx = new DefaultHttpContext();
+            ctx.Response.Body = new MemoryStream();
+            if (referer != null) ctx.Request.Headers.Referer = referer;
+            await SapInterfaceMiddleware.WriteAsync(ctx, 401, "UNAUTHORIZED", "Missing or wrong credentials");
+            Assert.Equal(401, ctx.Response.StatusCode);
+            Assert.Equal(challenged, ctx.Response.Headers.WWWAuthenticate.Count > 0);
+        }
+
         [Fact]
         public async Task With_the_allow_list_switched_off_any_caller_ip_passes_to_authentication()
         {

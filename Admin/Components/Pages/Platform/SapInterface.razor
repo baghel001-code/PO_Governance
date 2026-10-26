@@ -6,6 +6,7 @@
 @using Domain.Entities.Sap
 @inject UserSessionState Session
 @inject ISnackbar Snackbar
+@inject FileDownloadService Files
 
 <PageTitle>SAP Interface · VMM PO Governance</PageTitle>
 <PlatformStyles />
@@ -39,6 +40,9 @@ else
         case "decisions":
             @Decisions()
             break;
+        case "documents":
+            @Documents()
+            break;
         case "events":
             @Events()
             break;
@@ -60,7 +64,7 @@ else
 @code {
     private static readonly (string Key, string Label)[] Tabs =
     {
-        ("overview", "📡 Overview"), ("decisions", "⚖️ Decisions"), ("events", "📨 Events"), ("users", "🔑 Technical users"),
+        ("overview", "📡 Overview"), ("decisions", "⚖️ Decisions"), ("documents", "📄 PO documents"), ("events", "📨 Events"), ("users", "🔑 Technical users"),
         ("codes", "🏷 Reason codes"), ("test", "🧪 Test decision")
     };
 
@@ -85,6 +89,7 @@ else
         switch (tab)
         {
             case "decisions": await LoadDecisionsAsync(); break;
+            case "documents": await LoadReportAsync(); break;
             case "events": await LoadEventsAsync(); break;
             case "users": await LoadUsersAsync(); break;
             case "codes": await LoadCodesAsync(); break;
@@ -106,6 +111,11 @@ else
     {
         if (string.IsNullOrWhiteSpace(json)) return "";
         try { return JsonNode.Parse(json)!.ToJsonString(Pretty); } catch (JsonException) { return json; }
+    }
+    private static string? JsonField(string? json, string name)
+    {
+        if (string.IsNullOrWhiteSpace(json)) return null;
+        try { return (JsonNode.Parse(json) as JsonObject)?[name]?.GetValue<string>(); } catch (Exception) { return null; }
     }
     private static string VerdictClass(string? v) => v switch
     {
@@ -218,6 +228,15 @@ else
                     @if (h.ErrorCode != null) { <span class="pf-small" style="color:#DC2626">@h.ErrorCode: @h.ErrorMessage</span> }
                     <button class="btn-sec" style="margin-left:auto" @onclick="() => _dd = null">Close</button>
                 </div>
+                @{ var viewUrl = JsonField(h.ResponseJson, "view_url"); var doc = _dd.Documents.FirstOrDefault(x => x.IsCurrent); }
+                <div class="pf-small" style="margin-bottom:8px;display:flex;gap:18px;flex-wrap:wrap" data-testid="sd-links">
+                    <span>Final document:
+                        @if (doc != null) { <b class="pf-mono" data-testid="sd-doc">@doc.DocumentType @doc.DocumentNo</b> <span class="pf-muted">@(doc.DocumentDate ?? "") · received @When(doc.ReceivedAt) by @doc.TechUser</span> }
+                        else { <span class="pf-muted">not posted yet (POST /api/sap/v1/documents)</span> }
+                        @if (_dd.Documents.Count > 1) { <span class="pf-muted"> · replaced: @string.Join(", ", _dd.Documents.Where(x => !x.IsCurrent).Select(x => x.DocumentNo))</span> }
+                    </span>
+                    @if (viewUrl != null) { <span>Verdict link: <a href="@viewUrl" target="_blank" rel="noopener">open</a> <span class="pf-muted">(valid until @When(h.ViewExpiresAt))</span></span> }
+                </div>
                 <PfTable Headers="ItemHeaders" Count="_dd.Items.Count" Empty="No items logged.">
                     @foreach (var i in _dd.Items)
                     {
@@ -258,6 +277,89 @@ else
                     <td>@r.DurationMs</td>
                     <td style="color:@(r.HttpStatus == 200 ? "inherit" : "#DC2626");font-weight:700">@r.HttpStatus</td>
                     <td class="pf-small">@r.TechUser<br /><span class="pf-muted">@r.ClientIp</span></td>
+                </tr>
+            }
+        </PfTable>
+    };
+
+    // ── PO documents (decisions + final SAP document / MRN) ────
+    private SapDocumentReportReq _rq = new() { HasDocument = "yes", Max = 500 };
+    private SapDocumentReportResponse? _rl;
+    private bool _exporting;
+
+    private async Task LoadReportAsync()
+    {
+        if (string.IsNullOrEmpty(_rq.From)) _rq.From = DateTimeOffset.UtcNow.ToOffset(Ist).AddDays(-29).ToString("yyyy-MM-dd");
+        var res = await ApiMasterService.SapDocumentReportAsync(_rq);
+        if (Ok(res)) _rl = res.Data;
+    }
+
+    private async Task ExportReportAsync()
+    {
+        _exporting = true;
+        try
+        {
+            var res = await ApiMasterService.ExportSapDocumentReportAsync(_rq);
+            if (!res.IsSuccess) { _error = res.responseMessage ?? "Export failed"; return; }
+            await Files.SaveAsync(res);
+        }
+        finally { _exporting = false; }
+    }
+
+    private async Task OpenFromReportAsync(long id)
+    {
+        await SetTabAsync("decisions");
+        await OpenDecisionAsync(id);
+    }
+
+    private static readonly string[] ReportHeaders = { "Decided", "Decision ID", "Request ID", "PO", "Buyer", "Mode", "Verdict", "Items", "Order qty", "Document", "Doc. date", "Received" };
+
+    private RenderFragment Documents() => __builder =>
+    {
+        <div class="pf-note">Every answered SAP decision with the final document SAP posted for it (<code>POST /api/sap/v1/documents</code>, e.g. the MRN). "With document" = POs that were really generated; "Without document" = checked but not (yet) completed.</div>
+        <div class="card" style="padding:12px 14px;margin-bottom:12px;display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end">
+            <div><div class="pf-lbl">Decided from</div><input type="date" class="pf-in" value="@_rq.From" @onchange="e => _rq.From = e.Value?.ToString()" data-testid="sr-from" /></div>
+            <div><div class="pf-lbl">To</div><input type="date" class="pf-in" value="@_rq.To" @onchange="e => _rq.To = e.Value?.ToString()" /></div>
+            <div>
+                <div class="pf-lbl">Document</div>
+                <select class="pf-in" @bind="_rq.HasDocument" data-testid="sr-has">
+                    <option value="yes">With document (PO generated)</option><option value="no">Without document</option><option value="all">All</option>
+                </select>
+            </div>
+            <div><div class="pf-lbl">PO / request / document no</div><input class="pf-in" @bind="_rq.PoNumber" placeholder="4500099001" data-testid="sr-q" /></div>
+            <div>
+                <div class="pf-lbl">Verdict</div>
+                <select class="pf-in" @bind="_rq.Verdict">
+                    <option value="">All</option><option>ALLOW</option><option>REDUCE</option><option>WATCH</option><option>HOLD</option><option>BLOCK</option>
+                </select>
+            </div>
+            <div>
+                <div class="pf-lbl">Mode</div>
+                <select class="pf-in" @bind="_rq.Mode"><option value="">All</option><option>SHADOW</option><option>LIVE</option></select>
+            </div>
+            <label class="pf-small"><input type="checkbox" @bind="_rq.IncludeTests" /> Include tests</label>
+            <button class="btn-pri" @onclick="LoadReportAsync" data-testid="sr-show">Show</button>
+            <button class="btn-sec" disabled="@_exporting" @onclick="ExportReportAsync" data-testid="sr-export">@(_exporting ? "Exporting…" : "⬇ Excel")</button>
+            @if (_rl != null) { <span class="pf-count" style="margin-left:auto">@_rl.Total PO(s)@(_rl.Total > _rl.Items.Count ? " (latest " + _rl.Items.Count + ")" : "")</span> }
+        </div>
+        if (_rl == null) { <div class="pf-empty">Loading…</div> return; }
+        <PfTable Headers="ReportHeaders" Count="_rl.Items.Count" Empty="No POs in this range.">
+            @foreach (var r in _rl.Items)
+            {
+                var id = r.Id;
+                <tr>
+                    <td class="pf-nowrap">@When(r.DecidedAt)</td>
+                    <td><button class="pf-id" @onclick="() => OpenFromReportAsync(id)">@(r.DecisionId ?? "#" + r.Id)</button></td>
+                    <td class="pf-mono pf-small">@r.RequestId</td>
+                    <td>@r.PoNumber</td>
+                    <td class="pf-small">@r.BuyerUser</td>
+                    <td class="pf-small">@r.Mode@(r.IsTest ? " · test" : "")</td>
+                    <td>@Pill(r.OverallVerdict)</td>
+                    <td>@r.ItemCount</td>
+                    <td>@Qty(r.OrderQty)</td>
+                    <td class="pf-mono">@(r.DocumentNo == null ? "—" : r.DocumentType + " " + r.DocumentNo)</td>
+                    <td class="pf-small">@r.DocumentDate</td>
+                    <td class="pf-nowrap pf-small">@When(r.DocumentReceivedAt)</td>
                 </tr>
             }
         </PfTable>

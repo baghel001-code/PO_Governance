@@ -35,7 +35,7 @@ namespace POGovernance.Tests.SqlServer
         [SqlServerFact]
         public async Task Schema_v3_seed_and_rerun()
         {
-            Assert.Equal("3", await Scalar<string>("SELECT value FROM schema_info WHERE [key] = 'version'"));
+            Assert.Equal("4", await Scalar<string>("SELECT value FROM schema_info WHERE [key] = 'version'"));
             await SqlServerSchema.ApplyAsync(_fx.ConnectionString, new[] { SqlServerSchema.SapInterfaceScript });   // idempotent
             Assert.Equal(6, await Scalar<int>("SELECT COUNT(*) FROM SAP_REASON_CODES WHERE Code_Type = 'EXCEPTION'"));
             var verdictCodes = (await Repo().ListReasonCodesAsync("VERDICT")).Select(r => r.Code).OrderBy(x => x);
@@ -119,6 +119,54 @@ namespace POGovernance.Tests.SqlServer
             Assert.True(stats.Total >= 3 && stats.NotChecked >= 2 && stats.Reduce >= 1 && stats.Today >= 3);
             Assert.Equal(42, stats.P50Ms);
         }
+
+        [SqlServerFact]
+        public async Task Verdict_link_token_final_document_and_report()
+        {
+            var r = Repo();
+            var req = "SQL-DOC-" + Guid.NewGuid().ToString("N")[..8];
+            var token = Application.Services.V1.Sap.SapDecisionService.NewViewToken();
+            var row = Row(req, 200, "D-DOC-" + req[^8..]);
+            row.ViewToken = token;
+            row.ViewExpiresAt = DateTimeOffset.Now.AddDays(90);
+            var id = await r.SaveDecisionAsync(row, new[] { new SapDecisionItemRow { PoItem = 10, Verdict = "REDUCE", OrderQty = 1200, GroupQty = 1200, MetricsJson = "{}" } });
+            await r.SaveDecisionAsync(Row(req + "-nodoc", 200, "D-ND-" + req[^8..]), new[] { new SapDecisionItemRow { PoItem = 10, OrderQty = 5, MetricsJson = "{}" } });
+
+            var byToken = (await r.GetDecisionByViewTokenAsync(token))!;
+            Assert.Equal(id, byToken.Decision!.Id);
+            Assert.Equal(token, byToken.Decision.ViewToken);
+            Assert.NotNull(byToken.Decision.ViewExpiresAt);
+            Assert.Null(await r.GetDecisionByViewTokenAsync(SapDecisionServiceToken()));
+
+            SapDocumentInsert Doc(string no, bool replace = false) => new()
+            {
+                RequestId = req, DocumentNo = no, DocumentType = "MRN", DocumentDate = "2026-10-26", Replace = replace, TechUser = "sap_ecp", SourceSystem = "ECP"
+            };
+            var s1 = await r.SaveDocumentAsync(Doc("5000123456"));
+            Assert.Equal(("STORED", row.DecisionId), (s1.Result, s1.DecisionId));
+            Assert.Equal("UNCHANGED", (await r.SaveDocumentAsync(Doc("5000123456"))).Result);
+            var c = await r.SaveDocumentAsync(Doc("5000999999"));
+            Assert.True(c.Conflict);
+            Assert.Equal("5000123456", c.CurrentDocumentNo);
+            Assert.Equal("REPLACED", (await r.SaveDocumentAsync(Doc("5000999999", replace: true))).Result);
+            Assert.True((await r.SaveDocumentAsync(new SapDocumentInsert { RequestId = "SQL-NO-SUCH-REQUEST", DocumentNo = "1" })).NotFound);
+
+            var detail = await r.GetDecisionAsync(id);
+            Assert.Equal(new[] { ("5000999999", true), ("5000123456", false) }, detail.Documents.Select(d => (d.DocumentNo, d.IsCurrent)));
+            Assert.Equal("4500099001", detail.Documents[0].PoNumber);   // taken from the decision
+            Assert.Equal("2026-10-26", detail.Documents[0].DocumentDate);
+            Assert.Equal("5000999999", (await r.GetDecisionByViewTokenAsync(token))!.Documents[0].DocumentNo);
+
+            var with = await r.DocumentReportAsync(new SapDocumentReportReq { PoNumber = req, HasDocument = "yes" }, 330);
+            var line = Assert.Single(with.Items);
+            Assert.Equal((req, "5000999999", "MRN", 1200d), (line.RequestId, line.DocumentNo, line.DocumentType, line.OrderQty));
+            var byDocNo = await r.DocumentReportAsync(new SapDocumentReportReq { PoNumber = "5000999999", HasDocument = "all" }, 330);
+            Assert.Contains(byDocNo.Items, x => x.RequestId == req);
+            var without = await r.DocumentReportAsync(new SapDocumentReportReq { PoNumber = req, HasDocument = "no" }, 330);
+            Assert.Equal(req + "-nodoc", Assert.Single(without.Items).RequestId);
+        }
+
+        private static string SapDecisionServiceToken() => Application.Services.V1.Sap.SapDecisionService.NewViewToken();
 
         private static SapEventInsert Ev(string msg, long seq, string status = "ACCEPTED", string type = "GR_POSTED") => new()
         {

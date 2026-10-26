@@ -94,10 +94,20 @@ namespace POGovernance.Tests.Sap
             new object[] { typeof(SapParkedEvent), "EventBatchResult.parked[]" },
         };
 
+        /// <summary>
+        /// Fields added to the v1.4 contract on purpose (additive, optional for SAP; documented in docs/sap/SAP-API-Reference.md):
+        /// the verdict link of a decision.
+        /// </summary>
+        private static readonly Dictionary<string, string[]> Extensions = new()
+        {
+            ["DecisionResponse"] = new[] { "view_url", "view_url_expires_at" }
+        };
+
         [Theory]
         [MemberData(nameof(Pairs))]
         public void Contract_classes_have_exactly_the_YAML_property_names(Type type, string schema) =>
-            Assert.Equal(Props(Schema(schema)).OrderBy(x => x), JsonNames(type).OrderBy(x => x));
+            Assert.Equal(Props(Schema(schema)).Concat(Extensions.GetValueOrDefault(schema, Array.Empty<string>())).OrderBy(x => x),
+                         JsonNames(type).OrderBy(x => x));
 
         [Fact]
         public void The_contract_file_is_spec_v1_4()

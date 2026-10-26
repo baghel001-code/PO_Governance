@@ -14,7 +14,7 @@ JSON text, same IDs), so data moves both ways with the migration tool.
 | `02_procedures.sql` | `POGovernance` | the 14 `PRO_POGOV_*` procedures (`CREATE OR ALTER`) |
 | `03_seed.sql` | `POGovernance` | `schema_info`: `version = 2` |
 | `04_api_master.sql` | `POGovernance` | QPS API master: tables `API_MASTER` (one row per POGovApi portal action, path only) and `API_BASE_URL` (base URL per environment), `API_AUTHORIZATION` (token per API per environment), procedure `PRO_GET_ALL_API` (`@Cmd` `ALL` / `BY_TASK`, `@Environment`) |
-| `05_sap_interface.sql` | `POGovernance` | SAP R/3 interface (schema **v3**): tables `SAP_TECH_USERS`, `SAP_DECISION_LOG`, `SAP_DECISION_ITEMS`, `SAP_EVENTS`, `SAP_REASON_CODES` (seeded), sequence `SAP_DECISION_SEQ`, the 6 `PRO_SAP_*` procedures; `schema_info.version = 3` |
+| `05_sap_interface.sql` | `POGovernance` | SAP R/3 interface (schema **v4**): tables `SAP_TECH_USERS`, `SAP_DECISION_LOG` (with the verdict-link token), `SAP_DECISION_ITEMS`, `SAP_DECISION_DOCUMENTS` (final document / MRN per request_id), `SAP_EVENTS`, `SAP_REASON_CODES` (seeded), sequence `SAP_DECISION_SEQ`, the 7 `PRO_SAP_*` procedures; `schema_info.version = 4` |
 
 All six are idempotent — run them again after an upgrade (04 only inserts missing task names; it never overwrites a row;
 05 inserts missing exception reason codes and refreshes the verdict reason codes).
@@ -26,7 +26,7 @@ sqlcmd -S <server> -E -i 00_create_database.sql
 sqlcmd -S <server> -E -d POGovernance -i 01_tables.sql -i 02_procedures.sql -i 03_seed.sql -i 04_api_master.sql -i 05_sap_interface.sql
 ```
 
-**Upgrade of an existing v2 database:** run `04_api_master.sql` (new PO_SAP_* rows) and `05_sap_interface.sql`. Until 05 is run
+**Upgrade of an existing v2 / v3 database:** run `04_api_master.sql` (new PO_SAP_* rows, `POGOV_PORTAL` base URLs) and `05_sap_interface.sql`. Until 05 is run
 the API starts and the portal works, but it logs "run database/sqlserver/05_sap_interface.sql" and the SAP endpoints fail
 (with `SqlServerCreateSchema = true` the API runs 05 itself at start-up).
 

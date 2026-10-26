@@ -171,6 +171,8 @@ namespace Infrastructure.Repositories
             p.Add("@Decided_At", r.DecidedAt, DbType.DateTimeOffset);
             p.Add("@Request_Json", r.RequestJson, DbType.String, size: -1);
             p.Add("@Response_Json", r.ResponseJson, DbType.String, size: -1);
+            p.Add("@View_Token", r.ViewToken, DbType.String, size: 64);
+            p.Add("@View_Expires_At", r.ViewExpiresAt, DbType.DateTimeOffset);
             p.Add("@Items", JsonSerializer.Serialize(items, RowJson), DbType.String, size: -1);
             p.Add("@Log_Id", dbType: DbType.Int64, direction: ParameterDirection.Output);
             var code = 0;
@@ -209,9 +211,76 @@ namespace Infrastructure.Repositories
         {
             var p = P("BY_ID");
             p.Add("@Id", id, DbType.Int64);
-            var (rows, items) = await _db.ExecuteStoredProcedureMultipleListAsync<SapDecisionLogRow, SapDecisionItemRow>(DecisionGetSp, p, ct);
+            return await DetailAsync(p, ct);
+        }
+
+        public async Task<SapDecisionDetailResponse?> GetDecisionByViewTokenAsync(string token, CancellationToken ct = default)
+        {
+            var p = P("BY_VIEW_TOKEN");
+            p.Add("@View_Token", token, DbType.String, size: 64);
+            var d = await DetailAsync(p, ct);
+            return d.Decision == null ? null : d;
+        }
+
+        private async Task<SapDecisionDetailResponse> DetailAsync(DynamicParameters p, CancellationToken ct)
+        {
+            var (rows, items, docs) = await _db.ExecuteStoredProcedureMultiple3ListAsync<SapDecisionLogRow, SapDecisionItemRow, SapDocumentRow>(DecisionGetSp, p, ct);
             Check(DecisionGetSp, p);
-            return new SapDecisionDetailResponse { Decision = rows.FirstOrDefault(), Items = items.AsList() };
+            return new SapDecisionDetailResponse { Decision = rows.FirstOrDefault(), Items = items.AsList(), Documents = docs.AsList() };
+        }
+
+        // ── final documents ─────────────────────────────────────────
+
+        private const string DocumentSaveSp = "PRO_SAP_DOCUMENT_SAVE";
+
+        public async Task<SapDocumentSaveResult> SaveDocumentAsync(SapDocumentInsert d, CancellationToken ct = default)
+        {
+            var p = DapperHelper.AddErrorOutputs(new DynamicParameters());
+            p.Add("@Request_Id", d.RequestId, DbType.String, size: 80);
+            p.Add("@Document_No", d.DocumentNo, DbType.String, size: 40);
+            p.Add("@Document_Type", d.DocumentType, DbType.String, size: 20);
+            p.Add("@Po_Number", d.PoNumber, DbType.String, size: 20);
+            p.Add("@Document_Date", Date(d.DocumentDate), DbType.Date);
+            p.Add("@Note", d.Note, DbType.String, size: 500);
+            p.Add("@Replace", d.Replace, DbType.Boolean);
+            p.Add("@Tech_User", d.TechUser, DbType.String, size: 200);
+            p.Add("@Source_System", d.SourceSystem, DbType.String, size: 10);
+            p.Add("@Client_Ip", d.ClientIp, DbType.String, size: 64);
+            p.Add("@Trace_Id", d.TraceId, DbType.String, size: 20);
+            p.Add("@Request_Json", d.RequestJson, DbType.String, size: -1);
+            p.Add("@Result", dbType: DbType.String, direction: ParameterDirection.Output, size: 20);
+            p.Add("@Decision_Id", dbType: DbType.String, direction: ParameterDirection.Output, size: 30);
+            p.Add("@Current_Document_No", dbType: DbType.String, direction: ParameterDirection.Output, size: 40);
+            p.Add("@Received_At", dbType: DbType.DateTimeOffset, direction: ParameterDirection.Output);
+            await _db.ExecuteStoredProcedureAsync(DocumentSaveSp, p, commandTimeout: null, ct: ct);
+            var code = DapperHelper.ErrorCode(p);
+            var res = new SapDocumentSaveResult
+            {
+                DecisionId = p.Get<string?>("@Decision_Id"), CurrentDocumentNo = p.Get<string?>("@Current_Document_No"),
+                NotFound = code == 50404, Conflict = code == 50409, Message = code == 0 ? null : DapperHelper.ErrorMessage(p)
+            };
+            if (code is 50404 or 50409) return res;
+            Check(DocumentSaveSp, p);
+            res.Result = p.Get<string?>("@Result") ?? "";
+            res.ReceivedAt = p.Get<DateTimeOffset?>("@Received_At") ?? DateTimeOffset.Now;
+            return res;
+        }
+
+        public async Task<SapDocumentReportResponse> DocumentReportAsync(SapDocumentReportReq req, int tzOffsetMinutes, CancellationToken ct = default)
+        {
+            var p = P("REPORT");
+            p.Add("@From", Date(req.From), DbType.Date);
+            p.Add("@To", Date(req.To), DbType.Date);
+            p.Add("@Po_Number", string.IsNullOrWhiteSpace(req.PoNumber) ? null : req.PoNumber.Trim(), DbType.String, size: 40);
+            p.Add("@Verdict", string.IsNullOrWhiteSpace(req.Verdict) ? null : req.Verdict.Trim().ToUpperInvariant(), DbType.String, size: 10);
+            p.Add("@Mode", string.IsNullOrWhiteSpace(req.Mode) ? null : req.Mode.Trim().ToUpperInvariant(), DbType.String, size: 10);
+            p.Add("@Has_Document", string.IsNullOrWhiteSpace(req.HasDocument) ? null : req.HasDocument.Trim().ToLowerInvariant(), DbType.String, size: 10);
+            p.Add("@Include_Tests", req.IncludeTests, DbType.Boolean);
+            p.Add("@Max", req.Max, DbType.Int32);
+            p.Add("@Tz_Offset_Min", tzOffsetMinutes, DbType.Int32);
+            p.Add("@Total", dbType: DbType.Int32, direction: ParameterDirection.Output);
+            var rows = await ListAsync<SapDocumentReportRow>(DecisionGetSp, p, ct);
+            return new SapDocumentReportResponse { Items = rows, Total = p.Get<int?>("@Total") ?? rows.Count };
         }
 
         public async Task<SapDecisionStats> DecisionStatsAsync(string today, int tzOffsetMinutes, CancellationToken ct = default)
@@ -319,6 +388,9 @@ namespace Infrastructure.Repositories
 
         public Task<SapTechUser?> GetTechUserAsync(string userName, CancellationToken ct = default) => throw Fail();
         public Task<List<SapTechUser>> ListTechUsersAsync(CancellationToken ct = default) => throw Fail();
+        public Task<SapDecisionDetailResponse?> GetDecisionByViewTokenAsync(string token, CancellationToken ct = default) => throw Fail();
+        public Task<SapDocumentSaveResult> SaveDocumentAsync(SapDocumentInsert doc, CancellationToken ct = default) => throw Fail();
+        public Task<SapDocumentReportResponse> DocumentReportAsync(SapDocumentReportReq req, int tzOffsetMinutes, CancellationToken ct = default) => throw Fail();
         public Task<SapTechUser> AddTechUserAsync(string userName, string sourceSystem, string? description, string passwordHash, string by, CancellationToken ct = default) => throw Fail();
         public Task<SapTechUser> SetTechUserPasswordAsync(string userName, string passwordHash, string by, CancellationToken ct = default) => throw Fail();
         public Task<SapTechUser> SetTechUserActiveAsync(string userName, bool active, string by, CancellationToken ct = default) => throw Fail();

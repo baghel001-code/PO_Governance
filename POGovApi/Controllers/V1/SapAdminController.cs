@@ -12,6 +12,8 @@ namespace POGovApi.Controllers.V1
     [Route("api/v1/[Action]")]
     public sealed class SapAdminController : ApiControllerBase
     {
+        private const string XlsxContentType = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+
         private readonly ISapAdminService _sap;
 
         public SapAdminController(ISapAdminService sap)
@@ -101,6 +103,25 @@ namespace POGovApi.Controllers.V1
         {
             RequireAdmin();
             return Success(await _sap.TestDecisionAsync(req, Me.Email, Me.ClientIp ?? "", ct));
+        }
+
+        /// <summary>PO document report: answered decisions with their final SAP document (MRN).</summary>
+        [HttpPost]
+        public async Task<ActionResult<ApiDataResponse<SapDocumentReportResponse>>> SapDocumentReport(SapDocumentReportReq req, CancellationToken ct)
+        {
+            RequireAdmin();
+            return Success(await _sap.DocumentReportAsync(req, ct));
+        }
+
+        /// <summary>The PO document report as .xlsx (all matching rows).</summary>
+        [HttpPost]
+        [Produces(XlsxContentType, "application/json")]
+        public async Task<IActionResult> SapDocumentReportExport(SapDocumentReportReq req, CancellationToken ct)
+        {
+            RequireAdmin();
+            var bytes = await _sap.DocumentReportExcelAsync(req, ct);
+            var name = $"PO_Documents_{(string.IsNullOrWhiteSpace(req.From) ? "all" : req.From)}_to_{(string.IsNullOrWhiteSpace(req.To) ? "today" : req.To)}.xlsx";
+            return File(bytes, XlsxContentType, name);
         }
 
         /// <summary>A sample /decisions request built from the uploaded data.</summary>

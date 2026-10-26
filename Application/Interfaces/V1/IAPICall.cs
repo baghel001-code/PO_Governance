@@ -41,5 +41,7 @@ namespace Application.Interfaces.V1
     {
         Task<ApiMasterRes> GetAllApi(CancellationToken ct = default);
         Task<ApiMasterRes> GetSpecificApiData(string? taskName, string? param, CancellationToken ct = default);
+        /// <summary>The active API_BASE_URL base URL of <paramref name="baseUrlKey"/> in this environment (ends with /); null when none.</summary>
+        Task<string?> GetBaseUrlAsync(string baseUrlKey, CancellationToken ct = default);
     }
 }

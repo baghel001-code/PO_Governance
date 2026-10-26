@@ -27,7 +27,9 @@ namespace Application.Services.V1.Sap
     /// event-feed lag, rules_version from SapInterface:RulesVersion;</item>
     /// <item>everything after the parse runs under SapInterface:DecisionTimeoutMs — past it the answer is 503 DECISION_TIMEOUT
     /// (SAP: NOT_CHECKED);</item>
-    /// <item>every call is logged (SAP_DECISION_LOG + items; 4xx / 503 too) with its duration.</item>
+    /// <item>every call is logged (SAP_DECISION_LOG + items; 4xx / 503 too) with its duration;</item>
+    /// <item>an answered decision carries view_url = &lt;portal base URL&gt;verdict/&lt;token&gt; (SapInterface:VerdictLink): a random
+    /// 256-bit token stored with the decision (View_Token / View_Expires_At), opened read-only without sign-in.</item>
     /// </list>
     /// Verdicts still use the uploaded files + the same-day Tool 1 ledger: the live open-PO / stock position from /events is
     /// a pending development (handover §8 items 6, 7, 9).
@@ -42,13 +44,47 @@ namespace Application.Services.V1.Sap
         private readonly ISapEventService _events;
         private readonly SapInterfaceSettings _cfg;
         private readonly ILogger<SapDecisionService> _log;
+        private readonly IAPI? _api;
+        private (string? Url, DateTime At)? _linkBase;
 
         public SapDecisionService(ISapRepository repo, IDatasetCache cache, IStore store, IAppClock clock,
-                                  ISapDecisionEngine engine, ISapEventService events, IOptions<SapInterfaceSettings> cfg, ILogger<SapDecisionService> log)
+                                  ISapDecisionEngine engine, ISapEventService events, IOptions<SapInterfaceSettings> cfg, ILogger<SapDecisionService> log,
+                                  IAPI? api = null)
         {
             _repo = repo; _cache = cache; _store = store; _clock = clock; _engine = engine; _events = events;
-            _cfg = cfg.Value; _log = log;
+            _cfg = cfg.Value; _log = log; _api = api;
         }
+
+        /// <summary>
+        /// Base of the verdict links (ends with /): SapInterface:VerdictLink:PortalBaseUrl, else the API_BASE_URL row of
+        /// VerdictLink:BaseUrlKey (POGOV_PORTAL) in this environment, re-read every 5 minutes. Null = no link.
+        /// </summary>
+        public async Task<string?> VerdictLinkBaseAsync(CancellationToken ct = default)
+        {
+            var cfg = _cfg.VerdictLink;
+            if (!cfg.Enabled) return null;
+            if (!string.IsNullOrWhiteSpace(cfg.PortalBaseUrl)) return cfg.PortalBaseUrl.Trim().TrimEnd('/') + "/";
+            if (_linkBase is { } c && DateTime.UtcNow - c.At < TimeSpan.FromMinutes(5)) return c.Url;
+            string? url = null;
+            try
+            {
+                if (_api != null) url = await _api.GetBaseUrlAsync(cfg.BaseUrlKey, ct);
+            }
+            catch (Exception ex) when (!ct.IsCancellationRequested)
+            {
+                _log.LogWarning("Verdict link base URL {Key} not read: {Error}", cfg.BaseUrlKey, ex.Message);
+            }
+            if (url == null && _linkBase?.Url != null) url = _linkBase.Value.Url;   // keep the last good one on a read error
+            if (url == null && _linkBase == null)
+                _log.LogWarning("No verdict link in the SAP answers: API_BASE_URL has no active {Key} row for this environment " +
+                                "(or set SapInterface:VerdictLink:PortalBaseUrl)", cfg.BaseUrlKey);
+            _linkBase = (url, DateTime.UtcNow);
+            return url;
+        }
+
+        /// <summary>A new verdict-link token: 32 random bytes, base64url (43 characters).</summary>
+        public static string NewViewToken() =>
+            Convert.ToBase64String(System.Security.Cryptography.RandomNumberGenerator.GetBytes(32)).TrimEnd('=').Replace('+', '-').Replace('/', '_');
 
         public async Task<SapCallResult> DecideAsync(string body, SapCallContext caller, CancellationToken ct = default)
         {
@@ -206,6 +242,15 @@ namespace Application.Services.V1.Sap
                     }
                 }).ToList()
             };
+            string? viewToken = null;
+            DateTimeOffset? viewExpires = null;
+            if (await VerdictLinkBaseAsync(ct) is { } linkBase)
+            {
+                viewToken = NewViewToken();
+                viewExpires = now.AddDays(Math.Max(1, _cfg.VerdictLink.ValidDays));
+                response.ViewUrl = linkBase + "verdict/" + viewToken;
+                response.ViewUrlExpiresAt = SapJson.Timestamp(viewExpires.Value);
+            }
             var json = SapJson.Serialize(response);
 
             // 5. log (unique per request_id: a concurrent identical call may have stored its answer first)
@@ -220,6 +265,8 @@ namespace Application.Services.V1.Sap
             row.RulesVersion = response.RulesVersion;
             row.DecidedAt = now;
             row.ResponseJson = json;
+            row.ViewToken = viewToken;
+            row.ViewExpiresAt = viewExpires;
             try
             {
                 Mark("answer");
@@ -243,6 +290,7 @@ namespace Application.Services.V1.Sap
         public async Task<long?> WarmUpAsync(CancellationToken ct = default)
         {
             var sw = Stopwatch.StartNew();
+            await VerdictLinkBaseAsync(ct);   // keeps the cached link base fresh outside the decision time budget
             var data = await _cache.GetCurrentAsync(ct);
             if (data.DataVersion == _warmData && data.ParamsVersion == _warmParams) return null;
             var row = data.F1?.FirstOrDefault(r => r.Col("Generic Material", "GENERIC MATERIAL").Trim().Length > 0);

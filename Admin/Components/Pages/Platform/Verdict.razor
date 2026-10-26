@@ -1,0 +1,79 @@
+@page "/verdict/{Token}"
+@layout VerdictLayout
+@attribute [AllowAnonymous]
+@* The verdict behind the view_url of a SAP /decisions answer: opened by anyone with the link (no sign-in), read-only,
+   business fields only. The token is random and unguessable; the API answers 404 (unknown) or 410 (expired). Static
+   server rendering (no interactive circuit). API: AllApiNames.PO_SAP_VERDICT_VIEW. *@
+@using Domain.Entities.Sap
+
+<PageTitle>Verdict @(_v?.PoNumber) · VMM PO Governance</PageTitle>
+<PlatformStyles />
+
+@if (_error != null)
+{
+    <div class="card pf-err" style="padding:18px" data-testid="pv-error">@_error</div>
+}
+else if (_v != null)
+{
+    <div class="card" style="padding:16px 20px;margin-bottom:14px" data-testid="pv-head">
+        <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap">
+            <span class="pf-dp @VerdictClass(_v.OverallVerdict)" style="font-size:14px;padding:6px 16px" data-testid="pv-verdict">@_v.OverallVerdict</span>
+            <b style="font-size:18px">PO @(_v.PoNumber ?? "—")</b>
+            <span class="pf-small pf-muted">decision <span class="pf-mono">@_v.DecisionId</span> · request <span class="pf-mono">@_v.RequestId</span></span>
+        </div>
+        @if (!string.IsNullOrEmpty(_v.SummaryText)) { <div style="margin-top:10px">@_v.SummaryText</div> }
+        <div style="display:flex;flex-wrap:wrap;gap:22px;margin-top:12px" class="pf-small">
+            <div><div class="pf-lbl">Decided</div>@When(_v.DecidedAt)</div>
+            <div><div class="pf-lbl">Buyer</div>@(_v.BuyerUser ?? "—")</div>
+            <div><div class="pf-lbl">Division</div>@(_v.Division ?? "—")</div>
+            <div><div class="pf-lbl">Mode</div>@_v.Mode@(_v.Mode == "SHADOW" ? " (information only)" : "")</div>
+            <div><div class="pf-lbl">Goes to</div>@RouteText(_v.RouteTo)</div>
+            <div><div class="pf-lbl">Final document</div>@(_v.Document == null ? "not posted yet" : _v.Document.DocumentType + " " + _v.Document.DocumentNo + (_v.Document.DocumentDate != null ? " (" + _v.Document.DocumentDate + ")" : ""))</div>
+        </div>
+        @if (_v.DataDelayed) { <div class="pf-note" style="margin-top:8px;color:#b45309">The tool's event feed was behind when this was decided - SAP continued as NOT_CHECKED.</div> }
+    </div>
+    <PfTable Headers="Headers" Count="_v.Items.Count" Empty="No items.">
+        @foreach (var i in _v.Items)
+        {
+            <tr>
+                <td>@i.PoItem</td>
+                <td class="pf-mono pf-small">@(i.GenericArticle ?? i.Article)</td>
+                <td>@i.Colour</td>
+                <td>@i.DeliveryMonth</td>
+                <td>@Qty(i.OrderQty)</td>
+                <td><span class="pf-dp @VerdictClass(i.Verdict)">@i.Verdict</span></td>
+                <td>@(i.MaxQty == null ? "—" : Qty(i.MaxQty.Value))</td>
+                <td class="pf-small" style="max-width:420px"><b>@i.ReasonCode</b><br />@i.ReasonText</td>
+            </tr>
+        }
+    </PfTable>
+    <div class="pf-small pf-muted" style="margin-top:10px">This link is valid until @When(_v.ExpiresAt). Anyone with the link can see this page - do not forward it outside the company.</div>
+}
+
+@code {
+    [Parameter] public string Token { get; set; } = "";
+
+    private static readonly TimeSpan Ist = TimeSpan.FromMinutes(330);
+    private static readonly string[] Headers = { "Item", "Generic article", "Colour", "Month", "Order qty", "Verdict", "Max qty", "Reason" };
+
+    private SapVerdictView? _v;
+    private string? _error;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var res = await ApiMasterService.SapVerdictViewAsync(Token);
+        if (res.IsSuccess && res.Data != null) _v = res.Data;
+        else _error = res.responseMessage ?? "This verdict link cannot be opened.";
+    }
+
+    private static string When(DateTimeOffset? t) => t == null ? "—" : t.Value.ToOffset(Ist).ToString("dd MMM yyyy HH:mm");
+    private static string Qty(double v) => Js.Fmt(v);
+    private static string RouteText(string? r) => r switch
+    {
+        "NONE" => "normal approvals", "BUYER" => "buyer (reduce quantity)", "CATHEAD" => "category head", "BMHEAD" => "B&M head", _ => r ?? "—"
+    };
+    private static string VerdictClass(string? v) => v switch
+    {
+        "ALLOW" => "dp-allow", "REDUCE" => "dp-reduce", "WATCH" => "dp-watch", "HOLD" => "dp-hold", "BLOCK" => "dp-block", _ => "dp-nodata"
+    };
+}

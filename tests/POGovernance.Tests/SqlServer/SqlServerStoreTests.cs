@@ -77,7 +77,7 @@ namespace POGovernance.Tests.SqlServer
             using var s = _fx.NewStore();
             await s.InitializeAsync();
             Assert.Equal("sqlserver", s.Kind);
-            Assert.Equal("3", await Scalar<string>("SELECT value FROM schema_info WHERE [key] = 'version'"));
+            Assert.Equal("4", await Scalar<string>("SELECT value FROM schema_info WHERE [key] = 'version'"));
             Assert.True(await s.StorageBytesAsync() > 1_000_000);
 
             // a database without the scripts is refused with instructions (unless createSchema)

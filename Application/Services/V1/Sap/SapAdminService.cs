@@ -65,12 +65,14 @@ namespace Application.Services.V1.Sap
         private readonly IDatasetCache _cache;
         private readonly IStore _store;
         private readonly SapInterfaceSettings _cfg;
+        private readonly ISapReportExcelExporter? _excel;
 
         public SapAdminService(ISapRepository repo, ISapDecisionService decisions, ISapEventService events, IPasswordHasher hasher, IAuditService audit,
-                               IAppClock clock, IDatasetCache cache, IStore store, IOptions<SapInterfaceSettings> cfg)
+                               IAppClock clock, IDatasetCache cache, IStore store, IOptions<SapInterfaceSettings> cfg, ISapReportExcelExporter? excel = null)
         {
             _repo = repo; _decisions = decisions; _events = events; _hasher = hasher; _audit = audit; _clock = clock; _cache = cache; _store = store;
             _cfg = cfg.Value;
+            _excel = excel;
         }
 
         private int Tz => (int)_clock.Now.Offset.TotalMinutes;
@@ -96,6 +98,23 @@ namespace Application.Services.V1.Sap
             o.Events = await _repo.EventStatusAsync(_clock.Today, Tz, ct);
             o.Decisions = await _repo.DecisionStatsAsync(_clock.Today, Tz, ct);
             return o;
+        }
+
+        public Task<SapDocumentReportResponse> DocumentReportAsync(SapDocumentReportReq req, CancellationToken ct = default)
+        {
+            RequireStore();
+            req.Max = Math.Clamp(req.Max <= 0 ? 500 : req.Max, 1, 5000);
+            return _repo.DocumentReportAsync(req, Tz, ct);
+        }
+
+        public async Task<byte[]> DocumentReportExcelAsync(SapDocumentReportReq req, CancellationToken ct = default)
+        {
+            RequireStore();
+            if (_excel == null) throw new ServiceUnavailableException("Excel export is not configured");
+            req.Max = 100_000;
+            var rows = (await _repo.DocumentReportAsync(req, Tz, ct)).Items;
+            if (rows.Count == 0) throw new AppValidationException("Nothing to export");
+            return _excel.WriteDocumentReport(rows, Tz);
         }
 
         public Task<SapDecisionListResponse> ListDecisionsAsync(SapDecisionListReq req, CancellationToken ct = default)

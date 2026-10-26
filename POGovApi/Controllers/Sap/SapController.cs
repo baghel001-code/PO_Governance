@@ -27,12 +27,14 @@ namespace POGovApi.Controllers.Sap
         private readonly ISapUtilityService _utility;
         private readonly ISapEventService _events;
         private readonly ISapDecisionService _decisions;
+        private readonly ISapDocumentService _documents;
 
-        public SapController(ISapUtilityService utility, ISapEventService events, ISapDecisionService decisions)
+        public SapController(ISapUtilityService utility, ISapEventService events, ISapDecisionService decisions, ISapDocumentService documents)
         {
             _utility = utility;
             _events = events;
             _decisions = decisions;
+            _documents = documents;
         }
 
         private SapCallContext Caller => new(
@@ -66,5 +68,9 @@ namespace POGovApi.Controllers.Sap
         /// <summary>The governance verdict for a PO (synchronous, SAP waits at most 3 s; any non-200 = NOT_CHECKED).</summary>
         [HttpPost("decisions")]
         public async Task<IActionResult> Decisions(CancellationToken ct) => Answer(await _decisions.DecideAsync(await BodyAsync(ct), Caller, ct));
+
+        /// <summary>The final SAP document (MRN) of a decided request_id: one per request_id, safe to resend, replace = true corrects it.</summary>
+        [HttpPost("documents")]
+        public async Task<IActionResult> Documents(CancellationToken ct) => Answer(await _documents.ReceiveAsync(await BodyAsync(ct), Caller, ct));
     }
 }

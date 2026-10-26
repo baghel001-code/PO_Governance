@@ -238,12 +238,30 @@ head maintains them on `/admin/sap` → *Reason codes* (code ≤ 4, text ≤ 60 
 `/ping`: `{"status":"ok","server_time":…,"api_version":"1.0.0","environment":"TEST|PRODUCTION","source_system_recognised":"ECP"}`
 (`SapInterface:Environment`, `ApiVersion`; the system id of the technical user).
 
+## 4b. Verdict link (`view_url`) and final document (`POST /documents`)
+
+* Every answered decision carries `view_url` = `<portal base URL>verdict/<token>` + `view_url_expires_at`. The token is 32
+  random bytes (base64url), stored with the decision (`SAP_DECISION_LOG.View_Token`, `View_Expires_At`); the portal page
+  `/verdict/<token>` shows the verdict read-only **without sign-in** (anyone with the link), via `api/v1/SapVerdictView`
+  (static API token only). Unknown token → "not valid", past the expiry → "expired". The portal base URL is the
+  `API_BASE_URL` row `POGOV_PORTAL` of the API's environment (or `SapInterface:VerdictLink:PortalBaseUrl`).
+* `POST /api/sap/v1/documents` stores the final SAP document (MRN) against the `request_id`
+  (`SAP_DECISION_DOCUMENTS`, procedure `PRO_SAP_DOCUMENT_SAVE`): one current document per request_id, the same one again =
+  `UNCHANGED`, another = 409 unless `replace = true` (the old row stays as history). Full contract:
+  `SAP-API-Reference.md` §7.
+
+Where a /decisions call is stored: **request** = `SAP_DECISION_LOG.Request_Json` (+ the columns request_id, PO, buyer …),
+**response** = `SAP_DECISION_LOG.Response_Json` (+ verdict columns), one row per item in `SAP_DECISION_ITEMS`; the final
+document in `SAP_DECISION_DOCUMENTS`.
+
 ## 5. Monitoring (`/admin/sap`, admins)
 
 * **Overview**: settings in force, decisions today / NOT_CHECKED answers / verdict counts / shadow vs live, server time
   p50 / p95 / max, event feed (last received, last seq, lag, parked, late, not applied).
 * **Decisions**: filter by date, PO / request id, verdict, mode, answer (200 vs NOT_CHECKED); open one for its items (GM /
   colour matching, engine decision and full reason, metrics) and the request / response JSON.
+* **PO documents**: answered decisions with their final document (MRN) — "with document" (PO generated), "without", or
+  all; filters date / PO / request / document no / verdict / mode; ⬇ Excel; a row opens the decision.
 * **Events**: type, message id, seq, PO / material document / decision id, status (parked with reason), LATE, lag, applied,
   duplicates; open one for its payload.
 * **Technical users**, **Reason codes** (above), **Test decision**: a sample request built from the uploaded data runs
@@ -266,8 +284,9 @@ head maintains them on `/admin/sap` → *Reason codes* (code ≤ 4, text ≤ 60 
 | `BmHead` | off | `{Enabled, MinNetValue, IncludeWatch}` |
 | `MaxFailedLogins`, `LockoutMinutes`, `MinPasswordLength` | 5, 15, 24 | technical users |
 | `MaxEventsPerBatch`, `MaxBodyBytes` | 500, 5 MB | 413 above |
+| `VerdictLink` | on | `{Enabled, ValidDays (90), BaseUrlKey (POGOV_PORTAL), PortalBaseUrl (optional fixed base)}` — the `view_url` |
 
-Storage: the SAP interface needs **SQL Server** (`database/sqlserver/05_sap_interface.sql`, schema v3). With
+Storage: the SAP interface needs **SQL Server** (`database/sqlserver/05_sap_interface.sql`, schema v4). With
 `PoGovSettings:Storage = postgres` every SAP endpoint answers 503 "SAP interface requires SQL Server storage" and the
 portal screen shows the same.
 

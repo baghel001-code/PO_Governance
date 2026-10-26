@@ -95,5 +95,8 @@ namespace Domain.Entities.Common
         public string? PO_SAP_REASON_CODE_SAVE { get; set; }
         public string? PO_SAP_TEST_DECISION { get; set; }
         public string? PO_SAP_SAMPLE_REQUEST { get; set; }
+        public string? PO_SAP_DOCUMENT_REPORT { get; set; }
+        public string? PO_SAP_DOCUMENT_REPORT_EXPORT { get; set; }
+        public string? PO_SAP_VERDICT_VIEW { get; set; }
     }
 }

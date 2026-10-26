@@ -19,6 +19,8 @@ namespace Application.DIResolver
             services.AddSingleton<ISapAuthService, SapAuthService>();
             services.AddSingleton<ISapUtilityService, SapUtilityService>();
             services.AddSingleton<ISapAdminService, SapAdminService>();
+            services.AddSingleton<ISapDocumentService, SapDocumentService>();
+            services.AddSingleton<ISapVerdictViewService, SapVerdictViewService>();
             return services;
         }
     }

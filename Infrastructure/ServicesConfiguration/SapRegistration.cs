@@ -29,6 +29,7 @@ namespace Infrastructure.ServicesConfiguration
             else
                 services.AddSingleton<ISapRepository, SapUnavailableRepository>();
             services.AddSapServices();
+            services.AddSingleton<ISapReportExcelExporter, Services.V1.Excel.SapReportExcelExporter>();
             services.AddAuthentication()
                 .AddScheme<AuthenticationSchemeOptions, SapBasicAuthenticationHandler>(SapBasicAuthenticationHandler.SchemeName, _ => { });
             return services;

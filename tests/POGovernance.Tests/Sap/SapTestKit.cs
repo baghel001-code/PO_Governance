@@ -103,6 +103,56 @@ namespace POGovernance.Tests.Sap
         public Task<SapDecisionStats> DecisionStatsAsync(string today, int tzOffsetMinutes, CancellationToken ct = default) =>
             Task.FromResult(new SapDecisionStats { Total = Decisions.Count });
 
+        public readonly List<SapDocumentRow> Documents = new();
+
+        public Task<SapDecisionDetailResponse?> GetDecisionByViewTokenAsync(string token, CancellationToken ct = default)
+        {
+            var d = Decisions.FirstOrDefault(x => x.Row.ViewToken == token);
+            return Task.FromResult(d.Row == null ? null : new SapDecisionDetailResponse
+            {
+                Decision = d.Row, Items = d.Items, Documents = Documents.Where(x => x.DecisionLogId == d.Row.Id).OrderByDescending(x => x.IsCurrent).ToList()
+            });
+        }
+
+        public Task<SapDocumentSaveResult> SaveDocumentAsync(SapDocumentInsert doc, CancellationToken ct = default)
+        {
+            lock (_gate)
+            {
+                var log = Decisions.Select(x => x.Row).FirstOrDefault(r => r.RequestId == doc.RequestId && r.HttpStatus == 200);
+                if (log == null) return Task.FromResult(new SapDocumentSaveResult { NotFound = true, Message = "No answered decision" });
+                var cur = Documents.FirstOrDefault(x => x.RequestId == doc.RequestId && x.IsCurrent);
+                if (cur != null && cur.DocumentNo == doc.DocumentNo)
+                    return Task.FromResult(new SapDocumentSaveResult { Result = "UNCHANGED", DecisionId = log.DecisionId, ReceivedAt = cur.ReceivedAt });
+                if (cur != null && !doc.Replace)
+                    return Task.FromResult(new SapDocumentSaveResult { Conflict = true, CurrentDocumentNo = cur.DocumentNo, DecisionId = log.DecisionId,
+                                                                       Message = "request_id " + doc.RequestId + " already has document " + cur.DocumentNo });
+                var now = Clock.Now;
+                if (cur != null) { cur.IsCurrent = false; cur.ReplacedAt = now; }
+                Documents.Add(new SapDocumentRow
+                {
+                    Id = Documents.Count + 1, DecisionLogId = log.Id, RequestId = doc.RequestId, DecisionId = log.DecisionId, DocumentNo = doc.DocumentNo,
+                    DocumentType = doc.DocumentType ?? "MRN", PoNumber = doc.PoNumber ?? log.PoNumber, DocumentDate = doc.DocumentDate, Note = doc.Note,
+                    IsCurrent = true, TechUser = doc.TechUser, SourceSystem = doc.SourceSystem, ReceivedAt = now
+                });
+                return Task.FromResult(new SapDocumentSaveResult { Result = cur == null ? "STORED" : "REPLACED", DecisionId = log.DecisionId, ReceivedAt = now });
+            }
+        }
+
+        public Task<SapDocumentReportResponse> DocumentReportAsync(SapDocumentReportReq req, int tzOffsetMinutes, CancellationToken ct = default)
+        {
+            var rows = Decisions.Where(d => d.Row.HttpStatus == 200 && (req.IncludeTests || !d.Row.IsTest)).Select(d =>
+            {
+                var doc = Documents.FirstOrDefault(x => x.DecisionLogId == d.Row.Id && x.IsCurrent);
+                return new SapDocumentReportRow
+                {
+                    Id = d.Row.Id, DecisionId = d.Row.DecisionId, RequestId = d.Row.RequestId, PoNumber = d.Row.PoNumber, OverallVerdict = d.Row.OverallVerdict,
+                    ItemCount = d.Row.ItemCount, OrderQty = d.Items.Sum(i => i.OrderQty), DecidedAt = d.Row.DecidedAt, Mode = d.Row.Mode,
+                    DocumentNo = doc?.DocumentNo, DocumentType = doc?.DocumentType, DocumentDate = doc?.DocumentDate, DocumentReceivedAt = doc?.ReceivedAt
+                };
+            }).Where(r => req.HasDocument switch { "yes" => r.DocumentNo != null, "no" => r.DocumentNo == null, _ => true }).Reverse().ToList();
+            return Task.FromResult(new SapDocumentReportResponse { Items = rows, Total = rows.Count });
+        }
+
         public Task<List<SapEventSaveResult>> SaveEventsAsync(IReadOnlyList<SapEventInsert> events, string? queue, string? sourceSystem, string? client,
                                                               string? techUser, string batchId, CancellationToken ct = default)
         {

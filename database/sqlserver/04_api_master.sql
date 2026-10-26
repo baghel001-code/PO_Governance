@@ -115,6 +115,8 @@ GO
 /* The API master list, with the URLs of one environment.
    @Cmd ALL     (default) -> every active row, ordered by Task_Name
         BY_TASK           -> the active row of @Task_Name (QPS GetSpecificApiData; @Parm is accepted and ignored)
+        BASE_URL          -> the active API_BASE_URL row of key @Parm in @Environment, as Api_Url (e.g. POGOV_PORTAL: the
+                             portal address in the SAP verdict links); 50404 when there is none
    @Environment             Development / Staging / Production (NULL = Production). Api_Url of a row with a Base_Url_Key =
                             the active API_BASE_URL base URL of that key and environment + the row's path; without a key = Api_Url.
    @Error_Code / @Error_Message OUTPUT: 0 / '' = success; 50001 unknown @Cmd; 50404 no row for @Task_Name;
@@ -134,8 +136,16 @@ BEGIN
     SELECT @Error_Code = 0, @Error_Message = N'';
     BEGIN TRY
         IF @Cmd IS NULL SET @Cmd = CASE WHEN @Task_Name IS NULL THEN N'ALL' ELSE N'BY_TASK' END;
-        IF @Cmd NOT IN (N'ALL', N'BY_TASK') THROW 50001, N'PRO_GET_ALL_API: unknown @Cmd.', 1;
+        IF @Cmd NOT IN (N'ALL', N'BY_TASK', N'BASE_URL') THROW 50001, N'PRO_GET_ALL_API: unknown @Cmd.', 1;
         SET @Environment = ISNULL(NULLIF(LTRIM(RTRIM(@Environment)), N''), N'Production');
+        IF @Cmd = N'BASE_URL'
+        BEGIN
+            SELECT Base_Url_Key AS Api_Name, Base_Url_Key AS Task_Name, Base_Url AS Api_Url, Active_Status
+              FROM dbo.API_BASE_URL WHERE Base_Url_Key = @Parm AND Environment = @Environment AND Active_Status = 1;
+            IF @@ROWCOUNT = 0
+                SELECT @Error_Code = 50404, @Error_Message = N'No active base URL ' + ISNULL(@Parm, N'(null)') + N' for environment ' + @Environment;
+            RETURN;
+        END
 
         DECLARE @rows TABLE (Task_Name NVARCHAR(100) PRIMARY KEY, Base_Url_Key NVARCHAR(50) NULL);
         INSERT INTO @rows (Task_Name, Base_Url_Key)
@@ -289,7 +299,10 @@ INSERT INTO @seed (Api_Name, Task_Name, Action_Name, Api_Http_Method, Api_Conten
         (N'SapReasonCodeList', N'PO_SAP_REASON_CODE_LIST', N'SapReasonCodeList', N'POST', N'application/json', 60, N'SAP interface: reason codes'),
         (N'SapReasonCodeSave', N'PO_SAP_REASON_CODE_SAVE', N'SapReasonCodeSave', N'POST', N'application/json', 60, N'SAP interface: add / change an exception reason code'),
         (N'SapTestDecision', N'PO_SAP_TEST_DECISION', N'SapTestDecision', N'POST', N'application/json', 60, N'SAP interface: test decision (real decision path, logged as test)'),
-        (N'SapSampleRequest', N'PO_SAP_SAMPLE_REQUEST', N'SapSampleRequest', N'POST', N'application/json', 60, N'SAP interface: sample /decisions request');
+        (N'SapSampleRequest', N'PO_SAP_SAMPLE_REQUEST', N'SapSampleRequest', N'POST', N'application/json', 60, N'SAP interface: sample /decisions request'),
+        (N'SapDocumentReport', N'PO_SAP_DOCUMENT_REPORT', N'SapDocumentReport', N'POST', N'application/json', 120, N'SAP interface: PO document report (decisions + MRN)'),
+        (N'SapDocumentReportExport', N'PO_SAP_DOCUMENT_REPORT_EXPORT', N'SapDocumentReportExport', N'POST', N'application/json', 300, N'SAP interface: PO document report as Excel'),
+        (N'SapVerdictView', N'PO_SAP_VERDICT_VIEW', N'SapVerdictView', N'POST', N'application/json', 60, N'SAP verdict link page (no sign-in, token)');
 
 -- one-time move of full URLs (a database from before API_BASE_URL: no row has a Base_Url_Key yet): their most common
 -- base URL becomes the @ApiEnv base URL. Later runs leave rows that were given a full URL on purpose alone.
@@ -316,7 +329,11 @@ INSERT INTO dbo.API_BASE_URL (Base_Url_Key, Environment, Base_Url, Active_Status
 SELECT d.k, d.env, d.url, d.active, d.descr
 FROM (VALUES (N'POGOV_API', N'Development', N'http://localhost:5080/',             1, N'POGovApi on the developer machine'),
              (N'POGOV_API', N'Staging',     N'http://192.168.0.175:8178/',         1, N'POGovApi on the staging server'),
-             (N'POGOV_API', N'Production',  N'https://pogov-api.change-me.local/', 0, N'POGovApi in production - set the real URL, then Active_Status = 1')
+             (N'POGOV_API', N'Production',  N'https://pogov-api.change-me.local/', 0, N'POGovApi in production - set the real URL, then Active_Status = 1'),
+             -- the portal: base of the verdict links sent to SAP (view_url = <base>verdict/<token>)
+             (N'POGOV_PORTAL', N'Development', N'http://localhost:5090/',          1, N'Portal on the developer machine (SAP verdict links)'),
+             (N'POGOV_PORTAL', N'Staging',     N'http://192.168.0.175:8177/',      1, N'Portal on the staging server (SAP verdict links)'),
+             (N'POGOV_PORTAL', N'Production',  N'https://pogov.change-me.local/',  0, N'Portal in production - set the real URL, then Active_Status = 1')
      ) d (k, env, url, active, descr)
 WHERE NOT EXISTS (SELECT 1 FROM dbo.API_BASE_URL b WHERE b.Base_Url_Key = d.k AND b.Environment = d.env);
 

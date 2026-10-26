@@ -32,6 +32,12 @@ namespace Application.Interfaces.V1.Sap
         Task<SapDecisionListResponse> ListDecisionsAsync(SapDecisionListReq req, int tzOffsetMinutes, CancellationToken ct = default);
         Task<SapDecisionDetailResponse> GetDecisionAsync(long id, CancellationToken ct = default);
         Task<SapDecisionStats> DecisionStatsAsync(string today, int tzOffsetMinutes, CancellationToken ct = default);
+        /// <summary>The decision of a verdict-link token with its items and documents; null when the token is unknown.</summary>
+        Task<SapDecisionDetailResponse?> GetDecisionByViewTokenAsync(string token, CancellationToken ct = default);
+
+        // ── final documents (PRO_SAP_DOCUMENT_SAVE / PRO_SAP_DECISION_GET REPORT)
+        Task<SapDocumentSaveResult> SaveDocumentAsync(SapDocumentInsert doc, CancellationToken ct = default);
+        Task<SapDocumentReportResponse> DocumentReportAsync(SapDocumentReportReq req, int tzOffsetMinutes, CancellationToken ct = default);
 
         // ── events (PRO_SAP_EVENTS_SAVE / PRO_SAP_EVENTS_GET)
         /// <summary>Stores a batch in one transaction; one result per event in batch order (ACCEPTED / PARKED / DUPLICATE).</summary>
@@ -79,6 +85,19 @@ namespace Application.Interfaces.V1.Sap
         Task<long?> WarmUpAsync(CancellationToken ct = default);
     }
 
+    /// <summary>POST /documents: the final SAP document (MRN) of a decided request_id.</summary>
+    public interface ISapDocumentService
+    {
+        Task<SapCallResult> ReceiveAsync(string body, SapCallContext caller, CancellationToken ct = default);
+    }
+
+    /// <summary>The read-only verdict page behind the view_url of a decision (portal /verdict/&lt;token&gt;, no sign-in).</summary>
+    public interface ISapVerdictViewService
+    {
+        /// <summary>The verdict of <paramref name="token"/>; NotFoundException when unknown, 410 when expired.</summary>
+        Task<SapVerdictView> GetAsync(string token, CancellationToken ct = default);
+    }
+
     /// <summary>POST /events (spec v1.4 §5).</summary>
     public interface ISapEventService
     {
@@ -120,5 +139,9 @@ namespace Application.Interfaces.V1.Sap
         Task<SapTestDecisionResponse> TestDecisionAsync(SapTestDecisionReq req, string by, string clientIp, CancellationToken ct = default);
         /// <summary>A sample request built from the uploaded data (first GM + colour of the stock file).</summary>
         Task<string> SampleRequestAsync(CancellationToken ct = default);
+        /// <summary>Answered decisions with their final document (MRN): the PO document report.</summary>
+        Task<SapDocumentReportResponse> DocumentReportAsync(SapDocumentReportReq req, CancellationToken ct = default);
+        /// <summary>The same report as .xlsx (all matching rows).</summary>
+        Task<byte[]> DocumentReportExcelAsync(SapDocumentReportReq req, CancellationToken ct = default);
     }
 }

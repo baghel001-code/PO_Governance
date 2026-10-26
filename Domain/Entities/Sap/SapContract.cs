@@ -105,7 +105,42 @@ namespace Domain.Entities.Sap
         [JsonPropertyName("data_delayed")] public bool DataDelayed { get; set; }
         [JsonPropertyName("data_as_of")] public SapDataAsOf DataAsOf { get; set; } = new();
         [JsonPropertyName("decided_at")] public string DecidedAt { get; set; } = "";
+        /// <summary>
+        /// Link to the verdict page on the portal (/verdict/&lt;token&gt;, random unguessable token, read-only, no sign-in) for the
+        /// buyer / approver; omitted when the verdict link is switched off or the portal base URL is not configured.
+        /// </summary>
+        [JsonPropertyName("view_url"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] public string? ViewUrl { get; set; }
+        /// <summary>Until when <see cref="ViewUrl"/> works.</summary>
+        [JsonPropertyName("view_url_expires_at"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] public string? ViewUrlExpiresAt { get; set; }
         [JsonPropertyName("items")] public List<SapDecisionResponseItem> Items { get; set; } = new();
+    }
+
+    /// <summary>POST /documents: the final SAP document (MRN) of a request_id that was decided.</summary>
+    public sealed class SapDocumentRequest
+    {
+        [JsonPropertyName("request_id")] public string? RequestId { get; set; }
+        [JsonPropertyName("document_no")] public string? DocumentNo { get; set; }
+        /// <summary>Default MRN.</summary>
+        [JsonPropertyName("document_type")] public string? DocumentType { get; set; }
+        /// <summary>Default: the PO number of the decision.</summary>
+        [JsonPropertyName("po_number")] public string? PoNumber { get; set; }
+        /// <summary>YYYY-MM-DD.</summary>
+        [JsonPropertyName("document_date")] public string? DocumentDate { get; set; }
+        /// <summary>true = correct a document already stored for the request_id (the old one is kept in the history).</summary>
+        [JsonPropertyName("replace")] public bool Replace { get; set; }
+        [JsonPropertyName("note")] public string? Note { get; set; }
+    }
+
+    /// <summary>POST /documents answer.</summary>
+    public sealed class SapDocumentResponse
+    {
+        [JsonPropertyName("request_id")] public string RequestId { get; set; } = "";
+        [JsonPropertyName("decision_id")] public string? DecisionId { get; set; }
+        [JsonPropertyName("document_no")] public string DocumentNo { get; set; } = "";
+        [JsonPropertyName("document_type")] public string DocumentType { get; set; } = "";
+        /// <summary>STORED (first document) | UNCHANGED (same document again) | REPLACED (replace = true).</summary>
+        [JsonPropertyName("status")] public string Status { get; set; } = "";
+        [JsonPropertyName("received_at")] public string ReceivedAt { get; set; } = "";
     }
 
     /// <summary>DecisionResponse.data_as_of.</summary>
@@ -298,6 +333,10 @@ namespace Domain.Entities.Sap
         public const string StorageNotSupported = "STORAGE_NOT_SUPPORTED";
         public const string DatabaseUnavailable = "DATABASE_UNAVAILABLE";
         public const string NotFound = "NOT_FOUND";
+        /// <summary>POST /documents: no answered decision for the request_id.</summary>
+        public const string RequestNotFound = "REQUEST_NOT_FOUND";
+        /// <summary>POST /documents: another document is already stored for the request_id (send replace = true).</summary>
+        public const string DocumentConflict = "DOCUMENT_CONFLICT";
         public const string InternalError = "INTERNAL_ERROR";
     }
 }

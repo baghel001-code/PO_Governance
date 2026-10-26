@@ -50,6 +50,8 @@ today. All examples below were captured from the running interface.
 | `REQUEST_ID_CONFLICT` | 409 | `/decisions`: same `request_id` already used with a different body | Generate a new `request_id` |
 | `CANNOT_DECIDE` | 422 | `/decisions`: an item cannot be decided (e.g. article unknown to the tool) | Treat as **NOT_CHECKED**, continue as today |
 | `BATCH_TOO_LARGE` | 413 | `/events`: more than 500 events or 5 MB | Split the batch and resend |
+| `REQUEST_NOT_FOUND` | 404 | `/documents`: no answered decision for the `request_id` | Use the `request_id` of a `/decisions` call that answered 200 |
+| `DOCUMENT_CONFLICT` | 409 | `/documents`: another document is already stored for the `request_id` | Send `replace = true` if it is a correction |
 | `DECISION_TIMEOUT`, `DATA_NOT_LOADED`, `DATABASE_UNAVAILABLE`, `SAP_INTERFACE_DISABLED`, `INTERNAL_ERROR` | 503 | Tool temporarily unable to answer | `/decisions`: **NOT_CHECKED**, continue as today. `/events`: retry |
 
 ---
@@ -62,6 +64,7 @@ today. All examples below were captured from the running interface.
 | 2 | `GET /reason-codes` | SAP approver screen | Exception reasons for the dropdown |
 | 3 | `POST /decisions` | Release workflow background step "PO Governance check" (after OTB + depth check passed) | **Governance verdict per PO item** (synchronous, SAP waits max 3 s) |
 | 4 | `POST /events` | bgRFC queue from BAdIs (after commit) | PO, goods receipt / return and governance-outcome events (asynchronous) |
+| 5 | `POST /documents` | After the PO is really created / received in SAP | **Final document number (MRN) against the `request_id`** of the decision — feeds the "PO generated" report |
 
 ---
 
@@ -263,6 +266,8 @@ repeat), otherwise the answer is `400 VALIDATION_FAILED`. The answer always echo
   "data_delayed": false,
   "data_as_of": { "bw_snapshot": "2026-10-22T14:24:36+05:30", "events_lag_seconds": 0 },
   "decided_at": "2026-10-22T14:24:58+05:30",
+  "view_url": "http://192.168.0.175:8177/verdict/R_LVm2VaqeZN94W6EOgf44SuA27lJ9VQr5rUyQx5hb0",
+  "view_url_expires_at": "2027-01-20T14:24:58+05:30",
   "items": [
     {
       "po_item": 10,
@@ -293,6 +298,8 @@ repeat), otherwise the answer is `400 VALIDATION_FAILED`. The answer always echo
 | `data_as_of.bw_snapshot` | date-time | Time of the stock data the decision used |
 | `data_as_of.events_lag_seconds` | integer | How far behind the event feed is |
 | `decided_at` | date-time | When the tool decided |
+| `view_url` | string (URL) | **Link to the verdict page** on the PO Governance portal. Show it to the buyer / approver (work item, PO note, e-mail): clicking it opens the verdict with its items and reasons — read-only, **no sign-in needed**. The token in the link is random and cannot be guessed; anyone who has the link can open it, so keep it inside the company. Omitted if the link is switched off |
+| `view_url_expires_at` | date-time | Until when the link works (90 days by default) |
 | `items[].po_item` | integer | PO item |
 | `items[].verdict` / `verdict_code` | as above | Item verdict |
 | `items[].max_qty` | number \| null | **Maximum allowed quantity when the verdict is REDUCE**; `null` otherwise |
@@ -613,11 +620,73 @@ Other answers: `400` for a malformed envelope (e.g. `{"error_code":"VALIDATION_F
 
 ---
 
-## 7. Status of the tool side
+## 7. `POST /documents` — final document (MRN) of a decided PO
+
+Called when the PO is **really created in SAP** (e.g. after release / goods receipt, whatever document the business
+names "final", normally the MRN). It saves the document number against the `request_id` of the `/decisions` call, so the
+tool can report which checked POs were actually generated — not only which ones were asked about.
+
+### Rules
+
+- One current document per `request_id`. Sending **the same** `document_no` again is safe → `status: UNCHANGED`.
+- A **different** `document_no` for the same `request_id` → `409 DOCUMENT_CONFLICT`, unless `replace = true` (a correction:
+  the old number is kept in the history) → `status: REPLACED`.
+- The `request_id` must belong to a `/decisions` call that answered **200**; otherwise `404 REQUEST_NOT_FOUND`.
+- Same Basic authentication as the other endpoints. Retry on timeout / 503 — resending is always safe.
+
+### Request
+
+```json
+{
+  "request_id": "WI000004711-4500099001-V1",
+  "document_no": "5000123456",
+  "document_type": "MRN",
+  "po_number": "4500099001",
+  "document_date": "2026-10-26",
+  "replace": false,
+  "note": ""
+}
+```
+
+| Field | Type | Req. | Meaning |
+|---|---|---|---|
+| `request_id` | string, max 80 | **yes** | The `request_id` sent to `/decisions` (when SAP did not send one, the `request_id` the tool returned) |
+| `document_no` | string, max 40 | **yes** | Final document number (MRN) |
+| `document_type` | string, max 20 | no | Default `MRN` |
+| `po_number` | string, max 20 | no | `EKKO-EBELN`; default: the PO number of the decision |
+| `document_date` | date | no | `YYYY-MM-DD` |
+| `replace` | boolean | no | `true` = correct a document already stored for this `request_id` |
+| `note` | string, max 500 | no | Free text |
+
+### Response `200` (captured)
+
+```json
+{ "request_id": "WI-REDUCE-0001", "decision_id": "D-20261026-000001", "document_no": "5000123456",
+  "document_type": "MRN", "status": "STORED", "received_at": "2026-10-26T14:55:03+05:30" }
+```
+
+| Field | Meaning |
+|---|---|
+| `status` | `STORED` (first document) \| `UNCHANGED` (same document again) \| `REPLACED` (`replace = true`) |
+| `decision_id` | The decision the document belongs to |
+| `received_at` | When the tool stored it |
+
+### Error answers (captured)
+
+| Case | HTTP | Body |
+|---|---|---|
+| Another document already stored | 409 | `{"error_code":"DOCUMENT_CONFLICT","message":"request_id WI-REDUCE-0001 already has document 5000123456 - send replace = true to correct it","trace_id":"T-4834f8"}` |
+| `request_id` never decided | 404 | `{"error_code":"REQUEST_NOT_FOUND","message":"No answered decision for request_id WI-NOPE - post the document with the request_id of a /decisions call that answered 200","trace_id":"T-9deafd"}` |
+| `document_no` missing | 400 | `{"error_code":"VALIDATION_FAILED","message":"document_no is required","trace_id":"T-00125f"}` |
+
+---
+
+## 8. Status of the tool side
 
 | Item | Status |
 |---|---|
-| `ping`, `reason-codes`, `decisions`, `events` | **Available for testing** on staging |
+| `ping`, `reason-codes`, `decisions`, `events`, `documents` | **Available for testing** on staging |
+| Verdict link (`view_url`) | Available; the portal page `/verdict/<token>` opens without sign-in |
 | Decision logic | Same rules as the tool's New Request screen (Single Concept, Multi Concept, Watch List, Max Permissible) |
 | Data used for decisions | Uploaded BW / SAP extracts (stock, pending PO, sales, plan, BSR) + the day's approved requests |
 | Events → live open-PO / stock position | **In development**: events are received and stored now, and will feed the live position. Until then decisions use the uploaded files, so run **SHADOW** mode |
@@ -631,6 +700,8 @@ Other answers: `400` for a malformed envelope (e.g. `{"error_code":"VALIDATION_F
    check you get the same `decision_id`.
 4. Timeout / NOT_CHECKED handling (e.g. a wrong password gives 401 → must continue as today).
 5. `POST /events` for a PO save, a goods receipt and a GOV_OUTCOME, then the same batch again to see `duplicates`.
+6. Open a `view_url` from a decision answer in a browser.
+7. `POST /documents` with the MRN of a PO that was created, then the same call again (`UNCHANGED`).
 
 The tool's administrator sees every call — request, response, timing and trace ID — on **🔌 SAP Interface** in the
 portal, so results can be checked together.

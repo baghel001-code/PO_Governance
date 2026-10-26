@@ -199,6 +199,12 @@ namespace Domain.Entities.Common
         public static string PO_SAP_TEST_DECISION { get; set; } = nameof(PO_SAP_TEST_DECISION);
         /// <summary>Sample /decisions request from the uploaded data — api/v1/SapSampleRequest (POST).</summary>
         public static string PO_SAP_SAMPLE_REQUEST { get; set; } = nameof(PO_SAP_SAMPLE_REQUEST);
+        /// <summary>PO document report: decisions with their final SAP document (MRN) — api/v1/SapDocumentReport (POST).</summary>
+        public static string PO_SAP_DOCUMENT_REPORT { get; set; } = nameof(PO_SAP_DOCUMENT_REPORT);
+        /// <summary>PO document report as .xlsx — api/v1/SapDocumentReportExport (POST).</summary>
+        public static string PO_SAP_DOCUMENT_REPORT_EXPORT { get; set; } = nameof(PO_SAP_DOCUMENT_REPORT_EXPORT);
+        /// <summary>The verdict behind a SAP view_url (no sign-in) — api/v1/SapVerdictView (POST).</summary>
+        public static string PO_SAP_VERDICT_VIEW { get; set; } = nameof(PO_SAP_VERDICT_VIEW);
 
         /// <summary>Copies every non-empty ApiNamesSettings value onto the property of the same name (QPS Initialize).</summary>
         public static void Initialize(ApiNames apiNames)

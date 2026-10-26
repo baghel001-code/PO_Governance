@@ -14,7 +14,7 @@
      PRO_SAP_TECH_USER, PRO_SAP_DECISION_SAVE, PRO_SAP_DECISION_GET, PRO_SAP_EVENTS_SAVE, PRO_SAP_EVENTS_GET,
      PRO_SAP_REASON_CODES
    Own error numbers: 50001 unknown @Cmd, 50404 not found, 50409 already exists / request_id already decided.
-   schema_info version = 3. Idempotent (IF NOT EXISTS / CREATE OR ALTER): safe to run again.
+   schema_info version = 4 (v4: verdict link View_Token, SAP_DECISION_DOCUMENTS / PRO_SAP_DOCUMENT_SAVE). Idempotent (IF NOT EXISTS / CREATE OR ALTER): safe to run again.
    ═══════════════════════════════════════════════════════════════════════════ */
 SET NOCOUNT ON;
 SET ANSI_NULLS ON;
@@ -120,6 +120,47 @@ IF OBJECT_ID(N'dbo.FK_SAP_DECISION_ITEMS_Log', N'F') IS NOT NULL
 IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'IX_SAP_DECISION_ITEMS_Log' AND object_id = OBJECT_ID(N'dbo.SAP_DECISION_ITEMS'))
     CREATE INDEX IX_SAP_DECISION_ITEMS_Log ON dbo.SAP_DECISION_ITEMS (Decision_Log_Id, Po_Item);
 GO
+
+/* schema v4: verdict link (View_Token) on the decision, and the final SAP document (MRN) of a request_id */
+IF COL_LENGTH(N'dbo.SAP_DECISION_LOG', N'View_Token') IS NULL
+    ALTER TABLE dbo.SAP_DECISION_LOG ADD
+        View_Token       NVARCHAR(64) COLLATE Latin1_General_100_BIN2 NULL,   -- random, unguessable: /verdict/<token> on the portal
+        View_Expires_At  DATETIMEOFFSET(7) NULL;
+GO
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'UX_SAP_DECISION_LOG_ViewToken' AND object_id = OBJECT_ID(N'dbo.SAP_DECISION_LOG'))
+    CREATE UNIQUE INDEX UX_SAP_DECISION_LOG_ViewToken ON dbo.SAP_DECISION_LOG (View_Token) WHERE View_Token IS NOT NULL;
+GO
+
+/* Final SAP document (MRN) posted against an answered request_id (POST /api/sap/v1/documents). One current row per
+   request_id; a correction (replace = true) keeps the old row with Is_Current = 0 and Replaced_At. */
+IF OBJECT_ID(N'dbo.SAP_DECISION_DOCUMENTS', N'U') IS NULL
+CREATE TABLE dbo.SAP_DECISION_DOCUMENTS (
+    Id                   BIGINT IDENTITY(1,1) NOT NULL CONSTRAINT PK_SAP_DECISION_DOCUMENTS PRIMARY KEY,
+    Decision_Log_Id      BIGINT NOT NULL,                                     -- SAP_DECISION_LOG.Id of the answered decision
+    Request_Id           NVARCHAR(80)  COLLATE Latin1_General_100_BIN2 NOT NULL,
+    Decision_Id          NVARCHAR(30)  NULL,
+    Document_No          NVARCHAR(40)  NOT NULL,
+    Document_Type        NVARCHAR(20)  NOT NULL CONSTRAINT DF_SAP_DECISION_DOCUMENTS_Type DEFAULT (N'MRN'),
+    Po_Number            NVARCHAR(20)  NULL,
+    Document_Date        DATE          NULL,
+    Note                 NVARCHAR(500) NULL,
+    Is_Current           BIT NOT NULL CONSTRAINT DF_SAP_DECISION_DOCUMENTS_Current DEFAULT (1),
+    Replaced_At          DATETIMEOFFSET(7) NULL,
+    Tech_User            NVARCHAR(200) NULL,
+    Source_System        NVARCHAR(10)  NULL,
+    Client_Ip            NVARCHAR(64)  NULL,
+    Trace_Id             NVARCHAR(20)  NULL,
+    Received_At          DATETIMEOFFSET(7) NOT NULL CONSTRAINT DF_SAP_DECISION_DOCUMENTS_Received DEFAULT SYSDATETIMEOFFSET(),
+    Request_Json         NVARCHAR(MAX) NULL);
+GO
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'UX_SAP_DECISION_DOCUMENTS_Current' AND object_id = OBJECT_ID(N'dbo.SAP_DECISION_DOCUMENTS'))
+    CREATE UNIQUE INDEX UX_SAP_DECISION_DOCUMENTS_Current ON dbo.SAP_DECISION_DOCUMENTS (Request_Id) WHERE Is_Current = 1;
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'IX_SAP_DECISION_DOCUMENTS_Log' AND object_id = OBJECT_ID(N'dbo.SAP_DECISION_DOCUMENTS'))
+    CREATE INDEX IX_SAP_DECISION_DOCUMENTS_Log ON dbo.SAP_DECISION_DOCUMENTS (Decision_Log_Id, Is_Current);
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'IX_SAP_DECISION_DOCUMENTS_No' AND object_id = OBJECT_ID(N'dbo.SAP_DECISION_DOCUMENTS'))
+    CREATE INDEX IX_SAP_DECISION_DOCUMENTS_No ON dbo.SAP_DECISION_DOCUMENTS (Document_No);
+GO
+
 
 IF OBJECT_ID(N'dbo.SAP_EVENTS', N'U') IS NULL
 CREATE TABLE dbo.SAP_EVENTS (
@@ -350,6 +391,8 @@ CREATE OR ALTER PROCEDURE dbo.PRO_SAP_DECISION_SAVE
     @Decided_At          DATETIMEOFFSET(7) = NULL,
     @Request_Json        NVARCHAR(MAX) = NULL,
     @Response_Json       NVARCHAR(MAX) = NULL,
+    @View_Token          NVARCHAR(64)  = NULL,
+    @View_Expires_At     DATETIMEOFFSET(7) = NULL,
     @Items               NVARCHAR(MAX) = NULL,
     @Seq_No              BIGINT = NULL OUTPUT,
     @Log_Id              BIGINT = NULL OUTPUT,
@@ -374,11 +417,11 @@ BEGIN
         INSERT INTO dbo.SAP_DECISION_LOG (Decision_Id, Request_Id, Body_Hash, Mode, Source_System, Client, Po_Number, Buyer_User, Division,
                     Overall_Verdict, Verdict_Code, Route_To, Bm_Head_Required, Http_Status, Error_Code, Error_Message, Item_Count, Data_Delayed,
                     Events_Lag_Seconds, Rules_Version, Duration_Ms, Tech_User, Client_Ip, Is_Test, Trace_Id, Requested_At, Decided_At,
-                    Request_Json, Response_Json)
+                    Request_Json, Response_Json, View_Token, View_Expires_At)
         VALUES (@Decision_Id, ISNULL(@Request_Id, N''), @Body_Hash, @Mode, @Source_System, @Client, @Po_Number, @Buyer_User, @Division,
                 @Overall_Verdict, @Verdict_Code, @Route_To, ISNULL(@Bm_Head_Required, 0), @Http_Status, @Error_Code_Out, @Error_Text,
                 ISNULL(@Item_Count, 0), ISNULL(@Data_Delayed, 0), @Events_Lag_Seconds, @Rules_Version, ISNULL(@Duration_Ms, 0), @Tech_User,
-                @Client_Ip, ISNULL(@Is_Test, 0), @Trace_Id, @Requested_At, ISNULL(@Decided_At, SYSDATETIMEOFFSET()), @Request_Json, @Response_Json);
+                @Client_Ip, ISNULL(@Is_Test, 0), @Trace_Id, @Requested_At, ISNULL(@Decided_At, SYSDATETIMEOFFSET()), @Request_Json, @Response_Json, @View_Token, @View_Expires_At);
         SET @Log_Id = SCOPE_IDENTITY();
 
         INSERT INTO dbo.SAP_DECISION_ITEMS (Decision_Log_Id, Po_Item, Article, Generic_Article, Gm, Gm_Match, Colour_Sent, Colour, Colour_Match,
@@ -410,7 +453,11 @@ END
 GO
 
 /* @Cmd BY_REQUEST -> the answered (HTTP 200) decision of @Request_Id, with Body_Hash and Response_Json (idempotency)
-        BY_ID      -> the row @Id with Request_Json / Response_Json, then its items (second result set)
+        BY_ID      -> the row @Id with Request_Json / Response_Json, then its items, then its documents (MRN, current first)
+        BY_VIEW_TOKEN -> the same three result sets for the decision of @View_Token (verdict link; expiry checked by the API)
+        REPORT     -> answered decisions with their current document (MRN), newest first, max @Max rows; filters @From / @To
+                      (business day of Decided_At), @Po_Number (contains: PO, request_id or document no), @Verdict, @Mode,
+                      @Has_Document ('yes' / 'no' / all), @Include_Tests (0 = SAP calls only); @Total OUTPUT
         LIST       -> newest first, max @Max rows; filters @From / @To (dates, business day of Decided_At in @Tz_Offset_Min),
                       @Po_Number (contains), @Verdict, @Mode, @Status ('ok' = 200, 'error' = not 200); @Total OUTPUT
         STATS      -> counts (today = @Today in the business time zone) and latency percentiles of the last 1000 answered
@@ -421,13 +468,16 @@ CREATE OR ALTER PROCEDURE dbo.PRO_SAP_DECISION_GET
     @Id              BIGINT = NULL,
     @From            DATE = NULL,
     @To              DATE = NULL,
-    @Po_Number       NVARCHAR(20)  = NULL,
+    @Po_Number       NVARCHAR(80)  = NULL,
     @Verdict         NVARCHAR(10)  = NULL,
     @Mode            NVARCHAR(10)  = NULL,
     @Status          NVARCHAR(10)  = NULL,
     @Max             INT = 200,
     @Today           DATE = NULL,
     @Tz_Offset_Min   INT = 330,
+    @View_Token      NVARCHAR(64)  = NULL,
+    @Has_Document    NVARCHAR(10)  = NULL,
+    @Include_Tests   BIT = 0,
     @Total           INT = NULL OUTPUT,
     @Error_Code      INT = NULL OUTPUT,
     @Error_Message   NVARCHAR(500) = NULL OUTPUT
@@ -440,20 +490,58 @@ BEGIN
             SELECT TOP (1) Id, Decision_Id AS DecisionId, Request_Id AS RequestId, Body_Hash AS BodyHash, Mode, Http_Status AS HttpStatus,
                    Overall_Verdict AS OverallVerdict, Decided_At AS DecidedAt, Response_Json AS ResponseJson
               FROM dbo.SAP_DECISION_LOG WHERE Request_Id = @Request_Id AND Http_Status = 200;
-        ELSE IF @Cmd = N'BY_ID'
+        ELSE IF @Cmd IN (N'BY_ID', N'BY_VIEW_TOKEN')
         BEGIN
+            IF @Cmd = N'BY_VIEW_TOKEN'
+                SELECT @Id = Id FROM dbo.SAP_DECISION_LOG WHERE View_Token = @View_Token AND @View_Token IS NOT NULL AND @View_Token <> N'';
             SELECT Id, Decision_Id AS DecisionId, Request_Id AS RequestId, Body_Hash AS BodyHash, Mode, Source_System AS SourceSystem, Client,
                    Po_Number AS PoNumber, Buyer_User AS BuyerUser, Division, Overall_Verdict AS OverallVerdict, Verdict_Code AS VerdictCode,
                    Route_To AS RouteTo, Bm_Head_Required AS BmHeadRequired, Http_Status AS HttpStatus, Error_Code AS ErrorCode,
                    Error_Message AS ErrorMessage, Item_Count AS ItemCount, Data_Delayed AS DataDelayed, Events_Lag_Seconds AS EventsLagSeconds,
                    Rules_Version AS RulesVersion, Duration_Ms AS DurationMs, Tech_User AS TechUser, Client_Ip AS ClientIp, Is_Test AS IsTest,
-                   Trace_Id AS TraceId, Requested_At AS RequestedAt, Decided_At AS DecidedAt, Request_Json AS RequestJson, Response_Json AS ResponseJson
+                   Trace_Id AS TraceId, Requested_At AS RequestedAt, Decided_At AS DecidedAt, Request_Json AS RequestJson, Response_Json AS ResponseJson,
+                   View_Token AS ViewToken, View_Expires_At AS ViewExpiresAt
               FROM dbo.SAP_DECISION_LOG WHERE Id = @Id;
             SELECT Decision_Log_Id AS DecisionLogId, Po_Item AS PoItem, Article, Generic_Article AS GenericArticle, Gm, Gm_Match AS GmMatch,
                    Colour_Sent AS ColourSent, Colour, Colour_Match AS ColourMatch, Delivery_Month AS DeliveryMonth, Order_Qty AS OrderQty,
                    Group_Qty AS GroupQty, Verdict, Verdict_Code AS VerdictCode, Max_Qty AS MaxQty, Reason_Code AS ReasonCode, Rule_Id AS RuleId,
                    Reason_Text AS ReasonText, Engine, Engine_Decision AS EngineDecision, Engine_Reason AS EngineReason, Metrics_Json AS MetricsJson
               FROM dbo.SAP_DECISION_ITEMS WHERE Decision_Log_Id = @Id ORDER BY Po_Item, Id;
+            SELECT Id, Decision_Log_Id AS DecisionLogId, Request_Id AS RequestId, Decision_Id AS DecisionId, Document_No AS DocumentNo,
+                   Document_Type AS DocumentType, Po_Number AS PoNumber, CONVERT(NVARCHAR(10), Document_Date, 23) AS DocumentDate, Note,
+                   Is_Current AS IsCurrent, Replaced_At AS ReplacedAt, Tech_User AS TechUser, Source_System AS SourceSystem,
+                   Received_At AS ReceivedAt
+              FROM dbo.SAP_DECISION_DOCUMENTS WHERE Decision_Log_Id = @Id ORDER BY Is_Current DESC, Id DESC;
+        END
+        ELSE IF @Cmd = N'REPORT'
+        BEGIN
+            DECLARE @rep TABLE (Id BIGINT PRIMARY KEY, DocId BIGINT NULL);
+            INSERT INTO @rep (Id, DocId)
+            SELECT l.Id, d.Id
+              FROM dbo.SAP_DECISION_LOG l
+              LEFT JOIN dbo.SAP_DECISION_DOCUMENTS d ON d.Decision_Log_Id = l.Id AND d.Is_Current = 1
+             WHERE l.Http_Status = 200
+               AND (ISNULL(@Include_Tests, 0) = 1 OR l.Is_Test = 0)
+               AND (@From IS NULL OR CAST(SWITCHOFFSET(l.Decided_At, @Tz_Offset_Min) AS DATE) >= @From)
+               AND (@To IS NULL OR CAST(SWITCHOFFSET(l.Decided_At, @Tz_Offset_Min) AS DATE) <= @To)
+               AND (@Po_Number IS NULL OR @Po_Number = N'' OR l.Po_Number LIKE N'%' + @Po_Number + N'%'
+                    OR l.Request_Id LIKE N'%' + @Po_Number + N'%' OR d.Document_No LIKE N'%' + @Po_Number + N'%')
+               AND (@Verdict IS NULL OR @Verdict = N'' OR l.Overall_Verdict = @Verdict)
+               AND (@Mode IS NULL OR @Mode = N'' OR l.Mode = @Mode)
+               AND (@Has_Document IS NULL OR @Has_Document IN (N'', N'all') OR (@Has_Document = N'yes' AND d.Id IS NOT NULL)
+                    OR (@Has_Document = N'no' AND d.Id IS NULL));
+            SET @Total = @@ROWCOUNT;
+            SELECT TOP (ISNULL(@Max, 500)) l.Id, l.Decision_Id AS DecisionId, l.Request_Id AS RequestId, l.Po_Number AS PoNumber,
+                   l.Buyer_User AS BuyerUser, l.Division, l.Mode, l.Overall_Verdict AS OverallVerdict, l.Route_To AS RouteTo,
+                   l.Item_Count AS ItemCount,
+                   (SELECT SUM(i.Order_Qty) FROM dbo.SAP_DECISION_ITEMS i WHERE i.Decision_Log_Id = l.Id) AS OrderQty,
+                   l.Source_System AS SourceSystem, l.Is_Test AS IsTest, l.Decided_At AS DecidedAt,
+                   d.Document_No AS DocumentNo, d.Document_Type AS DocumentType, CONVERT(NVARCHAR(10), d.Document_Date, 23) AS DocumentDate,
+                   d.Received_At AS DocumentReceivedAt
+              FROM @rep r
+              JOIN dbo.SAP_DECISION_LOG l ON l.Id = r.Id
+              LEFT JOIN dbo.SAP_DECISION_DOCUMENTS d ON d.Id = r.DocId
+             ORDER BY l.Id DESC;
         END
         ELSE IF @Cmd = N'LIST'
         BEGIN
@@ -504,6 +592,86 @@ BEGIN
     END TRY
     BEGIN CATCH
         SELECT @Error_Code = ERROR_NUMBER(), @Error_Message = LEFT(ERROR_MESSAGE(), 500);
+    END CATCH
+END
+GO
+
+/* POST /documents: the final SAP document (MRN) of an answered request_id, in one transaction.
+   @Result OUTPUT: STORED (first document) | UNCHANGED (same Document_No again: idempotent) | REPLACED (@Replace = 1, the
+   old row is kept with Is_Current = 0). @Error_Code 50404 no answered decision for @Request_Id; 50409 another
+   Document_No is already stored (@Current_Document_No OUTPUT) and @Replace = 0. */
+CREATE OR ALTER PROCEDURE dbo.PRO_SAP_DOCUMENT_SAVE
+    @Request_Id          NVARCHAR(80),
+    @Document_No         NVARCHAR(40),
+    @Document_Type       NVARCHAR(20)  = NULL,
+    @Po_Number           NVARCHAR(20)  = NULL,
+    @Document_Date       DATE          = NULL,
+    @Note                NVARCHAR(500) = NULL,
+    @Replace             BIT = 0,
+    @Tech_User           NVARCHAR(200) = NULL,
+    @Source_System       NVARCHAR(10)  = NULL,
+    @Client_Ip           NVARCHAR(64)  = NULL,
+    @Trace_Id            NVARCHAR(20)  = NULL,
+    @Request_Json        NVARCHAR(MAX) = NULL,
+    @Result              NVARCHAR(20)  = NULL OUTPUT,
+    @Decision_Id         NVARCHAR(30)  = NULL OUTPUT,
+    @Current_Document_No NVARCHAR(40)  = NULL OUTPUT,
+    @Received_At         DATETIMEOFFSET(7) = NULL OUTPUT,
+    @Error_Code          INT = NULL OUTPUT,
+    @Error_Message       NVARCHAR(500) = NULL OUTPUT
+AS
+BEGIN
+    SET NOCOUNT ON;
+    SET XACT_ABORT ON;
+    SELECT @Error_Code = 0, @Error_Message = N'', @Result = NULL;
+    BEGIN TRY
+        BEGIN TRANSACTION;
+        DECLARE @logId BIGINT, @logPo NVARCHAR(20);
+        SELECT @logId = Id, @Decision_Id = Decision_Id, @logPo = Po_Number
+          FROM dbo.SAP_DECISION_LOG WITH (UPDLOCK, HOLDLOCK)
+         WHERE Request_Id = @Request_Id AND Http_Status = 200;
+        IF @logId IS NULL
+        BEGIN
+            ROLLBACK TRANSACTION;
+            SELECT @Error_Code = 50404, @Error_Message = N'No answered decision for request_id ' + ISNULL(@Request_Id, N'(null)');
+            RETURN;
+        END
+
+        DECLARE @curId BIGINT, @curReceived DATETIMEOFFSET(7);
+        SELECT @curId = Id, @Current_Document_No = Document_No, @curReceived = Received_At
+          FROM dbo.SAP_DECISION_DOCUMENTS WITH (UPDLOCK, HOLDLOCK)
+         WHERE Request_Id = @Request_Id AND Is_Current = 1;
+
+        IF @curId IS NOT NULL AND @Current_Document_No = @Document_No
+        BEGIN
+            COMMIT TRANSACTION;
+            SELECT @Result = N'UNCHANGED', @Received_At = @curReceived;
+            RETURN;
+        END
+        IF @curId IS NOT NULL AND ISNULL(@Replace, 0) = 0
+        BEGIN
+            ROLLBACK TRANSACTION;
+            SELECT @Error_Code = 50409,
+                   @Error_Message = N'request_id ' + @Request_Id + N' already has document ' + @Current_Document_No + N' - send replace = true to correct it';
+            RETURN;
+        END
+
+        SET @Received_At = SYSDATETIMEOFFSET();
+        IF @curId IS NOT NULL
+            UPDATE dbo.SAP_DECISION_DOCUMENTS SET Is_Current = 0, Replaced_At = @Received_At WHERE Id = @curId;
+        INSERT INTO dbo.SAP_DECISION_DOCUMENTS (Decision_Log_Id, Request_Id, Decision_Id, Document_No, Document_Type, Po_Number, Document_Date,
+                    Note, Is_Current, Tech_User, Source_System, Client_Ip, Trace_Id, Received_At, Request_Json)
+        VALUES (@logId, @Request_Id, @Decision_Id, @Document_No, ISNULL(NULLIF(@Document_Type, N''), N'MRN'), ISNULL(NULLIF(@Po_Number, N''), @logPo),
+                @Document_Date, @Note, 1, @Tech_User, @Source_System, @Client_Ip, @Trace_Id, @Received_At, @Request_Json);
+        COMMIT TRANSACTION;
+        SET @Result = CASE WHEN @curId IS NULL THEN N'STORED' ELSE N'REPLACED' END;
+    END TRY
+    BEGIN CATCH
+        IF @@TRANCOUNT > 0 ROLLBACK TRANSACTION;
+        IF ERROR_NUMBER() IN (2601, 2627)
+            SELECT @Error_Code = 50409, @Error_Message = N'A document for request_id ' + ISNULL(@Request_Id, N'') + N' was stored at the same time - send it again';
+        ELSE
+            SELECT @Error_Code = ERROR_NUMBER(), @Error_Message = LEFT(ERROR_MESSAGE(), 500);
     END CATCH
 END
 GO
@@ -733,6 +901,6 @@ GO
 
 /* ───────────────────────────── schema version ───────────────────────────── */
 IF NOT EXISTS (SELECT 1 FROM dbo.schema_info WHERE [key] = N'version')
-    INSERT INTO dbo.schema_info ([key], value) VALUES (N'version', N'3');
-UPDATE dbo.schema_info SET value = N'3' WHERE [key] = N'version' AND value < N'3';
+    INSERT INTO dbo.schema_info ([key], value) VALUES (N'version', N'4');
+UPDATE dbo.schema_info SET value = N'4' WHERE [key] = N'version' AND value < N'4';
 GO

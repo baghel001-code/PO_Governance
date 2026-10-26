@@ -70,6 +70,21 @@ namespace Domain.Entities.AppSettings
         /// <summary>Events per batch (spec: 1–500) and maximum body size (5 MB) — above: 413.</summary>
         public int MaxEventsPerBatch { get; set; } = 500;
         public int MaxBodyBytes { get; set; } = 5 * 1024 * 1024;
+
+        /// <summary>The view_url sent with every answered decision (portal page /verdict/&lt;token&gt;).</summary>
+        public SapVerdictLinkSettings VerdictLink { get; set; } = new();
+    }
+
+    /// <summary>SapInterface:VerdictLink.</summary>
+    public sealed class SapVerdictLinkSettings
+    {
+        public bool Enabled { get; set; } = true;
+        /// <summary>How long a link works, days.</summary>
+        public int ValidDays { get; set; } = 90;
+        /// <summary>API_BASE_URL key of the portal: its base URL in this environment builds the link.</summary>
+        public string BaseUrlKey { get; set; } = "POGOV_PORTAL";
+        /// <summary>Optional fixed portal base URL (overrides API_BASE_URL), e.g. https://pogov.company.local/.</summary>
+        public string? PortalBaseUrl { get; set; }
     }
 
     /// <summary>SapInterface:BmHead — see DecisionEngine.Sap.SapBmHeadRule.</summary>

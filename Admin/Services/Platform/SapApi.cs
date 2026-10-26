@@ -51,5 +51,17 @@ namespace Admin.Services.Platform
 
         public static Task<ApiDataResponse<SapTestDecisionResponse>> SapSampleRequestAsync(this IAPICall api) =>
             Call<SapTestDecisionResponse, EmptyReq>(api, AllApiNames.PO_SAP_SAMPLE_REQUEST, EmptyReq.Instance);
+
+        /// <summary>PO document report: answered decisions with their final SAP document (MRN).</summary>
+        public static Task<ApiDataResponse<SapDocumentReportResponse>> SapDocumentReportAsync(this IAPICall api, SapDocumentReportReq req) =>
+            Call<SapDocumentReportResponse, SapDocumentReportReq>(api, AllApiNames.PO_SAP_DOCUMENT_REPORT, req);
+
+        /// <summary>The same report as Excel.</summary>
+        public static Task<ApiFileResponse> ExportSapDocumentReportAsync(this IAPICall api, SapDocumentReportReq req) =>
+            api.CallingAPIDownload(AllApiNames.PO_SAP_DOCUMENT_REPORT_EXPORT, req);
+
+        /// <summary>The verdict behind a SAP view_url token (no sign-in needed).</summary>
+        public static Task<ApiDataResponse<SapVerdictView>> SapVerdictViewAsync(this IAPICall api, string token) =>
+            Call<SapVerdictView, SapVerdictViewReq>(api, AllApiNames.PO_SAP_VERDICT_VIEW, new SapVerdictViewReq { Token = token });
     }
 }

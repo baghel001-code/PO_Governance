@@ -1,0 +1,15 @@
+@inherits LayoutComponentBase
+@* Public page layout (SAP verdict links, no sign-in): logo bar + content, no navigation. *@
+<div class="pv-bg">
+    <div class="pv-bar">
+        <img src="img/logo.png" alt="Vishal Mega Mart" style="height:34px" />
+        <span class="pv-title">PO Governance · Verdict</span>
+    </div>
+    <main class="pv-main">@Body</main>
+</div>
+<style>
+    .pv-bg { min-height: 100vh; background: var(--bg, #f4f6fb); }
+    .pv-bar { display: flex; align-items: center; gap: 14px; padding: 12px 22px; background: #fff; border-bottom: 1px solid #e5e7eb; }
+    .pv-title { font-family: var(--font-brand); font-weight: 800; font-size: 18px; color: var(--vmm-navy, #1e3a8a); }
+    .pv-main { max-width: 1100px; margin: 0 auto; padding: 20px 16px 40px; }
+</style>

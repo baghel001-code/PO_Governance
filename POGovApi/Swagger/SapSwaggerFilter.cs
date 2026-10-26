@@ -47,6 +47,11 @@ namespace POGovApi.Swagger
             }
             """;
 
+        private const string DocumentExample = """
+            { "request_id": "WI000004711-4500099001-V1", "document_no": "5000123456", "document_type": "MRN",
+              "po_number": "4500099001", "document_date": "2026-10-26", "replace": false, "note": "" }
+            """;
+
         public void Apply(OpenApiOperation operation, OperationFilterContext context)
         {
             var path = context.ApiDescription.RelativePath ?? "";
@@ -61,6 +66,10 @@ namespace POGovApi.Swagger
                 operation.RequestBody = Body(context, typeof(SapDecisionRequest),
                     "PO to decide. Mandatory per item: generic_article, colour, order_qty, delivery_date; everything else is optional.",
                     ("minimal", "Only the four mandatory fields", DecisionMinimal), ("full", "Every field SAP may send", DecisionFull));
+            else if (path.EndsWith("/documents", StringComparison.OrdinalIgnoreCase))
+                operation.RequestBody = Body(context, typeof(SapDocumentRequest),
+                    "Final SAP document (MRN) of a decided request_id. Mandatory: request_id, document_no; replace = true corrects a stored one.",
+                    ("mrn", "MRN of a PO", DocumentExample));
             else if (path.EndsWith("/events", StringComparison.OrdinalIgnoreCase))
                 operation.RequestBody = Body(context, typeof(SapEventBatch), "1-500 events in ascending seq order.",
                     ("goods_receipt", "One goods receipt (GR_POSTED)", EventsExample));

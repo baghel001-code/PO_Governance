@@ -59,6 +59,18 @@ namespace Infrastructure.Services.V1
             return await RunAsync(p, ct);
         }
 
+        public async Task<string?> GetBaseUrlAsync(string baseUrlKey, CancellationToken ct = default)
+        {
+            if (_db == null || string.IsNullOrWhiteSpace(baseUrlKey)) return null;
+            var p = DapperHelper.AddErrorOutputs(new DynamicParameters());
+            p.Add("@Cmd", "BASE_URL", DbType.String);
+            p.Add("@Parm", baseUrlKey.Trim(), DbType.String);
+            p.Add("@Environment", Environment, DbType.String);
+            var res = await RunAsync(p, ct);
+            var url = res.responseCode == 0 ? res.ApiData?.FirstOrDefault()?.Api_Url : null;
+            return string.IsNullOrWhiteSpace(url) ? null : url.EndsWith('/') ? url : url + "/";
+        }
+
         private async Task<ApiMasterRes> RunAsync(DynamicParameters p, CancellationToken ct)
         {
             List<ApiData> rows;

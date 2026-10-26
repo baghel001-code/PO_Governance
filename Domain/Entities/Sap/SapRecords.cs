@@ -59,6 +59,81 @@ namespace Domain.Entities.Sap
         /// <summary>Filled by the detail call only.</summary>
         public string? RequestJson { get; set; }
         public string? ResponseJson { get; set; }
+        /// <summary>Verdict link token (portal /verdict/&lt;token&gt;) and its expiry; null when no link was issued.</summary>
+        public string? ViewToken { get; set; }
+        public DateTimeOffset? ViewExpiresAt { get; set; }
+    }
+
+    /// <summary>SAP_DECISION_DOCUMENTS row: the final SAP document (MRN) of a request_id (current, or replaced = history).</summary>
+    public sealed class SapDocumentRow
+    {
+        public long Id { get; set; }
+        public long DecisionLogId { get; set; }
+        public string RequestId { get; set; } = "";
+        public string? DecisionId { get; set; }
+        public string DocumentNo { get; set; } = "";
+        public string DocumentType { get; set; } = "MRN";
+        public string? PoNumber { get; set; }
+        /// <summary>YYYY-MM-DD.</summary>
+        public string? DocumentDate { get; set; }
+        public string? Note { get; set; }
+        public bool IsCurrent { get; set; }
+        public DateTimeOffset? ReplacedAt { get; set; }
+        public string? TechUser { get; set; }
+        public string? SourceSystem { get; set; }
+        public DateTimeOffset ReceivedAt { get; set; }
+    }
+
+    /// <summary>What to store for POST /documents (PRO_SAP_DOCUMENT_SAVE).</summary>
+    public sealed class SapDocumentInsert
+    {
+        public string RequestId { get; set; } = "";
+        public string DocumentNo { get; set; } = "";
+        public string? DocumentType { get; set; }
+        public string? PoNumber { get; set; }
+        public string? DocumentDate { get; set; }
+        public string? Note { get; set; }
+        public bool Replace { get; set; }
+        public string? TechUser { get; set; }
+        public string? SourceSystem { get; set; }
+        public string? ClientIp { get; set; }
+        public string? TraceId { get; set; }
+        public string? RequestJson { get; set; }
+    }
+
+    /// <summary>PRO_SAP_DOCUMENT_SAVE outcome: Result STORED / UNCHANGED / REPLACED, or Conflict / NotFound.</summary>
+    public sealed class SapDocumentSaveResult
+    {
+        public string Result { get; set; } = "";
+        public string? DecisionId { get; set; }
+        public string? CurrentDocumentNo { get; set; }
+        public DateTimeOffset ReceivedAt { get; set; }
+        public bool NotFound { get; set; }
+        public bool Conflict { get; set; }
+        public string? Message { get; set; }
+    }
+
+    /// <summary>One line of the PO document report: an answered decision and its current document (MRN), if any.</summary>
+    public sealed class SapDocumentReportRow
+    {
+        public long Id { get; set; }
+        public string? DecisionId { get; set; }
+        public string RequestId { get; set; } = "";
+        public string? PoNumber { get; set; }
+        public string? BuyerUser { get; set; }
+        public string? Division { get; set; }
+        public string? Mode { get; set; }
+        public string? OverallVerdict { get; set; }
+        public string? RouteTo { get; set; }
+        public int ItemCount { get; set; }
+        public double? OrderQty { get; set; }
+        public string? SourceSystem { get; set; }
+        public bool IsTest { get; set; }
+        public DateTimeOffset DecidedAt { get; set; }
+        public string? DocumentNo { get; set; }
+        public string? DocumentType { get; set; }
+        public string? DocumentDate { get; set; }
+        public DateTimeOffset? DocumentReceivedAt { get; set; }
     }
 
     /// <summary>SAP_DECISION_ITEMS row.</summary>
@@ -193,6 +268,28 @@ namespace Domain.Entities.Sap
         public int Max { get; set; } = 200;
     }
 
+    /// <summary>SapDocumentReport / SapDocumentReportExport: filters (empty = all).</summary>
+    public sealed class SapDocumentReportReq : BaseRequest
+    {
+        public string? From { get; set; }
+        public string? To { get; set; }
+        /// <summary>Contains: PO number, request_id or document number.</summary>
+        public string? PoNumber { get; set; }
+        public string? Verdict { get; set; }
+        public string? Mode { get; set; }
+        /// <summary>"yes" (default: POs with a final document), "no", "all".</summary>
+        public string? HasDocument { get; set; } = "yes";
+        /// <summary>Include portal test decisions.</summary>
+        public bool IncludeTests { get; set; }
+        public int Max { get; set; } = 500;
+    }
+
+    /// <summary>SapVerdictView: the token of a verdict link.</summary>
+    public sealed class SapVerdictViewReq : BaseRequest
+    {
+        public string? Token { get; set; }
+    }
+
     /// <summary>SapDecisionGet: one decision log row by its id.</summary>
     public sealed class SapDecisionGetReq : BaseRequest
     {
@@ -298,6 +395,50 @@ namespace Domain.Entities.Sap
     {
         public SapDecisionLogRow? Decision { get; set; }
         public List<SapDecisionItemRow> Items { get; set; } = new();
+        /// <summary>Final documents (MRN): the current one first, then replaced ones.</summary>
+        public List<SapDocumentRow> Documents { get; set; } = new();
+    }
+
+    public sealed class SapDocumentReportResponse
+    {
+        public List<SapDocumentReportRow> Items { get; set; } = new();
+        public int Total { get; set; }
+    }
+
+    /// <summary>
+    /// The read-only verdict page behind a verdict link (/verdict/&lt;token&gt;, no sign-in): business fields only — no request /
+    /// response JSON, technical user, IP or engine internals.
+    /// </summary>
+    public sealed class SapVerdictView
+    {
+        public string? DecisionId { get; set; }
+        public string RequestId { get; set; } = "";
+        public string? PoNumber { get; set; }
+        public string? BuyerUser { get; set; }
+        public string? Division { get; set; }
+        public string? Mode { get; set; }
+        public string? OverallVerdict { get; set; }
+        public string? RouteTo { get; set; }
+        public string? SummaryText { get; set; }
+        public bool DataDelayed { get; set; }
+        public DateTimeOffset DecidedAt { get; set; }
+        public DateTimeOffset? ExpiresAt { get; set; }
+        public List<SapVerdictViewItem> Items { get; set; } = new();
+        public SapDocumentRow? Document { get; set; }
+    }
+
+    public sealed class SapVerdictViewItem
+    {
+        public int PoItem { get; set; }
+        public string? Article { get; set; }
+        public string? GenericArticle { get; set; }
+        public string? Colour { get; set; }
+        public string? DeliveryMonth { get; set; }
+        public double OrderQty { get; set; }
+        public string? Verdict { get; set; }
+        public double? MaxQty { get; set; }
+        public string? ReasonCode { get; set; }
+        public string? ReasonText { get; set; }
     }
 
     public sealed class SapEventListResponse

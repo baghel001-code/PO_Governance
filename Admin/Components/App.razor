@@ -26,8 +26,8 @@
 @code {
     [CascadingParameter] private HttpContext HttpContext { get; set; } = default!;
 
-    // Sign-in pages are plain server-rendered forms (they set the auth cookie);
-    // everything else is interactive.
+    // Sign-in pages are plain server-rendered forms (they set the auth cookie) and the public SAP verdict page
+    // (/verdict/<token>) is read-only; everything else is interactive.
     private IComponentRenderMode? RenderModeForPage =>
-        HttpContext.Request.Path.StartsWithSegments("/Account") ? null : InteractiveServer;
+        HttpContext.Request.Path.StartsWithSegments("/Account") || HttpContext.Request.Path.StartsWithSegments("/verdict") ? null : InteractiveServer;
 }

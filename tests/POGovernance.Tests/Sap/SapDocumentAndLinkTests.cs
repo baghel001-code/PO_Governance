@@ -17,6 +17,7 @@ namespace POGovernance.Tests.Sap
     {
         private sealed class FakeApi : IAPI
         {
+            public string Environment => "Staging";
             public string? Base = "http://portal:5090";
             public int Calls;
             public Task<ApiMasterRes> GetAllApi(CancellationToken ct = default) => throw new NotSupportedException();

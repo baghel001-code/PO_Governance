@@ -66,10 +66,13 @@ namespace Application.Services.V1.Sap
         private readonly IStore _store;
         private readonly SapInterfaceSettings _cfg;
         private readonly ISapReportExcelExporter? _excel;
+        private readonly IAPI? _api;
 
         public SapAdminService(ISapRepository repo, ISapDecisionService decisions, ISapEventService events, IPasswordHasher hasher, IAuditService audit,
-                               IAppClock clock, IDatasetCache cache, IStore store, IOptions<SapInterfaceSettings> cfg, ISapReportExcelExporter? excel = null)
+                               IAppClock clock, IDatasetCache cache, IStore store, IOptions<SapInterfaceSettings> cfg, ISapReportExcelExporter? excel = null,
+                               IAPI? api = null)
         {
+            _api = api;
             _repo = repo; _decisions = decisions; _events = events; _hasher = hasher; _audit = audit; _clock = clock; _cache = cache; _store = store;
             _cfg = cfg.Value;
             _excel = excel;
@@ -94,6 +97,13 @@ namespace Application.Services.V1.Sap
             var data = await _cache.GetCurrentAsync(ct);
             o.RulesVersion = string.IsNullOrWhiteSpace(_cfg.RulesVersion) ? "R-P" + data.ParamsVersion.ToString(CultureInfo.InvariantCulture) : _cfg.RulesVersion;
             o.BwSnapshot = SapDecisionService.BwSnapshot(await Platform.PlatformCore.GetManifestAsync(_store, ct));
+            o.ApiEnvironment = _api?.Environment;
+            o.VerdictLinkBase = await _decisions.VerdictLinkBaseAsync(ct);
+            if (o.VerdictLinkBase == null)
+                o.VerdictLinkProblem = !_cfg.VerdictLink.Enabled
+                    ? "switched off (SapInterface:VerdictLink:Enabled = false)"
+                    : "no active API_BASE_URL row " + _cfg.VerdictLink.BaseUrlKey + " for environment " + (o.ApiEnvironment ?? "?") +
+                      " - activate it, or run the API as the right environment (ASPNETCORE_ENVIRONMENT / ApiMaster:Environment)";
             if (!_repo.Available) return o;
             o.Events = await _repo.EventStatusAsync(_clock.Today, Tz, ct);
             o.Decisions = await _repo.DecisionStatsAsync(_clock.Today, Tz, ct);

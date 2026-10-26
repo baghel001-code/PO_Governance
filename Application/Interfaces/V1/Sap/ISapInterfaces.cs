@@ -85,6 +85,9 @@ namespace Application.Interfaces.V1.Sap
         /// taken in ms, or null when the snapshot was already warm.
         /// </summary>
         Task<long?> WarmUpAsync(CancellationToken ct = default);
+
+        /// <summary>Base of the verdict links (view_url), null when no link is sent (switched off, or no active portal base URL).</summary>
+        Task<string?> VerdictLinkBaseAsync(CancellationToken ct = default);
     }
 
     /// <summary>POST /documents: the final SAP document (MRN) of a decided request_id.</summary>

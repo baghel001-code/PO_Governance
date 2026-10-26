@@ -147,6 +147,7 @@ else
                 <div><div class="pf-lbl">Unknown items</div>@_ov.UnknownItemPolicy</div>
                 <div><div class="pf-lbl">Timeout</div>@_ov.DecisionTimeoutMs ms</div>
                 <div><div class="pf-lbl">Stock file (bw_snapshot)</div>@(_ov.BwSnapshot ?? "—")</div>
+                <div data-testid="sap-ov-link"><div class="pf-lbl">API environment · verdict links</div><b>@(_ov.ApiEnvironment ?? "—")</b> · @if (_ov.VerdictLinkBase != null) { <span class="pf-mono pf-small">@(_ov.VerdictLinkBase)verdict/…</span> } else { <span class="pf-small" style="color:#DC2626">no links: @_ov.VerdictLinkProblem</span> }</div>
                 <div><div class="pf-lbl">Allowed IPs</div><span class="pf-mono pf-small">@(!_ov.EnforceIpAllowList ? "off - technical user + password only" : _ov.AllowedIps.Count == 0 ? "on, but no addresses listed - every call refused" : string.Join(", ", _ov.AllowedIps))</span></div>
                 @if (_ov.OnlyOnPort > 0)
                 {

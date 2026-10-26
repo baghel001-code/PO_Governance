@@ -365,6 +365,11 @@ namespace Domain.Entities.Sap
         public SapEventStatus Events { get; set; } = new();
         public SapDecisionStats Decisions { get; set; } = new();
         public string? BwSnapshot { get; set; }
+        /// <summary>Environment the API runs as (ASPNETCORE_ENVIRONMENT / ApiMaster:Environment): picks the API_BASE_URL rows.</summary>
+        public string? ApiEnvironment { get; set; }
+        /// <summary>Base of the verdict links (view_url) in use; null = no links are sent (see <see cref="VerdictLinkProblem"/>).</summary>
+        public string? VerdictLinkBase { get; set; }
+        public string? VerdictLinkProblem { get; set; }
     }
 
     public sealed class SapDecisionStats

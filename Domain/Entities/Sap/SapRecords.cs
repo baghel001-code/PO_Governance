@@ -418,9 +418,16 @@ namespace Domain.Entities.Sap
         public string? Division { get; set; }
         public string? Mode { get; set; }
         public string? OverallVerdict { get; set; }
+        public string? VerdictCode { get; set; }
         public string? RouteTo { get; set; }
+        public bool BmHeadRequired { get; set; }
         public string? SummaryText { get; set; }
+        public string? RulesVersion { get; set; }
+        public string? SourceSystem { get; set; }
+        /// <summary>data_as_of.bw_snapshot of the answer: time of the stock data the decision used.</summary>
+        public string? BwSnapshot { get; set; }
         public bool DataDelayed { get; set; }
+        public DateTimeOffset? RequestedAt { get; set; }
         public DateTimeOffset DecidedAt { get; set; }
         public DateTimeOffset? ExpiresAt { get; set; }
         public List<SapVerdictViewItem> Items { get; set; } = new();
@@ -438,7 +445,17 @@ namespace Domain.Entities.Sap
         public string? Verdict { get; set; }
         public double? MaxQty { get; set; }
         public string? ReasonCode { get; set; }
+        public string? RuleId { get; set; }
         public string? ReasonText { get; set; }
+        /// <summary>Figures behind the verdict (items[].metrics of the answer); null when they do not apply.</summary>
+        public double? PlanQty { get; set; }
+        public double? StockQty { get; set; }
+        public double? OpenPoQty { get; set; }
+        public double? HeadroomQty { get; set; }
+        public double? CoverDays { get; set; }
+        public double? SellThroughPct { get; set; }
+        /// <summary>Total quantity of the items decided together (size variants of one generic article + colour + month).</summary>
+        public double GroupQty { get; set; }
     }
 
     public sealed class SapEventListResponse

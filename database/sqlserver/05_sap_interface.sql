@@ -357,6 +357,8 @@ GO
 /* ───────────────────────────── decisions ───────────────────────────── */
 
 /* @Cmd NEXT_ID -> @Seq_No OUTPUT = NEXT VALUE FOR SAP_DECISION_SEQ (the API formats D-yyyyMMdd-000001)
+        SET_VIEW_TOKEN -> @View_Token / @View_Expires_At / @Response_Json on the answered row @Log_Id that has no link yet
+                   (50409 when it already has one)
         INSERT  -> one SAP_DECISION_LOG row + its items (@Items = JSON array, see SAP_DECISION_ITEMS columns), one
                    transaction; @Log_Id OUTPUT. An HTTP 200 row whose @Request_Id already has an answered decision is
                    refused with 50409 (the caller re-reads it: concurrent duplicate request). */
@@ -407,6 +409,14 @@ BEGIN
         IF @Cmd = N'NEXT_ID'
         BEGIN
             SET @Seq_No = NEXT VALUE FOR dbo.SAP_DECISION_SEQ;
+            RETURN;
+        END
+        IF @Cmd = N'SET_VIEW_TOKEN'
+        BEGIN
+            /* a decision answered before the verdict link existed gets one on its first replay (only if it still has none) */
+            UPDATE dbo.SAP_DECISION_LOG SET View_Token = @View_Token, View_Expires_At = @View_Expires_At, Response_Json = @Response_Json
+             WHERE Id = @Log_Id AND View_Token IS NULL AND Http_Status = 200;
+            IF @@ROWCOUNT = 0 SELECT @Error_Code = 50409, @Error_Message = N'The decision already has a verdict link.';
             RETURN;
         END
         IF @Cmd <> N'INSERT' THROW 50001, N'PRO_SAP_DECISION_SAVE: unknown @Cmd.', 1;
@@ -488,7 +498,8 @@ BEGIN
     BEGIN TRY
         IF @Cmd = N'BY_REQUEST'
             SELECT TOP (1) Id, Decision_Id AS DecisionId, Request_Id AS RequestId, Body_Hash AS BodyHash, Mode, Http_Status AS HttpStatus,
-                   Overall_Verdict AS OverallVerdict, Decided_At AS DecidedAt, Response_Json AS ResponseJson
+                   Overall_Verdict AS OverallVerdict, Decided_At AS DecidedAt, Response_Json AS ResponseJson,
+                   View_Token AS ViewToken, View_Expires_At AS ViewExpiresAt
               FROM dbo.SAP_DECISION_LOG WHERE Request_Id = @Request_Id AND Http_Status = 200;
         ELSE IF @Cmd IN (N'BY_ID', N'BY_VIEW_TOKEN')
         BEGIN

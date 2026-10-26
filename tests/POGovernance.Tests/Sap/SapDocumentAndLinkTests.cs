@@ -82,6 +82,32 @@ namespace POGovernance.Tests.Sap
         }
 
         [Fact]
+        public async Task A_decision_made_before_the_link_existed_gets_one_on_its_first_replay()
+        {
+            var k = new Kit();
+            k.Cfg.VerdictLink.Enabled = false;                                    // decided before the upgrade
+            var body = SapKit.Request("WI000004711-4500099001-V1", SapKit.Item(1, "1101000101", "WHT", 100)).ToJsonString();
+            var before = Parse(await k.Decisions().DecideAsync(body, SapKit.Caller));
+            Assert.Null(before["view_url"]);
+
+            k.Cfg.VerdictLink.Enabled = true;                                     // after the upgrade SAP repeats the call
+            var svc = k.Decisions();
+            var replay = await svc.DecideAsync(body, SapKit.Caller);
+            Assert.True(replay.Replayed);
+            var j = Parse(replay);
+            Assert.Equal(before["decision_id"]!.GetValue<string>(), j["decision_id"]!.GetValue<string>());
+            var url = j["view_url"]!.GetValue<string>();
+            Assert.StartsWith("http://portal:5090/verdict/", url);
+            var keys = j.Select(kv => kv.Key).ToList();
+            Assert.Equal(keys.IndexOf("items") - 2, keys.IndexOf("view_url"));    // same place as in a new answer
+            var row = k.Repo.Decisions.Single().Row;
+            Assert.Equal(url[^43..], row.ViewToken);
+            Assert.Equal(replay.Json, row.ResponseJson);
+            Assert.Equal(replay.Json, (await svc.DecideAsync(body, SapKit.Caller)).Json);   // later replays: the same answer
+            Assert.Equal("WI000004711-4500099001-V1", (await k.View().GetAsync(row.ViewToken!)).RequestId);
+        }
+
+        [Fact]
         public async Task No_link_when_switched_off_or_without_a_portal_base_url()
         {
             var off = new Kit();
@@ -110,7 +136,15 @@ namespace POGovernance.Tests.Sap
             Assert.Equal("WI-VIEW", v.RequestId);
             Assert.Equal(a["overall_verdict"]!.GetValue<string>(), v.OverallVerdict);
             Assert.Equal(a["summary_text"]!.GetValue<string>(), v.SummaryText);
-            Assert.Equal(10, Assert.Single(v.Items).PoItem);
+            var item = Assert.Single(v.Items);
+            Assert.Equal(10, item.PoItem);
+            var metrics = a["items"]![0]!["metrics"]!.AsObject();
+            Assert.Equal(metrics["plan_qty"]?.GetValue<double>(), item.PlanQty);
+            Assert.Equal(metrics["stock_qty"]?.GetValue<double>(), item.StockQty);
+            Assert.Equal(a["items"]![0]!["rule_id"]!.GetValue<string>(), item.RuleId);
+            Assert.Equal("R-T", v.RulesVersion);
+            Assert.Equal(a["data_as_of"]!["bw_snapshot"]!.GetValue<string>(), v.BwSnapshot);
+            Assert.Equal("ECP", v.SourceSystem);
             Assert.Null(v.Document);
 
             await Assert.ThrowsAsync<NotFoundException>(() => k.View().GetAsync("x"));

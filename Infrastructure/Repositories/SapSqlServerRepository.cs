@@ -214,6 +214,19 @@ namespace Infrastructure.Repositories
             return await DetailAsync(p, ct);
         }
 
+        public async Task<bool> SetViewTokenAsync(long logId, string token, DateTimeOffset expiresAt, string responseJson, CancellationToken ct = default)
+        {
+            var p = P("SET_VIEW_TOKEN");
+            p.Add("@Log_Id", logId, DbType.Int64, ParameterDirection.InputOutput);
+            p.Add("@View_Token", token, DbType.String, size: 64);
+            p.Add("@View_Expires_At", expiresAt, DbType.DateTimeOffset);
+            p.Add("@Response_Json", responseJson, DbType.String, size: -1);
+            await _db.ExecuteStoredProcedureAsync(DecisionSaveSp, p, commandTimeout: null, ct: ct);
+            if (DapperHelper.ErrorCode(p) == 50409) return false;
+            Check(DecisionSaveSp, p);
+            return true;
+        }
+
         public async Task<SapDecisionDetailResponse?> GetDecisionByViewTokenAsync(string token, CancellationToken ct = default)
         {
             var p = P("BY_VIEW_TOKEN");
@@ -389,6 +402,7 @@ namespace Infrastructure.Repositories
         public Task<SapTechUser?> GetTechUserAsync(string userName, CancellationToken ct = default) => throw Fail();
         public Task<List<SapTechUser>> ListTechUsersAsync(CancellationToken ct = default) => throw Fail();
         public Task<SapDecisionDetailResponse?> GetDecisionByViewTokenAsync(string token, CancellationToken ct = default) => throw Fail();
+        public Task<bool> SetViewTokenAsync(long logId, string token, DateTimeOffset expiresAt, string responseJson, CancellationToken ct = default) => throw Fail();
         public Task<SapDocumentSaveResult> SaveDocumentAsync(SapDocumentInsert doc, CancellationToken ct = default) => throw Fail();
         public Task<SapDocumentReportResponse> DocumentReportAsync(SapDocumentReportReq req, int tzOffsetMinutes, CancellationToken ct = default) => throw Fail();
         public Task<SapTechUser> AddTechUserAsync(string userName, string sourceSystem, string? description, string passwordHash, string by, CancellationToken ct = default) => throw Fail();

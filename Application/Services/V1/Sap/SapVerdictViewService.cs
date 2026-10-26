@@ -34,23 +34,41 @@ namespace Application.Services.V1.Sap
             if (row.ViewExpiresAt is { } until && until < _clock.Now)
                 throw new AppException(410, "This verdict link expired on " + until.ToOffset(_clock.Now.Offset).ToString("dd-MMM-yyyy") + ".");
 
-            string? summary = null;
-            try { summary = (JsonNode.Parse(row.ResponseJson ?? "{}") as JsonObject)?["summary_text"]?.GetValue<string>(); }
-            catch (System.Text.Json.JsonException) { /* old row without JSON: no summary */ }
+            string? summary = null, bw = null;
+            try
+            {
+                var answer = JsonNode.Parse(row.ResponseJson ?? "{}") as JsonObject;
+                summary = answer?["summary_text"]?.GetValue<string>();
+                bw = answer?["data_as_of"]?["bw_snapshot"]?.GetValue<string>();
+            }
+            catch (Exception e) when (e is System.Text.Json.JsonException or InvalidOperationException) { /* no usable answer JSON */ }
 
             return new SapVerdictView
             {
                 DecisionId = row.DecisionId, RequestId = row.RequestId, PoNumber = row.PoNumber, BuyerUser = row.BuyerUser, Division = row.Division,
-                Mode = row.Mode, OverallVerdict = row.OverallVerdict, RouteTo = row.RouteTo, SummaryText = summary, DataDelayed = row.DataDelayed,
-                DecidedAt = row.DecidedAt, ExpiresAt = row.ViewExpiresAt,
-                Items = d.Items.Select(i => new SapVerdictViewItem
+                Mode = row.Mode, OverallVerdict = row.OverallVerdict, VerdictCode = row.VerdictCode, RouteTo = row.RouteTo,
+                BmHeadRequired = row.BmHeadRequired, SummaryText = summary, RulesVersion = row.RulesVersion, SourceSystem = row.SourceSystem,
+                BwSnapshot = bw, DataDelayed = row.DataDelayed, RequestedAt = row.RequestedAt, DecidedAt = row.DecidedAt, ExpiresAt = row.ViewExpiresAt,
+                Items = d.Items.Select(i =>
                 {
-                    PoItem = i.PoItem, Article = i.Article, GenericArticle = i.GenericArticle, Colour = i.Colour ?? i.ColourSent,
-                    DeliveryMonth = i.DeliveryMonth, OrderQty = i.OrderQty, Verdict = i.Verdict, MaxQty = i.MaxQty, ReasonCode = i.ReasonCode,
-                    ReasonText = i.ReasonText
+                    var m = Metrics(i.MetricsJson);
+                    return new SapVerdictViewItem
+                    {
+                        PoItem = i.PoItem, Article = i.Article, GenericArticle = i.GenericArticle, Colour = i.Colour ?? i.ColourSent,
+                        DeliveryMonth = i.DeliveryMonth, OrderQty = i.OrderQty, GroupQty = i.GroupQty, Verdict = i.Verdict, MaxQty = i.MaxQty,
+                        ReasonCode = i.ReasonCode, RuleId = i.RuleId, ReasonText = i.ReasonText, PlanQty = m?.PlanQty, StockQty = m?.StockQty,
+                        OpenPoQty = m?.OpenPoQty, HeadroomQty = m?.HeadroomQty, CoverDays = m?.CoverDays, SellThroughPct = m?.SellThroughPct
+                    };
                 }).ToList(),
                 Document = d.Documents.FirstOrDefault(x => x.IsCurrent)
             };
+        }
+
+        private static SapDecisionMetrics? Metrics(string? json)
+        {
+            if (string.IsNullOrWhiteSpace(json)) return null;
+            try { return SapJson.Deserialize<SapDecisionMetrics>(json); }
+            catch (System.Text.Json.JsonException) { return null; }
         }
     }
 }

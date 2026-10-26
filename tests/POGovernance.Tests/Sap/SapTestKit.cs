@@ -105,6 +105,17 @@ namespace POGovernance.Tests.Sap
 
         public readonly List<SapDocumentRow> Documents = new();
 
+        public Task<bool> SetViewTokenAsync(long logId, string token, DateTimeOffset expiresAt, string responseJson, CancellationToken ct = default)
+        {
+            lock (_gate)
+            {
+                var row = Decisions.Select(d => d.Row).First(r => r.Id == logId);
+                if (row.ViewToken != null) return Task.FromResult(false);
+                row.ViewToken = token; row.ViewExpiresAt = expiresAt; row.ResponseJson = responseJson;
+                return Task.FromResult(true);
+            }
+        }
+
         public Task<SapDecisionDetailResponse?> GetDecisionByViewTokenAsync(string token, CancellationToken ct = default)
         {
             var d = Decisions.FirstOrDefault(x => x.Row.ViewToken == token);

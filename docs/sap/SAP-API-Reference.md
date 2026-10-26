@@ -300,6 +300,12 @@ repeat), otherwise the answer is `400 VALIDATION_FAILED`. The answer always echo
 | `decided_at` | date-time | When the tool decided |
 | `view_url` | string (URL) | **Link to the verdict page** on the PO Governance portal. Show it to the buyer / approver (work item, PO note, e-mail): clicking it opens the verdict with its items and reasons — read-only, **no sign-in needed**. The token in the link is random and cannot be guessed; anyone who has the link can open it, so keep it inside the company. Omitted if the link is switched off |
 | `view_url_expires_at` | date-time | Until when the link works (90 days by default) |
+
+**The verdict page** (`view_url`) shows the complete verdict: what happens next for this verdict, the decision details
+(decision / request ID, decided at, route, mode, buyer, division, SAP system, rules version, stock data date, final
+document), every item with its reason, rule and the figures behind it (plan, stock, open PO, headroom, cover days or
+sell-through), totals, and a print button. A decision answered before the link existed gets its `view_url` the first
+time SAP repeats the same `request_id` (the answer is otherwise unchanged and stays the same on every later repeat).
 | `items[].po_item` | integer | PO item |
 | `items[].verdict` / `verdict_code` | as above | Item verdict |
 | `items[].max_qty` | number \| null | **Maximum allowed quantity when the verdict is REDUCE**; `null` otherwise |

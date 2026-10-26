@@ -34,6 +34,8 @@ namespace Application.Interfaces.V1.Sap
         Task<SapDecisionStats> DecisionStatsAsync(string today, int tzOffsetMinutes, CancellationToken ct = default);
         /// <summary>The decision of a verdict-link token with its items and documents; null when the token is unknown.</summary>
         Task<SapDecisionDetailResponse?> GetDecisionByViewTokenAsync(string token, CancellationToken ct = default);
+        /// <summary>Gives an answered decision without a verdict link one (with its new response JSON); false when it already has one.</summary>
+        Task<bool> SetViewTokenAsync(long logId, string token, DateTimeOffset expiresAt, string responseJson, CancellationToken ct = default);
 
         // ── final documents (PRO_SAP_DOCUMENT_SAVE / PRO_SAP_DECISION_GET REPORT)
         Task<SapDocumentSaveResult> SaveDocumentAsync(SapDocumentInsert doc, CancellationToken ct = default);

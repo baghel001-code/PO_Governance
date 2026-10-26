@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using System.Globalization;
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using Application.Interfaces.V1;
 using Application.Interfaces.V1.Sap;
 using Application.Services.V1.Platform;
@@ -176,7 +177,7 @@ namespace Application.Services.V1.Sap
             void Mark(string what) { lock (marks) marks.Append(what).Append('=').Append(sw.ElapsedMilliseconds).Append(' '); }
             var existing = await _repo.GetDecisionByRequestAsync(req.RequestId!, ct);
             Mark("lookup");
-            if (existing != null) return Replay(existing, hash, req.RequestId!, caller);
+            if (existing != null) return await ReplayAsync(existing, hash, req.RequestId!, caller, ct);
 
             // 2. data: snapshot, today's Tool 1 ledger (read only), manifest (upload times), feed status
             var today = _clock.Today;
@@ -281,7 +282,7 @@ namespace Application.Services.V1.Sap
             {
                 var stored = await _repo.GetDecisionByRequestAsync(req.RequestId!, ct);
                 if (stored == null) throw;
-                return Replay(stored, hash, req.RequestId!, caller);
+                return await ReplayAsync(stored, hash, req.RequestId!, caller, ct);
             }
         }
 
@@ -310,6 +311,43 @@ namespace Application.Services.V1.Sap
             _warmData = data.DataVersion;
             _warmParams = data.ParamsVersion;
             return sw.ElapsedMilliseconds;
+        }
+
+        /// <summary>
+        /// The stored answer of a repeated request_id. A decision answered before the verdict link existed gets its link here,
+        /// once (stored with the decision, so every later replay returns the same answer again).
+        /// </summary>
+        private async Task<SapCallResult> ReplayAsync(SapDecisionLogRow existing, string hash, string requestId, SapCallContext caller, CancellationToken ct)
+        {
+            var res = Replay(existing, hash, requestId, caller);
+            if (existing.ViewToken != null || existing.ResponseJson == null || await VerdictLinkBaseAsync(ct) is not { } linkBase) return res;
+            try
+            {
+                if (JsonNode.Parse(existing.ResponseJson) is not JsonObject old || old.ContainsKey("view_url")) return res;
+                var token = NewViewToken();
+                var expires = _clock.Now.AddDays(Math.Max(1, _cfg.VerdictLink.ValidDays));
+                var withLink = new JsonObject();
+                foreach (var (k, v) in old.ToList())
+                {
+                    if (k == "items")
+                    {
+                        withLink["view_url"] = linkBase + "verdict/" + token;
+                        withLink["view_url_expires_at"] = SapJson.Timestamp(expires);
+                    }
+                    old.Remove(k);
+                    withLink[k] = v;
+                }
+                var json = withLink.ToJsonString(SapJson.Options);
+                if (await _repo.SetViewTokenAsync(existing.Id, token, expires, json, CancellationToken.None))
+                    res.Json = json;
+                else if (await _repo.GetDecisionByRequestAsync(requestId, ct) is { ResponseJson: { } stored })
+                    res.Json = stored;   // a concurrent replay added the link first
+            }
+            catch (Exception ex) when (ex is JsonException or SapStoreException)
+            {
+                _log.LogWarning("No verdict link added to the replayed decision {DecisionId}: {Error}", existing.DecisionId, ex.Message);
+            }
+            return res;
         }
 
         private static SapCallResult Replay(SapDecisionLogRow existing, string hash, string requestId, SapCallContext caller)

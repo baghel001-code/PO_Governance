@@ -1,13 +1,26 @@
 @page "/verdict/{Token}"
 @layout VerdictLayout
 @attribute [AllowAnonymous]
-@* The verdict behind the view_url of a SAP /decisions answer: opened by anyone with the link (no sign-in), read-only,
-   business fields only. The token is random and unguessable; the API answers 404 (unknown) or 410 (expired). Static
-   server rendering (no interactive circuit). API: AllApiNames.PO_SAP_VERDICT_VIEW. *@
+@* The verdict behind the view_url of a SAP /decisions answer: opened by anyone with the link (no sign-in), read-only.
+   Shows the complete verdict: what to do next, the decision details, every item with its reason and the figures behind
+   it (plan, stock, open POs, headroom, cover days / sell-through), totals and the final SAP document (MRN). The token is
+   random and unguessable; the API answers 404 (unknown) or 410 (expired). Static server rendering. API:
+   AllApiNames.PO_SAP_VERDICT_VIEW. *@
 @using Domain.Entities.Sap
 
 <PageTitle>Verdict @(_v?.PoNumber) · VMM PO Governance</PageTitle>
 <PlatformStyles />
+<style>
+    .pv-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 12px 20px; }
+    .pv-next { border-radius: 10px; padding: 12px 16px; margin-top: 12px; font-size: 13.5px; line-height: 1.5; }
+    .pv-next.allow { background: #f0fdf4; border: 1px solid #bbf7d0; }
+    .pv-next.reduce { background: #fffbeb; border: 1px solid #fde68a; }
+    .pv-next.watch, .pv-next.hold, .pv-next.block { background: #fef2f2; border: 1px solid #fecaca; }
+    .pv-fig { display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: 11.5px; color: var(--ink2, #374151); }
+    .pv-fig b { color: var(--ink, #111827); }
+    .pv-tot td { font-weight: 800; background: var(--sur2, #f8fafc); }
+    @@media print { .pv-bar, .pv-noprint { display: none !important; } .card { box-shadow: none !important; } }
+</style>
 
 @if (_error != null)
 {
@@ -15,38 +28,88 @@
 }
 else if (_v != null)
 {
-    <div class="card" style="padding:16px 20px;margin-bottom:14px" data-testid="pv-head">
-        <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap">
-            <span class="pf-dp @VerdictClass(_v.OverallVerdict)" style="font-size:14px;padding:6px 16px" data-testid="pv-verdict">@_v.OverallVerdict</span>
-            <b style="font-size:18px">PO @(_v.PoNumber ?? "—")</b>
-            <span class="pf-small pf-muted">decision <span class="pf-mono">@_v.DecisionId</span> · request <span class="pf-mono">@_v.RequestId</span></span>
+    var cls = (_v.OverallVerdict ?? "").ToLowerInvariant();
+    <div class="card" style="padding:18px 22px;margin-bottom:14px" data-testid="pv-head">
+        <div style="display:flex;gap:14px;align-items:center;flex-wrap:wrap">
+            <span class="pf-dp @VerdictClass(_v.OverallVerdict)" style="font-size:15px;padding:7px 18px" data-testid="pv-verdict">@_v.OverallVerdict</span>
+            <b style="font-size:20px">PO @(_v.PoNumber ?? "—")</b>
+            <span class="pf-small pf-muted">@_v.Items.Count item(s)</span>
+            <button class="btn-sec pv-noprint" style="margin-left:auto" onclick="window.print()">🖨 Print</button>
         </div>
-        @if (!string.IsNullOrEmpty(_v.SummaryText)) { <div style="margin-top:10px">@_v.SummaryText</div> }
-        <div style="display:flex;flex-wrap:wrap;gap:22px;margin-top:12px" class="pf-small">
+        @if (!string.IsNullOrEmpty(_v.SummaryText)) { <div style="margin-top:10px;font-size:14px" data-testid="pv-summary">@_v.SummaryText</div> }
+        <div class="pv-next @cls" data-testid="pv-next">
+            <b>What happens next:</b> @NextStep(_v)
+            @if (_v.Mode == "SHADOW") { <div class="pf-small" style="margin-top:4px">Shadow mode: the verdict is information only for now - SAP does not route the PO on it.</div> }
+            @if (_v.DataDelayed) { <div class="pf-small" style="margin-top:4px;color:#b45309">The tool's event feed was behind when this was decided (data_delayed) - SAP continues the PO as NOT_CHECKED.</div> }
+        </div>
+    </div>
+
+    <div class="card" style="padding:16px 22px;margin-bottom:14px" data-testid="pv-details">
+        <div style="font-weight:800;margin-bottom:10px">Decision details</div>
+        <div class="pv-grid pf-small">
+            <div><div class="pf-lbl">Decision ID</div><span class="pf-mono">@_v.DecisionId</span></div>
+            <div><div class="pf-lbl">Request ID</div><span class="pf-mono">@_v.RequestId</span></div>
             <div><div class="pf-lbl">Decided</div>@When(_v.DecidedAt)</div>
+            <div><div class="pf-lbl">Requested by SAP</div>@When(_v.RequestedAt)</div>
+            <div><div class="pf-lbl">Verdict</div>@_v.OverallVerdict (@_v.VerdictCode)</div>
+            <div><div class="pf-lbl">Goes to</div>@RouteText(_v.RouteTo)</div>
+            <div><div class="pf-lbl">B&amp;M head needed</div>@(_v.BmHeadRequired ? "yes" : "no")</div>
+            <div><div class="pf-lbl">Mode</div>@_v.Mode</div>
             <div><div class="pf-lbl">Buyer</div>@(_v.BuyerUser ?? "—")</div>
             <div><div class="pf-lbl">Division</div>@(_v.Division ?? "—")</div>
-            <div><div class="pf-lbl">Mode</div>@_v.Mode@(_v.Mode == "SHADOW" ? " (information only)" : "")</div>
-            <div><div class="pf-lbl">Goes to</div>@RouteText(_v.RouteTo)</div>
-            <div><div class="pf-lbl">Final document</div>@(_v.Document == null ? "not posted yet" : _v.Document.DocumentType + " " + _v.Document.DocumentNo + (_v.Document.DocumentDate != null ? " (" + _v.Document.DocumentDate + ")" : ""))</div>
+            <div><div class="pf-lbl">SAP system</div>@(_v.SourceSystem ?? "—")</div>
+            <div><div class="pf-lbl">Rules version</div>@(_v.RulesVersion ?? "—")</div>
+            <div><div class="pf-lbl">Stock data as of</div>@Stamp(_v.BwSnapshot)</div>
+            <div><div class="pf-lbl">Final document</div><span data-testid="pv-doc">@(_v.Document == null ? "not posted yet" : _v.Document.DocumentType + " " + _v.Document.DocumentNo)</span>@(_v.Document?.DocumentDate != null ? " (" + _v.Document.DocumentDate + ")" : "")</div>
         </div>
-        @if (_v.DataDelayed) { <div class="pf-note" style="margin-top:8px;color:#b45309">The tool's event feed was behind when this was decided - SAP continued as NOT_CHECKED.</div> }
     </div>
+
+    <div style="font-weight:800;margin:4px 0 8px">Items</div>
     <PfTable Headers="Headers" Count="_v.Items.Count" Empty="No items.">
         @foreach (var i in _v.Items)
         {
-            <tr>
-                <td>@i.PoItem</td>
-                <td class="pf-mono pf-small">@(i.GenericArticle ?? i.Article)</td>
+            <tr data-testid="pv-item">
+                <td><b>@i.PoItem</b></td>
+                <td class="pf-small"><span class="pf-mono">@(i.GenericArticle ?? "—")</span>@if (!string.IsNullOrEmpty(i.Article) && i.Article != i.GenericArticle) { <br /><span class="pf-mono pf-muted">@i.Article</span> }</td>
                 <td>@i.Colour</td>
-                <td>@i.DeliveryMonth</td>
-                <td>@Qty(i.OrderQty)</td>
+                <td>@MonthText(i.DeliveryMonth)</td>
+                <td class="pf-nowrap">@Js.Fmt(i.OrderQty)@if (i.GroupQty > i.OrderQty) { <br /><span class="pf-small pf-muted">group @Js.Fmt(i.GroupQty)</span> }</td>
                 <td><span class="pf-dp @VerdictClass(i.Verdict)">@i.Verdict</span></td>
-                <td>@(i.MaxQty == null ? "—" : Qty(i.MaxQty.Value))</td>
-                <td class="pf-small" style="max-width:420px"><b>@i.ReasonCode</b><br />@i.ReasonText</td>
+                <td class="pf-nowrap">@(i.MaxQty == null ? "—" : Js.Fmt(i.MaxQty.Value))</td>
+                <td style="min-width:300px;max-width:460px">
+                    <div class="pf-small"><b>@i.ReasonCode</b> <span class="pf-muted">@i.RuleId</span></div>
+                    <div class="pf-small" style="margin:2px 0 4px">@i.ReasonText</div>
+                    <div class="pv-fig" data-testid="pv-figures">
+                        @if (i.PlanQty != null) { <span>Plan <b>@Js.Fmt(i.PlanQty.Value)</b></span> }
+                        @if (i.StockQty != null) { <span>Stock <b>@Js.Fmt(i.StockQty.Value)</b></span> }
+                        @if (i.OpenPoQty != null) { <span>Open PO <b>@Js.Fmt(i.OpenPoQty.Value)</b></span> }
+                        @if (i.HeadroomQty != null) { <span>Headroom <b>@Js.Fmt(i.HeadroomQty.Value)</b></span> }
+                        @if (i.CoverDays != null) { <span>Cover <b>@Js.Fmt(i.CoverDays.Value) days</b></span> }
+                        @if (i.SellThroughPct != null) { <span>Sell-thru <b>@i.SellThroughPct.Value.ToString("0.##") %/day</b></span> }
+                    </div>
+                </td>
+            </tr>
+        }
+        @if (_v.Items.Count > 1)
+        {
+            <tr class="pv-tot">
+                <td colspan="4">Total</td>
+                <td>@Js.Fmt(_v.Items.Sum(x => x.OrderQty))</td>
+                <td></td>
+                <td>@(_v.Items.Any(x => x.MaxQty != null) ? Js.Fmt(_v.Items.Sum(x => x.MaxQty ?? x.OrderQty)) : "—")</td>
+                <td class="pf-small pf-muted">@(_v.Items.Any(x => x.MaxQty != null) ? "max allowed (REDUCE items at their max, others as ordered)" : "")</td>
             </tr>
         }
     </PfTable>
+
+    <div class="card pf-small" style="padding:12px 18px;margin-top:14px" data-testid="pv-legend">
+        <b>Verdicts:</b> <span class="pf-dp dp-allow">ALLOW</span> within the norms ·
+        <span class="pf-dp dp-reduce">REDUCE</span> order at most the max qty ·
+        <span class="pf-dp dp-watch">WATCH</span> category head approves or rejects ·
+        <span class="pf-dp dp-hold">HOLD</span> do not release as is (BLOCK = confirmed slow seller).
+        <b>Figures:</b> plan = sales plan of the delivery window, stock + open PO = what is already there or coming, headroom =
+        how much more fits the cover norm, cover = days of sales covered after this PO, sell-thru = % of stock sold per day.
+    </div>
     <div class="pf-small pf-muted" style="margin-top:10px">This link is valid until @When(_v.ExpiresAt). Anyone with the link can see this page - do not forward it outside the company.</div>
 }
 
@@ -54,7 +117,7 @@ else if (_v != null)
     [Parameter] public string Token { get; set; } = "";
 
     private static readonly TimeSpan Ist = TimeSpan.FromMinutes(330);
-    private static readonly string[] Headers = { "Item", "Generic article", "Colour", "Month", "Order qty", "Verdict", "Max qty", "Reason" };
+    private static readonly string[] Headers = { "Item", "Generic article / article", "Colour", "Delivery", "Order qty", "Verdict", "Max qty", "Reason and figures" };
 
     private SapVerdictView? _v;
     private string? _error;
@@ -67,10 +130,23 @@ else if (_v != null)
     }
 
     private static string When(DateTimeOffset? t) => t == null ? "—" : t.Value.ToOffset(Ist).ToString("dd MMM yyyy HH:mm");
-    private static string Qty(double v) => Js.Fmt(v);
+    private static string Stamp(string? iso) => DateTimeOffset.TryParse(iso, out var t) ? When(t) : iso ?? "—";
+    private static string MonthText(string? m) =>
+        DateTime.TryParseExact(m ?? "", "MM.yyyy", null, System.Globalization.DateTimeStyles.None, out var d) ? d.ToString("MMM yyyy") : m ?? "—";
     private static string RouteText(string? r) => r switch
     {
         "NONE" => "normal approvals", "BUYER" => "buyer (reduce quantity)", "CATHEAD" => "category head", "BMHEAD" => "B&M head", _ => r ?? "—"
+    };
+    private static string NextStep(SapVerdictView v) => v.OverallVerdict switch
+    {
+        "ALLOW" => "all items are within the norms - the PO continues through the normal approvals.",
+        "REDUCE" => "the buyer reduces each REDUCE item to its max qty (or less) and resubmits the PO; the other items stay as ordered.",
+        "WATCH" => "the category head approves or rejects the PO (an exception needs a reason code).",
+        "HOLD" => v.Items.Any(i => i.ReasonCode == "BLOCK")
+            ? "do not release as is - a confirmed slow seller (BLOCK); the category head decides."
+            : "do not release as is - the category head decides.",
+        "BLOCK" => "the article is blocked as a confirmed slow seller - the PO should not be released.",
+        _ => "see the items below."
     };
     private static string VerdictClass(string? v) => v switch
     {

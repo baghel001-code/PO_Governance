@@ -76,6 +76,8 @@ namespace Application.Services.V1.Sap
                 _log.LogWarning("Verdict link base URL {Key} not read: {Error}", cfg.BaseUrlKey, ex.Message);
             }
             if (url == null && _linkBase?.Url != null) url = _linkBase.Value.Url;   // keep the last good one on a read error
+            if (url != null && url != _linkBase?.Url)
+                _log.LogInformation("SAP verdict links: {Base}verdict/<token> (API_BASE_URL {Key} of this environment)", url, cfg.BaseUrlKey);
             if (url == null && _linkBase == null)
                 _log.LogWarning("No verdict link in the SAP answers: API_BASE_URL has no active {Key} row for this environment " +
                                 "(or set SapInterface:VerdictLink:PortalBaseUrl)", cfg.BaseUrlKey);

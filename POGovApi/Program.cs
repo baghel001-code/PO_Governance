@@ -93,6 +93,17 @@ builder.Services.AddSwaggerGen(c =>
 
 var app = builder.Build();
 
+// Which environment this API runs as: it picks appsettings.<Environment>.json and the API_BASE_URL / API_AUTHORIZATION
+// rows (API master URLs, tokens, SAP verdict links). Source: ApiMaster:Environment if set, else ASPNETCORE_ENVIRONMENT
+// (DOTNET_ENVIRONMENT), else Production. Visual Studio sets Development in Properties/launchSettings.json.
+app.Logger.LogInformation(
+    "POGovApi environment: {Environment} (ASPNETCORE_ENVIRONMENT = {AspNetCoreEnvironment}, ApiMaster:Environment = {ApiMasterEnvironment}) - " +
+    "uses the API_BASE_URL / API_AUTHORIZATION rows of this environment and appsettings.{HostEnvironment}.json",
+    InfrastructureRegistration.ApiEnvironment(app.Configuration, app.Services),
+    Environment.GetEnvironmentVariable("ASPNETCORE_ENVIRONMENT") ?? Environment.GetEnvironmentVariable("DOTNET_ENVIRONMENT") ?? "not set (= Production)",
+    string.IsNullOrWhiteSpace(app.Configuration["ApiMaster:Environment"]) ? "not set" : app.Configuration["ApiMaster:Environment"],
+    app.Environment.EnvironmentName);
+
 // ── pipeline ───────────────────────────────────────────────────────────
 app.UseApiExceptionHandling();
 app.UseSapInterface();          // /api/sap/*: trace id, IP allow-list, enabled / storage / database checks, SAP error bodies

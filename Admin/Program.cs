@@ -37,6 +37,13 @@ builder.Services.AddPortal(builder.Configuration, builder.Environment);
 
 var app = builder.Build();
 
+// The portal's environment picks appsettings.<Environment>.json (e.g. MasterApiSettings:Api_Url of staging); every other URL
+// comes from the API master of POGovApi's own environment. Source: ASPNETCORE_ENVIRONMENT (DOTNET_ENVIRONMENT), else Production.
+app.Logger.LogInformation("Portal environment: {Environment} (ASPNETCORE_ENVIRONMENT = {AspNetCoreEnvironment}) - API master from {MasterUrl}",
+    app.Environment.EnvironmentName,
+    Environment.GetEnvironmentVariable("ASPNETCORE_ENVIRONMENT") ?? Environment.GetEnvironmentVariable("DOTNET_ENVIRONMENT") ?? "not set (= Production)",
+    builder.Configuration["MasterApiSettings:Api_Url"]);
+
 // QPS: load the API master list (AllApi.ApiDetails) through AllApiNames.MasterApi = GetAllApi. When POGovApi is not up yet the
 // portal still starts (the error is logged) and APICallService loads the list on the first call.
 {

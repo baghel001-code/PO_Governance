@@ -105,13 +105,15 @@ app.Logger.LogInformation(
     app.Environment.EnvironmentName);
 
 // ── pipeline ───────────────────────────────────────────────────────────
-app.UseApiExceptionHandling();
-app.UseSapInterface();          // /api/sap/*: trace id, IP allow-list, enabled / storage / database checks, SAP error bodies
-app.UseDatabaseReadiness();     // 503 + reason until the database is reachable (the API itself always starts)
+// request log first (outermost): it records the status the client really got, after the error handler turned a business
+// exception (404 not found, 400 validation …) into its JSON answer, instead of logging the exception as a 500
 app.UseSerilogRequestLogging(o => o.GetLevel = (ctx, _, ex) =>
     ex != null || ctx.Response.StatusCode >= 500 ? Serilog.Events.LogEventLevel.Error
     : ctx.Request.Path.StartsWithSegments("/api/v1/GetStatus") || ctx.Request.Path.StartsWithSegments("/api/v1/AuthMe") ? Serilog.Events.LogEventLevel.Debug
     : Serilog.Events.LogEventLevel.Information);
+app.UseApiExceptionHandling();
+app.UseSapInterface();          // /api/sap/*: trace id, IP allow-list, enabled / storage / database checks, SAP error bodies
+app.UseDatabaseReadiness();     // 503 + reason until the database is reachable (the API itself always starts)
 
 if (app.Environment.IsDevelopment())
 {

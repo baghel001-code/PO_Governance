@@ -236,7 +236,7 @@ else
                         else { <span class="pf-muted">not posted yet (POST /api/sap/v1/documents)</span> }
                         @if (_dd.Documents.Count > 1) { <span class="pf-muted"> · replaced: @string.Join(", ", _dd.Documents.Where(x => !x.IsCurrent).Select(x => x.DocumentNo))</span> }
                     </span>
-                    @if (viewUrl != null) { <span>Verdict link: <a href="@viewUrl" target="_blank" rel="noopener">open</a> <span class="pf-muted">(valid until @When(h.ViewExpiresAt))</span></span> }
+                    @if (viewUrl != null) { <span>Verdict link: <a href="@viewUrl" target="_blank" rel="noopener" data-testid="sd-view-link" style="font-weight:800;color:var(--vmm-pink,#E6007E);text-decoration:underline">🔗 Open verdict page ↗</a> <span class="pf-muted">(valid until @When(h.ViewExpiresAt))</span></span> }
                 </div>
                 <PfTable Headers="ItemHeaders" Count="_dd.Items.Count" Empty="No items logged.">
                     @foreach (var i in _dd.Items)

@@ -2,30 +2,34 @@
 
 **Status:** proposal for review · **Date:** 27 Oct 2026 · **Applies to:** POGovApi / Admin portal (this repository)
 
-**Decision asked for:** replace the daily manual upload in 📂 Data Setup with an automatic import: SAP BW writes the
-data files every night (BW Open Hub → CSV, 04:00), the tool loads them by itself, checks them against a control file,
-and keeps the previous data if anything is wrong. Manual upload stays as the fallback. In a later phase, SAP's live PO /
-goods-receipt / return events (already received on `POST /api/sap/v1/events`) keep the open-PO and stock position
+**Decision asked for:** stop uploading Excel / CSV files in 📂 Data Setup. The tool **fetches every dataset directly
+from its original source system** on a schedule — through a **SQL Server linked server** (a read-only database
+connection to the source) or through the **source's API** (SAP OData / REST) — checks that what it received is
+complete, and only then makes it the data everyone works with. If a pull fails, the previous data stays in use and
+the responsible teams are alerted. No file is exported, copied or uploaded by anybody. In a later phase, SAP's live
+PO / goods-receipt / return events (already received on `POST /api/sap/v1/events`) keep the open-PO and stock position
 current during the day.
 
-Nothing in the decision rules changes. The engines keep reading the same datasets (F1…F4, Universe Master, BSR, masters);
-only the way the datasets arrive changes.
+Nothing in the decision rules changes. The engines keep reading the same datasets (F1…F4, Universe Master, BSR,
+masters); only **how the datasets get into the tool** changes.
 
 ---
 
 ## 1. Summary
 
-| | Today | After phase 1 (BW feed) | After phase 3 (live position) |
+| | Today | After phase 1 (direct pull) | After phase 3 (live position) |
 |---|---|---|---|
-| Who loads the data | A planner, by hand, every morning | Nobody — the tool, automatically at ~04:30 | Same, plus SAP events during the day |
-| How | Excel / CSV / ZIP upload in Data Setup | BW Open Hub CSV files + control file in a landing folder | + `POST /events` applied to a live open-PO / stock position |
-| Freshness | Whenever someone uploads (often mid-morning) | Previous day's close, ready before office hours | Near real time for POs, receipts and returns |
-| Checks | Visual; row counts in the upload report | Control file: row count + total qty per file, master checks, held-aside rows | + event order / cut-off checks |
-| If data is missing | Decisions run on yesterday's (or older) upload | Previous base is kept, BW team + planning are emailed, `data_delayed` can be raised | Same |
-| SAP `bw_snapshot` | Upload time of F1 | BW snapshot time from the control file | Same |
+| Who loads the data | A planner, by hand, every morning | Nobody — the tool pulls it on a schedule (e.g. 04:30 after the BW night load) | Same, plus SAP events during the day |
+| How | Excel / CSV / ZIP upload in Data Setup | **Linked server** (SQL query on the source database) or **API** (OData / REST) per dataset | + `POST /events` applied to a live open-PO / stock position |
+| Files | Exported, renamed and uploaded by people | **None** | None |
+| Freshness | Whenever someone uploads (often mid-morning) | Previous day's close, ready before office hours; masters / plan as often as needed | Near real time for POs, receipts and returns |
+| Completeness check | Visual | Source-side **count and quantity totals** for the same snapshot, master checks, held-aside rows | + event order / cut-off checks |
+| If a pull fails | Decisions run on yesterday's (or older) upload | Previous data kept, BW / IT / planning alerted, retried automatically | Same |
+| SAP `bw_snapshot` | Upload time of F1 | Snapshot time reported by the source | Same |
 
-Planned effort (tool side): **phase 1 about 5–6 weeks**, **phase 2 (plan + remaining masters) about 2 weeks**, **phase 3
-about 6–8 weeks** after the open questions in §12 are answered. BW and SAP work is on top (§11).
+Planned effort (tool side, after the open questions in §12 are answered): **phase 1 about 5–6 weeks**, **phase 2
+(plan, GRC, business masters) about 2–3 weeks**, **phase 3 about 6–8 weeks**. Source-side work (views / services,
+users, network) is on top (§11).
 
 ---
 
@@ -66,7 +70,7 @@ All paths end in the same commit: one **upload batch** (`UPL-yyyyMMdd-nnnn`), on
 update, upload log + audit line, cache invalidation; for `catheadmap` also the SCR login sync. History keeps every
 version, and any older version or whole upload can be made current again.
 
-**This commit is the seam for automation:** the automatic import produces the same rows and calls the same
+**This commit is the seam for automation:** the automatic pull produces the same rows and calls the same
 `SaveVersionAsync`, so the engines, History, restore and audit work unchanged.
 
 ### 2.3 Problems with the manual process
@@ -84,313 +88,356 @@ version, and any older version or whole upload can be made current again.
 ## 3. Target architecture
 
 ```
- ┌──────────── SAP BW ───────────┐      ┌───────────── SAP ECC / S/4 ─────────────┐
- │ process chain, 04:00          │      │ PO save / GR / return BAdIs → bgRFC     │
- │  stock · open PO · sales ·    │      └───────────────┬─────────────────────────┘
- │  article · universe · colour  │                      │ POST /api/sap/v1/events (exists)
- │  weekly: BSR                  │                      ▼
- │  Open Hub → CSV + CONTROL     │         SAP_EVENTS (stored, Applied = 0 today)
- └──────────────┬────────────────┘                      │ phase 3: applied after the cut-off
-                │ SFTP / shared folder                   ▼
-                ▼                              LIVE_OPEN_PO · LIVE_STOCK_ADJ
-   landing folder  \\tool-server\pogov-feed\inbox                │
-                │                                                │
-                ▼                                                │
-   ┌──────────── POGovApi: DataFeedService (new) ─────────────┐  │
-   │ 1 wait for VMM_CONTROL_<date>.csv                         │  │
-   │ 2 check every file: present, row count, total qty, hash   │  │
-   │ 3 parse CSV → canonical rows (mapping §5)                 │  │
-   │ 4 master checks; unknown GM / colour rows held aside      │  │
-   │ 5 commit ALL datasets as ONE upload batch (source = bw)   │◄─┘ (phase 3: position read by
-   │ 6 archive files, record run, notify, warm decision cache  │      the engines next to F1/F2)
-   └──────────────┬────────────────────────────────────────────┘
-                  ▼
-   dataset_versions + manifest (unchanged) → DatasetCache
-                  → Tool 1 · Tool 2 · SAP decisions · analytics
-                  ▲
-   Data Setup page: feed status, "Run import now",
-                    manual upload still possible (fallback / override)
+  SOURCE SYSTEMS (read only)                       PO GOVERNANCE
+ ┌──────────────────────────────┐
+ │ SAP BW / BW on HANA          │  linked server   ┌──────────────────────────────────────────┐
+ │  views: stock, open PO,      │ ───────────────► │ SQL Server (POGovernance database)       │
+ │  sales, article, universe,   │  OPENQUERY       │  PRO_FEED_PULL  → FEED_STG_<dataset>     │
+ │  colour, BSR                 │                  │  (staging tables, one per dataset)       │
+ └──────────────────────────────┘                  └───────────────┬──────────────────────────┘
+ ┌──────────────────────────────┐                                  │
+ │ SAP Gateway / S/4 OData,     │  HTTPS API       ┌───────────────▼──────────────────────────┐
+ │ SFCC/SFCR plan service,      │ ───────────────► │ POGovApi: DataPullService (new)          │
+ │ other REST APIs              │  paged JSON      │  1 is the source ready? (load status)    │
+ └──────────────────────────────┘                  │  2 pull each dataset (SQL or API)        │
+                                                   │  3 control totals: count + sum match?    │
+ ┌──────────────────────────────┐                  │  4 map to the tool's columns             │
+ │ SAP ECC / S/4 (live)         │  POST /events    │  5 masters first, unknown rows aside     │
+ │  PO / GR / return BAdIs      │ ───────────────► │  6 commit all datasets as ONE batch      │
+ └──────────────────────────────┘  (exists)        │  7 record run, alert, warm the cache     │
+                                                   └───────────────┬──────────────────────────┘
+                                                                   ▼
+                       dataset_versions + manifest (unchanged) → DatasetCache
+                              → Tool 1 · Tool 2 · SAP decisions · analytics
+                       Data Setup page: pull status per dataset, "Pull now", run history
 ```
 
-**Why files from BW, not a live connection to BW:** this is the delivery agreed in the Developer Brief (§04) and the
-least coupling: BW owns the extraction logic and the cut-off; the tool needs no BW user, no RFC library and no network
-path into BW; a failed night is visible as missing files. The alternatives are in §4.
+**The principle:** the source system owns the data and the business logic of the extract (which stock, which POs,
+cut-off); the tool only **reads** a defined view or service per dataset, at a time when the source says its data is
+complete, and checks that it received everything.
 
 ---
 
-## 4. Delivery options considered
+## 4. Connection options
 
-| Option | How | For | Against | Verdict |
-|---|---|---|---|---|
-| **A. BW Open Hub → CSV + control file** (SFTP or shared folder) | BW process chain ends with an Open Hub Destination per dataset, writes CSV into the landing folder, control file last | Agreed in the Developer Brief; simple; BW keeps the business logic and the cut-off; files are an audit trail; replayable | One-day-old data until phase 3 | **Recommended** |
-| B. Tool pulls BW queries (OData / BW query via HTTP) | Scheduled job in the tool calls published BW queries | No files to manage | Needs a BW technical user, query performance at night, paging of millions of rows, harder to reconcile | Fallback if Open Hub is not available |
-| C. Direct database read (BW on HANA calculation views via ODBC) | SQL reads | Fast | Tight coupling to BW internals; needs HANA client and DB user; security review | Not recommended |
-| D. SAP RFC / BAPI from the tool | NCo / RFC calls for stock, POs | Real time | Heavy (SAP NCo licence/library), puts query load on ECC, duplicates BW logic | Not recommended — SAP events cover the real-time part |
-| E. Keep manual upload, improve it | Better ZIP rules | No project | Does not solve freshness | Stays only as fallback |
+### 4.1 Linked server (direct SQL read)
+
+A **linked server** is a connection defined inside the tool's SQL Server to another database. A stored procedure in
+the POGovernance database runs the source query with `OPENQUERY`, so the filtering and aggregation run **on the source**
+and only the result travels:
+
+```sql
+-- example: F1 stock of one snapshot, from a BW-on-HANA view exposed for the tool
+INSERT INTO dbo.FEED_STG_F1 (Run_Id, Generic_Material, Colour, Brand_Type, Division, Mc_Cd, Mc_Desc, Mrp, Flag, Stock_Qty)
+SELECT @Run_Id, *
+FROM OPENQUERY(BW_HANA, 'SELECT GENERIC_MATERIAL, COLOUR, BRAND_TYPE, DIVISION, MC_CD, MC_DESC, MRP, FLAG, STOCK_QTY
+                         FROM "POGOV"."V_STOCK" WHERE SNAPSHOT_DATE = CURRENT_DATE - 1');
+```
+
+| Source | Linked-server provider |
+|---|---|
+| SAP BW on HANA / BW/4HANA, S/4HANA (HANA database) | SAP HANA ODBC driver (HDBODBC) via MSDASQL |
+| A data warehouse on SQL Server | SQL Server (native) |
+| Oracle / other DW | the vendor's OLE DB / ODBC provider |
+
+- The source team publishes **one read-only view per dataset** (`V_STOCK`, `V_OPEN_PO`, `V_SALES_45D`, …) with exactly
+  the fields in §5; the tool never reads raw SAP tables.
+- Login: a **read-only technical database user** on the source, mapped in the linked server (`sp_addlinkedsrvlogin`);
+  no write rights.
+- Best for **large datasets** (sales of 45 days, stock, open POs): set-based, fast, no paging.
+
+### 4.2 API (OData / REST)
+
+The tool calls an HTTP service of the source and receives JSON:
+
+- **SAP BW queries published as OData** (BW query with the "OData" flag, SAP Gateway), **S/4HANA CDS views** exposed as
+  OData services, the **SFCC / SFCR** plan service, or any REST API of another system.
+- Paging with `$top` / `$skip` (or server-driven `__next` / skip tokens), `$select` to the needed fields, `$filter` on
+  the snapshot date.
+- Authentication with a **technical user** (Basic) or **OAuth 2.0 client credentials**.
+- The URLs and tokens live in the tool's existing **API master per environment**: `API_BASE_URL` (base URL of each
+  source per Development / Staging / Production) and `API_AUTHORIZATION` (credentials per API and environment) — the
+  same mechanism the portal already uses, so test systems are used from staging and production systems from
+  production automatically.
+- Best for **masters and the plan**, for systems that do not allow database access, and where the source already has
+  services.
+
+### 4.3 Comparison and recommendation
+
+| | Linked server | API (OData / REST) |
+|---|---|---|
+| Volume (millions of rows) | ✓ best | paging, slower |
+| Needs DB access to the source | yes (driver, DB user, firewall to DB port) | no (HTTPS only) |
+| Business logic location | source view | source service |
+| Security review | DB-level read user | service user / OAuth |
+| Change of a field | change the view + mapping | change the service + mapping |
+| Typical use here | stock, open PO, sales, BSR, article | plan (SFCC/SFCR), colour master, SCR / business masters, sources without DB access |
+
+**Recommendation: support both, configured per dataset**, with one common pipeline (checks, mapping, commit). Start
+with **linked server to BW (on HANA)** for the heavy daily datasets and **OData** for the plan and any master that has
+a service. Which source and which connector per dataset is a configuration row (§8.1), not code — it can be switched
+later (e.g. from linked server to an OData service) without a new release.
+
+Not chosen: SAP RFC / BAPI calls from the tool (needs the SAP .NET connector, loads the ERP during the day and
+duplicates BW logic — the live part is covered by the SAP events); file exports (what this design removes).
 
 ---
 
-## 5. Dataset by dataset: source, schedule and mapping
+## 5. Dataset by dataset: source, connector, schedule and mapping
 
-The file names and column lists below are the ones in the Developer Brief (`VMM_<DATASET>_<YYYYMMDD>.csv`). The
-**right-hand column** is what the tool's code actually reads today, so the importer must produce exactly those headers
-(or the engines must be taught the new names — §9.4 recommends mapping in the importer).
+The **source fields** below follow the Developer Brief's data list; the **tool column** is what the code reads today
+(Appendix A). The source team provides a view / service with these fields; the pull maps them to the tool columns.
 
 ### 5.1 Overview
 
-| # | Tool dataset | File | Source | Frequency | Phase |
+| # | Tool dataset | Source object (to be provided) | Connector (proposed) | Frequency | Phase |
 |---|---|---|---|---|---|
-| 1 | `f1` Stock | `VMM_STOCK` | BW (closing stock, company level) | daily 04:00 | 1 |
-| 2 | `f2` Pending PO | `VMM_OPENPO` | BW (released vendor POs, open qty) | daily 04:00 | 1 |
-| 3 | `f3` Sales Trend | `VMM_SALES` | BW (POS sales, last 45 days) | daily 04:00 | 1 |
-| 4 | `um` Universe Master | `VMM_UNIVERSE` | BW | daily 04:00 | 1 |
-| 5 | `artmaster` Article Master | `VMM_ARTICLE` | BW | daily 04:00 | 1 |
-| 6 | `colmaster` Colour Master | `VMM_COLOUR` | SAP (via BW) | daily 04:00 | 1 |
-| 7 | `bsr` BSR | `VMM_BSR` | BW | weekly (e.g. Monday 04:00) | 1 |
-| 8 | `f4` Forecast / plan | `VMM_PLAN` | SAP SFCC / SFCR — manual upload until then | when changed (later hourly) | 2 |
-| 9 | `attrrel` Attr Relevance | — | Planning (manual) | when changed | stays manual |
-| 10 | `catheadmap` SCR mapping | — | Merchandising (manual) — or HR/merch system later | when changed | stays manual (option: phase 2) |
-| 11 | `grc` GRC buying history | `VMM_GRC` (optional) | BW goods receipts | weekly | 2 (optional) |
-| — | Live PO changes, GR, returns | `POST /events` | SAP R/3 | real time | 3 |
+| 1 | `f1` Stock | BW closing stock, company level — view `V_STOCK` | linked server | daily after BW night load | 1 |
+| 2 | `f2` Pending PO | BW released vendor POs, open qty — view `V_OPEN_PO` | linked server | daily | 1 |
+| 3 | `f3` Sales Trend | BW POS sales of the last 45 days — view `V_SALES_45D` | linked server | daily | 1 |
+| 4 | `um` Universe Master | BW — view `V_UNIVERSE` | linked server | daily | 1 |
+| 5 | `artmaster` Article Master | BW — view `V_ARTICLE` | linked server | daily | 1 |
+| 6 | `colmaster` Colour Master | SAP colour characteristic — view or OData | linked server / OData | daily | 1 |
+| 7 | `bsr` BSR | BW best-seller report, all seasons — view `V_BSR` | linked server | weekly | 1 |
+| 8 | `f4` Forecast / plan | SAP SFCC / SFCR plan | OData / REST | when the plan version changes (later hourly) | 2 |
+| 9 | `grc` GRC buying history | BW goods receipts by month / week — view `V_GRC` | linked server | weekly | 2 |
+| 10 | `catheadmap` SCR mapping | merchandising / HR system (buyer & category head per Brand × MC × MRP), if one exists | API or linked server | daily | 2 |
+| 11 | `attrrel` Attr Relevance | planning-owned table; if no system holds it, maintained **in the tool** (edit screen, no Excel) | — / in-tool | when changed | 2 |
+| — | Live PO changes, GR, returns | SAP R/3 events | `POST /events` (exists) | real time | 3 |
 
-Fixed rules from the Developer Brief that every file follows: **company level** (all sites summed), **vendor POs only
-(no STO)**, open PO = **released** POs only, open qty = ordered − received + returned, **no real-time sales**.
+Fixed rules from the Developer Brief that every source view follows: **company level** (all sites summed), **vendor POs
+only (no STO)**, open PO = **released** POs only, open qty = ordered − received + returned, **no real-time sales**.
 
-### 5.2 `VMM_STOCK` → `f1`
+### 5.2 Stock → `f1`
 
-| BW file column | Tool column (`f1`) | Rule |
+| Source field | Tool column (`f1`) | Rule |
 |---|---|---|
 | Generic Material | `Generic Material` | leading zeros removed |
 | Colour | `Color` | colour **code** (as in Colour Master) |
 | Brand Type | `Brand Type` | |
 | Division | `DIV` | |
-| MC CD | `MC CD` | |
-| MRP | `MRP` | number, no thousand separator |
+| MC CD, MC Desc | `MC CD`, `MC DESC` | |
+| MRP | `MRP` | number |
 | Flag | `BOGO/NON-BOGO` | `BOGO` / `NON-BOGO` exactly as in F4 / Universe |
-| Stock Qty | `OP STK` | closing stock **incl. in-transit** (today's raw export adds `Stk q + In Q`) — **confirm** |
-| Article, Stock Value, As-of Date | — | stored in meta / checked; As-of Date must equal the control-file snapshot date |
-| *(not in brief)* MC Desc | `MC DESC` | **add** — used by Attribute Analysis |
+| Stock Qty | `OP STK` | closing stock **incl. in-transit** (today's manual export adds `Stk q + In Q`) — **confirm** |
+| Snapshot date / time | — | must match the snapshot of the run; becomes `bw_snapshot` |
 
-### 5.3 `VMM_OPENPO` → `f2`
+### 5.3 Open PO → `f2`
 
-| BW file column | Tool column (`f2`) | Rule |
+| Source field | Tool column (`f2`) | Rule |
 |---|---|---|
-| PO Number | `PO Number` | |
-| PO Item | — | kept in meta; Tool 2 works per PO line = PO + GM + colour + month |
-| Generic Material, Colour, Brand Type, MC CD, MRP, Flag | `Generic Material`, `Color`, `Brand Type`, `MC CD`, `MRP`, `BOGO/NON-BOGO` | as F1 |
-| Delivery Date (YYYY-MM-DD) | `Delivery Month` | converted to **`MM.YYYY`** (first schedule line) |
-| Pending Qty | `Pending Qty` | = ordered − received + returned (BW computes) |
-| Vendor | `Vendor Name` | the tool shows the **name**; brief lists only `Vendor` → **add Vendor Name** |
-| *(not in brief)* PO Value | `PO Value` | **add** — Tool 2 "₹ Value at Risk" needs it |
-| *(not in brief)* Division, MC Desc, Season, Art Desc | `DIV`, `MC DESC`, `Season`, `ART DESC` | **add** (resolve map fallback when a GM is not in Article Master) |
-| Ordered / Received / Returned Qty, Release Date | — | meta; used for checks and phase 3 |
+| PO Number (EKKO-EBELN) | `PO Number` | |
+| Generic Material (MARA-SATNR), Colour, Brand Type, Division, MC CD, MC Desc, MRP, Flag | `Generic Material`, `Color`, `Brand Type`, `DIV`, `MC CD`, `MC DESC`, `MRP`, `BOGO/NON-BOGO` | |
+| Delivery Date (first schedule line, EKET-EINDT) | `Delivery Month` | converted to **`MM.YYYY`** |
+| Pending Qty | `Pending Qty` | ordered − received + returned, computed in the source view |
+| PO Value | `PO Value` | needed for Tool 2 "₹ Value at Risk" |
+| Vendor Name | `Vendor Name` | |
+| Season, Article description | `Season`, `ART DESC` | resolve-map fallback when a GM is not in Article Master |
+| PO item, ordered / received / returned qty, release date | — | kept for checks and phase 3 |
 
-### 5.4 `VMM_SALES` → `f3`
+### 5.4 Sales → `f3`
 
-The brief delivers **long format** (one row per GM × colour × day); the tool reads **wide format** (`Day 1` … `Day 45`,
-oldest first). The importer pivots:
+The tool reads **one row per GM × colour** with `Day 1` … `Day 45` (oldest first). Either the source view returns that
+**wide** shape directly (preferred, far fewer rows) or it returns one row per day and the pull pivots it:
 
-| BW file column | Tool column (`f3`) | Rule |
+| Source field | Tool column (`f3`) | Rule |
 |---|---|---|
-| Generic Material, Colour, Brand Type, MC CD, MRP, Flag | same as F1 | one output row per GM × colour |
-| Date + Sales Qty | `Day 1` … `Day N` | N = `params.mixWindowDays` (45); `Day 1` = snapshot date − N + 1; missing days = 0 |
+| Generic Material, Colour, Brand Type, MC CD, MRP, Flag | same as F1 | |
+| Date + Sales Qty (or Day 1…Day 45) | `Day 1` … `Day N` | N = `params.mixWindowDays` (45); `Day 1` = snapshot date − N + 1; missing days = 0 |
 
-Volume note: long format is ~45 × the wide row count. Alternative to agree with BW: deliver wide (`Day 1..45`) directly.
+### 5.5 Universe Master → `um`
 
-### 5.5 `VMM_UNIVERSE` → `um`
-
-| BW file column | Tool column | Rule |
+| Source field | Tool column | Rule |
 |---|---|---|
 | Generic Material | `Generic Material` | presence = Single Concept |
-| MC CD, MRP, Flag | `MC CD`, `MRP`, `Flag (BOGO/NON-BOGO)` | |
-| Concept (Single), Valid From | — | only rows with Concept = Single and Valid From ≤ snapshot date are loaded |
-| *(not in brief)* Brand Type, Division, MC Desc | `Brand Type`, `Division`, `MC DES` | **add** (resolve map) |
+| Brand Type, Division, MC CD, MC Desc, MRP, Flag | `Brand Type`, `Division`, `MC CD`, `MC DES`, `MRP`, `Flag (BOGO/NON-BOGO)` | |
+| Concept, Valid From | — | only Single Concept rows valid on the snapshot date |
 
-### 5.6 `VMM_ARTICLE` → `artmaster`
+### 5.6 Article Master → `artmaster`
 
-| BW file column | Tool column | Rule |
+| Source field | Tool column | Rule |
 |---|---|---|
-| Generic Material | `Generic Material` | one row per GM (article/colour rows collapsed) |
+| Generic Material, Article description | `Generic Material`, `ART DESC` | one row per GM |
 | Brand Type, Division, MC CD, MC Desc, MRP, Flag, Season | `Brand Type`, `Division`, `MC CD`, `MC DESC`, `MRP`, `Flag (BOGO/NON-BOGO)`, `Season` | Season drives Current / Fallback season selection |
 | Style, Fit, Product Material, Design | same names | Recommendation dimensions, Attribute Analysis |
 | Vendor, Vendor Name | `Vendor`, `VENDOR NAME` | |
-| *(not in brief)* Article description | `ART DESC` | **add** |
 
-### 5.7 `VMM_COLOUR` → `colmaster`
+### 5.7 Colour Master → `colmaster`
 
-| BW file column | Tool column | Rule |
+| Source field | Tool column | Rule |
 |---|---|---|
-| Colour Code | `Colour` | the tool's lookup reads `Colour`/`Color` and `Colour Desc`/`Color Desc`/`Description` — **the brief's names do not match**, the importer must rename |
+| Colour Code | `Colour` | the tool reads `Colour` / `Color` and `Colour Desc` / `Color Desc` / `Description` |
 | Colour Description | `Colour Desc` | |
 
-### 5.8 `VMM_BSR` → `bsr` (weekly)
+### 5.8 BSR → `bsr` (weekly)
 
-| BW file column | Tool column | Rule |
+| Source field | Tool column | Rule |
 |---|---|---|
 | Generic Material, Colour, MC CD, MRP, Flag | `Generic Material`, `Color`, `MC CD`, `MRP`, `Article Type` | |
 | Weeks on Floor | `WEEK ON FLOOR` | |
-| Avg Per-Day Sell-Thru % | `AVG PERDAY SELL THRU%` | percent number (e.g. `5.2` → stored as `5.2%`) |
-| Season, Snapshot Week | — | the file holds **all seasons**; season of a GM still comes from Article Master |
+| Avg Per-Day Sell-Thru % | `AVG PERDAY SELL THRU%` | percent number |
+| Season, Snapshot Week | — | all seasons in one pull; a GM's season still comes from Article Master |
 
-Change of behaviour: today BSR **accumulates** over uploads; the feed **replaces** BSR with the weekly file (one complete
-all-seasons file). Days without a new BSR file keep the current BSR version.
+Change of behaviour: today BSR **accumulates** over uploads; the pull **replaces** BSR with the complete weekly
+result. Between weekly pulls the current BSR stays.
 
-### 5.9 `VMM_PLAN` → `f4` (phase 2)
+### 5.9 Plan → `f4` (phase 2, API)
 
-| File column | Tool column | Rule |
+| Source field | Tool column | Rule |
 |---|---|---|
-| MC CD, MRP, Flag (+ Brand Type — **add**) | `MC CD`, `MRP`, `BOGO/NON-BOGO`, `Brand Type` | one row per Brand × MC × MRP × Flag |
-| Month + Plan Qty | `MM.YYYY` columns | pivot long → wide |
-| Plan Version | — | load only when the version changed |
+| Brand Type, MC CD, MRP, Flag | `Brand Type`, `MC CD`, `MRP`, `BOGO/NON-BOGO` | one row per bucket |
+| Month + Plan Qty | `MM.YYYY` columns | pivot to wide |
+| Plan Version | — | pulled only when the version changed |
 
-Until SFCC/SFCR is connected, the planner keeps uploading F4 by hand; the feed never overwrites a manually uploaded F4
-with an older plan version.
+### 5.10 GRC → `grc` (phase 2)
 
-### 5.10 What stays manual
+Goods received per Brand × GM × colour × month (or week) with quantity and value, straight into the tool's GRC row
+shape (`brand, gm, artdesc, colour, period, periodType, qty, value`) — no Excel layout parsing any more.
 
-- **Attr Relevance Master** and **SCR Products / Cat Head Mapping**: business-maintained, change rarely; keep the
-  Data Setup slots. SCR upload keeps creating logins.
-- **Parameters** and **Season Selection** (Data Setup sidebar).
-- Manual upload of **any** dataset stays possible as an override (§8.4).
+### 5.11 Business-owned masters
+
+- **SCR mapping (`catheadmap`)** and **Attr Relevance (`attrrel`)** are business decisions, not transactions. If a
+  system holds them, they are pulled like any other dataset (SCR pulls keep creating logins). If not, they are
+  **maintained in the tool** on a small edit screen (add / change / delete rows, history and audit) — so no Excel file is
+  needed anywhere.
+- **Parameters** and **Season Selection** stay in the Data Setup sidebar as today.
 
 ---
 
-## 6. File contract (to agree with the BW team)
+## 6. Source contract (to agree with the BW / SAP / IT teams)
 
 | Item | Rule |
 |---|---|
-| Location | `\\<tool-server>\pogov-feed\inbox` (shared folder) **or** SFTP account `pogov_feed` → same folder. Write-only for BW, read/move for the tool service account |
-| File names | `VMM_<DATASET>_<YYYYMMDD>.csv`, date = **snapshot (business) date**, e.g. `VMM_STOCK_20261026.csv` |
-| Encoding | UTF-8 (BOM optional), comma separator, `"` quoting, first row = header, **fixed column order** |
-| Numbers | dot decimal, no thousand separators, no currency signs; empty = 0 only where stated |
-| Dates | `YYYY-MM-DD`; timestamps ISO 8601 with offset |
-| Codes | GM and article **without** leading zeros (or the importer strips them); colour = Colour Master code |
-| Writing | write to `*.tmp`, rename to `.csv` when complete; **control file last** |
-| Control file | `VMM_CONTROL_<YYYYMMDD>.csv`: `File Name, Row Count, Total Qty, Snapshot Date, Extraction Time` — one line per data file of that night (`Total Qty` = sum of the quantity column: Stock Qty / Pending Qty / Sales Qty / Plan Qty; empty for masters) |
-| Cut-off | `Extraction Time` = the moment the snapshot represents (e.g. `2026-10-26T23:59:59+05:30`); becomes `bw_snapshot` in SAP answers and the cut-off for phase 3 |
-| Re-delivery | BW may re-deliver a night by writing the same names again with a new control file; the tool re-imports |
-| Weekly BSR | listed in the control file only on BSR days |
+| Objects | one read-only **view** (linked server) or **service entity set** (API) per dataset, with the fields of §5, field names fixed |
+| Snapshot | every view / service filters on a **snapshot date**; all datasets of one run are read for the **same** snapshot |
+| Readiness | a **load-status** view / endpoint per source: `Source, Snapshot_Date, Status (COMPLETE / RUNNING / FAILED), Completed_At, Cut_Off_Time` — e.g. from the BW process-chain log; the tool reads only when `COMPLETE` |
+| Control totals | per dataset a **control query** for the same snapshot: `COUNT(*)` and `SUM(quantity)` (stock qty / pending qty / sales qty / plan qty) — the tool compares them with what it received |
+| Codes | GM and article without leading zeros (or the tool strips them); colour = Colour Master code |
+| Numbers / dates | numeric types (no text with separators); dates as date types; timestamps with time zone |
+| Users | read-only technical DB user (linked server) / technical service user or OAuth client (API), one per environment (QA source for staging, production source for production) |
+| Network | tool SQL Server → source DB port (linked server) and / or tool API server → source HTTPS (API); firewall rules per environment |
+| Performance | views tuned for a full read of one snapshot within the pull window (target < 15 min for the nightly set) |
+| Change control | a change of a view / service field is announced to the tool team (mapping update) |
 
 ---
 
-## 7. Import process (DataFeedService)
+## 7. The pull process (DataPullService)
 
-A new background service in POGovApi, following the pattern of the existing `BackupBackgroundService` (polls every few
-minutes, acts once per business day after a configured hour, uses the business time zone `Asia/Kolkata`).
+A new background service in POGovApi, following the pattern of the existing `BackupBackgroundService` (checks every
+few minutes, acts on its schedule, uses the business time zone `Asia/Kolkata`).
 
-### 7.1 Schedule
+### 7.1 Schedule and settings
 
 | Setting | Default | Meaning |
 |---|---|---|
-| `DataFeed:Enabled` | `false` | master switch (off until go-live) |
-| `DataFeed:InboxDir` / `ArchiveDir` / `ErrorDir` | `D:\pogov-feed\inbox` … | folders |
-| `DataFeed:StartAt` | `04:15` | start looking for today's control file |
-| `DataFeed:LateAfter` | `06:30` | no control file by then → "feed late" alert |
-| `DataFeed:GiveUpAt` | `09:00` | stop waiting; decisions keep yesterday's base (alert sent) |
-| `DataFeed:PollMinutes` | `5` | check interval |
-| `DataFeed:MaxAgeDays` | `1` | snapshot older than this → `data_delayed` warning on SAP answers (optional) |
-| `DataFeed:AlertTo` | BW team, planning, IT | email recipients |
+| `DataPull:Enabled` | `false` | master switch (off until go-live) |
+| `DataPull:DailyStartAt` | `04:30` | start checking the sources' load status |
+| `DataPull:LateAfter` | `06:30` | sources not ready by then → "data late" alert |
+| `DataPull:GiveUpAt` | `09:00` | stop waiting; decisions keep the previous data (alert sent) |
+| `DataPull:PollMinutes` | `5` | readiness check interval |
+| `DataPull:CommandTimeoutSeconds` | `900` | per linked-server query / API page |
+| `DataPull:MaxRejectPct`, `MaxSwingPct` | `2`, `30` | held-aside rows limit; plausibility vs previous day |
+| `DataPull:AlertTo` | BW, IT, planning | email recipients |
+| per dataset (table `FEED_DATASET`) | | connector, source object, frequency (daily / weekly / on version change), active |
 
 ### 7.2 Steps of one run
 
-1. **Detect.** `VMM_CONTROL_<date>.csv` for a date newer than the last successful import appears.
-2. **Completeness.** Every file named in the control file exists and is complete (no `.tmp`); unknown extra files are
-   ignored and reported.
-3. **Reconcile.** For each file: row count = control `Row Count`; sum of the quantity column = `Total Qty` (to the unit);
-   SHA-256 recorded. Any mismatch → **run fails** (step 9).
-4. **Parse & map.** Read the CSV with the existing delimited reader (UTF-8 path), map columns per §5 into the tool's
-   canonical headers, convert dates (`Delivery Date` → `MM.YYYY`), pivot sales and plan to wide format, strip leading
-   zeros.
-5. **Masters first.** Load Colour, Article and Universe masters into the new snapshot before the transactional files.
-6. **Reference checks.** F1 / F2 / F3 / BSR rows whose GM is in no master, or whose colour is not in Colour Master, are
-   **held aside** (not loaded) and listed in `DATA_FEED_REJECT`; a run fails only if held-aside rows exceed a threshold
-   (`DataFeed:MaxRejectPct`, default 2 %).
-7. **Plausibility.** Compare with the current base: total stock, total open PO qty and row counts within ±`MaxSwingPct`
-   (default 30 %) of yesterday, else **warning** (not failure) for planning to look at.
-8. **Commit (one transaction per run).** One upload batch `UPL-…` with source **`bw-feed`** and the control-file date
-   as label; one new version per dataset (same `SaveVersionAsync` as manual uploads); manifest updated once; BSR
-   **replaced** (not appended) when a BSR file is present; F4 only when the plan version changed. `bw_snapshot` = control
-   `Extraction Time` (stored in the dataset meta of F1, read by `SapDecisionService.BwSnapshot`). Cache invalidated;
-   `DecisionWarmUpService` loads the new snapshot within 30 s.
-9. **On failure.** Nothing is committed; the **previous base stays current**; files move to `ErrorDir/<date>/`; the
-   run is recorded with the reason; alert email to `AlertTo`; the Data Setup page shows the red feed status. Manual
-   upload or "Run import now" after BW re-delivers.
-10. **Archive & record.** Files move to `ArchiveDir/<date>/` (kept `ArchiveKeepDays`, default 60); run, files and
-    counts recorded; audit line `📂 Upload` with "BW feed".
+1. **Ready?** Read the load status of every source involved. Proceed only when all report `COMPLETE` for a snapshot
+   newer than the current one; else wait (step 1 again) until `GiveUpAt`.
+2. **Pull.** For each due dataset (masters first): linked server → `PRO_FEED_PULL @Dataset` fills
+   `FEED_STG_<dataset>` with `OPENQUERY`; API → page through the service and bulk-insert into the same staging table.
+3. **Control totals.** Run the dataset's control query at the source; row count and quantity sum must equal what was
+   staged. Any mismatch → the run **fails** (step 8), nothing is used.
+4. **Map.** Staging rows → the tool's canonical columns (§5, Appendix A): `MM.YYYY` months, sales / plan pivot,
+   leading zeros stripped, flags normalised.
+5. **Reference checks.** Rows whose GM is in no master, or whose colour is not in Colour Master, are **held aside**
+   (`FEED_REJECT`), not loaded; above `MaxRejectPct` the run fails.
+6. **Plausibility.** Totals vs the current data within `MaxSwingPct` → otherwise a **warning** for planning (not a
+   failure).
+7. **Commit — one batch.** One batch `UPL-…` with source **`auto-pull`** and the snapshot as label; one new version per
+   dataset through the same `SaveVersionAsync` the uploads use today; manifest updated once; BSR **replaced**; F4 only
+   on a new plan version; `bw_snapshot` = the source's cut-off time. Cache invalidated; `DecisionWarmUpService` loads
+   the new data within 30 s.
+8. **On failure.** Nothing is committed, the **previous data stays current**, staging is kept for diagnosis, the run is
+   recorded with the reason, an alert is emailed, and the Data Setup page shows the failed dataset in red. Retried at the
+   next poll until `GiveUpAt`; an admin can press **Pull now** after the source is fixed.
+9. **Record.** Run, per-dataset counts / totals / duration, held-aside rows; audit line "Data pull"; staging tables
+   cleared after a successful commit.
 
-### 7.3 Idempotency and replays
+### 7.3 Rules
 
-- A control-file date is imported once; re-delivery (new control file, same date) imports again and replaces that
-  night's versions (new upload batch, old one stays in History).
-- An older date than the current base is never imported automatically (admin can force it from the portal).
-- Running two imports at once is prevented by the store lock already used for uploads.
+- One snapshot is committed once; a re-run for the same snapshot (after a source correction) creates a new batch and
+  becomes current (the older one stays in History).
+- An older snapshot than the current one is never pulled automatically (an admin can force it).
+- Two runs never overlap (the store lock used by uploads today).
+- Intra-day datasets (e.g. plan on version change) commit on their own, as a separate batch, without touching the
+  nightly datasets.
 
 ---
 
 ## 8. Changes in the tool
 
-### 8.1 Database (new script `06_data_feed.sql`, schema v5)
+### 8.1 Database (new script `06_data_pull.sql`, schema v5)
 
-| Table | Columns (main) | Purpose |
-|---|---|---|
-| `DATA_FEED_RUN` | Run_Id, Snapshot_Date, Started_At, Finished_At, Status (RUNNING / OK / WARNING / FAILED / LATE), Reason, Upload_Id, Extraction_Time, Triggered_By (schedule / admin) | one row per import attempt |
-| `DATA_FEED_FILE` | Run_Id, File_Name, Dataset_Key, Rows_Expected, Rows_Read, Qty_Expected, Qty_Read, Sha256, Status, Message | per file |
-| `DATA_FEED_REJECT` | Run_Id, Dataset_Key, Line_No, Reason, Row_Json | held-aside rows (kept 60 days) |
-
-Procedures `PRO_DATA_FEED_RUN` (`START` / `FILE` / `FINISH` / `LIST` / `GET`) and `PRO_DATA_FEED_REJECT`, QPS style
-(`@Cmd`, `@Error_Code`, `@Error_Message`), like the SAP procedures. `upload_batches.rec.source` gets the value
-`bw-feed`; nothing else in the existing tables changes.
+| Object | Purpose |
+|---|---|
+| `FEED_SOURCE` (Source_Key, Type `LINKED_SERVER` / `ODATA` / `REST`, Linked_Server_Name or Base_Url_Key, Status_Query / Status_Path, Active) | the source systems and how to reach them |
+| `FEED_DATASET` (Dataset_Key, Source_Key, Source_Object (view / entity set), Control_Query / Control_Path, Frequency, Order, Active, Column_Map JSON) | what to pull per dataset — editable without a release |
+| `FEED_STG_<dataset>` (F1, F2, F3, F4, UM, BSR, ARTICLE, COLOUR, GRC, SCR, ATTRREL) | staging per run |
+| `FEED_RUN`, `FEED_RUN_DATASET` (rows, qty, control totals, duration, status, message) | run history |
+| `FEED_REJECT` (Run_Id, Dataset_Key, Reason, Row_Json) | held-aside rows (kept 60 days) |
+| `PRO_FEED_PULL`, `PRO_FEED_CONTROL`, `PRO_FEED_RUN` (`START` / `DATASET` / `FINISH` / `LIST` / `GET`) | QPS-style procedures (`@Cmd`, `@Error_Code`, `@Error_Message`) |
+| Linked servers | created by the DBA per environment (`BW_HANA`, …) with a read-only login — not in the scripts |
 
 ### 8.2 Code
 
 | Where | What |
 |---|---|
-| `Application/Services/V1/DataFeed/` | `DataFeedService` (steps 1–10), `FeedFileContract` (expected columns per file), `FeedMapper` (BW columns → canonical rows, pivots), `FeedValidator` |
-| `Application/Interfaces/V1/DataFeed/` | `IDataFeedRepository`, `IFeedSource` (folder today; SFTP or BW-pull later behind the same interface) |
-| `Infrastructure/Services/V1/DataFeedBackgroundService.cs` | schedule (as `BackupBackgroundService`) |
-| `Infrastructure/Repositories/DataFeedSqlServerRepository.cs` | the procedures |
-| `Infrastructure/Services/V1/Mail/` | SMTP alert sender (`Smtp` settings) — the tool has no mail sender today |
-| `Application/Services/V1/Ingest/DataIngestService` | unchanged; the feed reuses `CommitAsync` / `SaveVersionAsync` |
-| `SapDecisionService.BwSnapshot` | prefer `meta.extractionTime` of F1 over the upload time |
-| `POGovApi/Controllers/V1/DataFeedController.cs` | `DataFeedStatus`, `DataFeedRuns`, `DataFeedRunGet`, `DataFeedRunNow`, `DataFeedRejectsExport` (staff; run-now admin) + API_MASTER rows |
+| `Application/Services/V1/DataPull/` | `DataPullService` (steps 1–9), `PullMapper` (source fields → canonical rows, pivots), `PullValidator` (control totals, references, plausibility) |
+| `Application/Interfaces/V1/DataPull/` | `IPullConnector` with two implementations: `LinkedServerConnector` (calls `PRO_FEED_PULL` / `PRO_FEED_CONTROL`) and `ODataConnector` / `RestConnector` (HttpClient, paging, API master URL + token per environment) |
+| `Infrastructure/Services/V1/DataPullBackgroundService.cs` | schedule |
+| `Infrastructure/Repositories/DataPullSqlServerRepository.cs` | the procedures |
+| `Infrastructure/Services/V1/Mail/` | SMTP alert sender (the tool has no mail sender today) |
+| `Application/Services/V1/Ingest/DataIngestService` | unchanged; the pull reuses `SaveVersionAsync` and the batch / audit / cache steps |
+| `SapDecisionService.BwSnapshot` | read the snapshot time stored with F1 instead of the upload time |
+| `POGovApi/Controllers/V1/DataPullController.cs` | `DataPullStatus`, `DataPullRuns`, `DataPullRunGet`, `DataPullNow`, `DataPullRejectsExport`, `FeedDatasetList` / `Save` (admin) + API_MASTER rows |
 
 ### 8.3 Portal
 
-- **📂 Data Setup**: a new top card **"Automatic data feed"** — last run (date, status, snapshot time, rows per
-  dataset), next expected run, **Run import now** (admin), link to the run details and the held-aside rows (⬇ Excel).
-  Each slot shows its source: "BW feed · 26 Oct snapshot" or "Manual upload by … (overrides the feed until the next
-  run)".
-- **🗂 History → Data uploads**: type **"BW feed"** next to ZIP bundle / Raw import / File upload; make-current works as
-  today.
-- Header pill: amber when today's feed is late or failed ("Data from 25 Oct").
-- SAP Interface → Overview: `bw_snapshot` shown with its source (feed / upload).
+- **📂 Data Setup** becomes a **status page**: per dataset — source, connector, last pull (snapshot, rows, quantity
+  total, status), next pull, held-aside rows (⬇ Excel); **Pull now** (admin); run history. The upload slots, ZIP and
+  raw-import boxes are **removed**. Parameters and Season Selection stay.
+- **Admin → Data sources**: the `FEED_SOURCE` / `FEED_DATASET` configuration (connector, view / service, frequency,
+  active), **Test connection** and **Test pull (dry run)** per dataset.
+- **SCR mapping / Attr Relevance** edit screens if no source system holds them (§5.11).
+- **🗂 History → Data uploads** lists the pulls (type "Automatic pull") — open, download as Excel and make an older
+  snapshot current, as today.
+- Header pill turns amber when today's data is late or a pull failed ("Data from 25 Oct").
 
-### 8.4 Manual upload after go-live
+### 8.4 Emergency fallback
 
-Kept for: emergencies (feed failed), F4 until phase 2, Attr Relevance and SCR. A manual upload of a fed dataset
-becomes current until the next successful feed run, which replaces it again (the slot says so). Optionally
-(`DataFeed:LockFedSlots`) the fed slots can be hidden for planners and left to admins only.
+With no uploads in normal operation, the fallback for a source outage is: keep using the previous snapshot (decisions
+continue; SAP answers can set `data_delayed`), or an admin makes an earlier snapshot current in History. Optionally an
+**admin-only** emergency upload can be kept behind a switch (`DataPull:AllowManualUpload`, default `false`) for the
+first months after go-live.
 
-### 8.5 Fixes to make on the way (found while preparing this document)
+### 8.5 Fixes on the way (found while preparing this document)
 
-- Upload size limit is read from three different keys (`Ingest:MaxUploadMb`, `max_upload_mb`, `PoGovSettings:MaxUploadMb`)
-  and hard-coded at 400 MB in the portal — unify on `PoGovSettings:MaxUploadMb`.
-- Colour Master lookup does not accept `Colour Code` / `Colour Name` headers (the test fixture uses them) — accept them
-  or document the required headers.
-- ZIP and Raw imports **replace** BSR while slot uploads **append** — make the behaviour explicit in the UI.
+- Upload size limit read from three different keys and hard-coded in the portal — becomes irrelevant once uploads are
+  removed; keep one key if the emergency upload stays.
+- Colour Master lookup does not accept `Colour Code` / `Colour Name` — the pull maps to the accepted names.
+- BSR append vs replace — the pull always replaces.
 
 ---
 
 ## 9. Phase 3 — live open-PO and stock position from SAP events
 
 SAP already sends PO, goods-receipt and return events (`POST /api/sap/v1/events`, stored in `SAP_EVENTS` with
-`Applied = 0`). Phase 3 applies them so that decisions see POs raised, changed, received or returned **today**, and the
-same-day Tool 1 ledger can be switched off (handover §8 item 9).
-
-### 9.1 Model
+`Applied = 0`). Phase 3 applies them on top of the nightly snapshot so that decisions see POs raised, changed,
+received or returned **today**, and the same-day Tool 1 ledger can be switched off (handover §8 item 9).
 
 ```
-live open PO (per PO item)   = BW open PO (f2 base, snapshot T)
+live open PO (per PO item)   = pulled open PO (snapshot, cut-off T)
                                + PO_CREATED / PO_CHANGED / PO_RELEASED after T   (full current state per PO)
                                − PO_CLOSED / PO_DELETED / RELEASE_REVOKED after T
                                − GR_POSTED  + GR_REVERSED                         (received)
@@ -398,59 +445,57 @@ live open PO (per PO item)   = BW open PO (f2 base, snapshot T)
 live stock adjustment        = + GR_POSTED − GR_REVERSED − RETURN_POSTED + RETURN_REVERSED   (after T)
 ```
 
-- Only events with `occurred_at` **after the BW cut-off T** (control-file extraction time) are applied — this prevents
-  double counting (spec v1.4 p.4).
-- Each new BW base clears the previous day's adjustments and re-applies the events of the new day after T.
-- PO events carry the **full PO state**, so the newest state per PO replaces older ones (order by `seq`).
-
-### 9.2 Changes
+- Only events with `occurred_at` **after the cut-off T** reported by the source's load status are applied — no double
+  counting (SAP spec v1.4 p.4).
+- Each new nightly snapshot clears the previous day's adjustments and re-applies the events after its cut-off.
+- PO events carry the full PO state; the newest per PO (by `seq`) wins.
 
 | Item | Change |
 |---|---|
-| Tables | `LIVE_OPEN_PO` (PO, item, GM, colour, delivery month, open qty, last seq, last event), `LIVE_STOCK_ADJ` (GM, colour, qty delta, last seq) |
-| Applier | background service applying `ACCEPTED` events in `seq` order every few seconds, setting `Applied = 1` / `Applied_At` |
-| Engines | Tool 1 B / SAP decisions read open PO = live open PO instead of F2 + ledger; stock = F1 + live adjustment. Behind a switch `LivePosition:Enabled` |
-| `data_delayed` | already computed from the event lag — becomes meaningful |
-| Ledger | same-day Tool 1 ledger off when live position is on (Watch List approvals in the tool stay until the SAP workflow takes them over) |
+| Tables | `LIVE_OPEN_PO`, `LIVE_STOCK_ADJ` |
+| Applier | background service applying `ACCEPTED` events in `seq` order every few seconds; `Applied = 1` |
+| Engines | Tool 1 B / SAP decisions read open PO = live open PO; stock = F1 + live adjustment (switch `LivePosition:Enabled`) |
+| Ledger | same-day Tool 1 ledger off when the live position is on |
 
 ---
 
 ## 10. Testing, cut-over and rollback
 
-1. **File contract test** — BW delivers one sample night to a test folder; the importer runs in **dry-run** mode
-   (`DataFeed:DryRun = true`: validates and reports, commits nothing).
-2. **Parallel run, 2–3 weeks** — feed runs on the staging server every night; planners keep uploading by hand in
-   production. A daily **reconciliation report** compares feed vs manual per dataset: row counts, total qty, and the
-   **Tool 2 decision mix** and a sample of Tool 1 decisions on both bases.
-3. **Go-live criteria** — 10 consecutive nights with: feed complete before 06:30, control checks passing, held-aside
-   rows < 0.5 %, Tool 2 decision differences explained.
-4. **Go-live** — `DataFeed:Enabled = true` in production; planners stop daily uploads (slots remain).
-5. **Rollback** — switch the feed off; manual upload works exactly as today; History lets admins make any previous
-   upload current again.
+1. **Connection tests** per environment: linked server (`SELECT` 1 row from each view), API (one page per service),
+   load-status and control queries.
+2. **Dry run** (`DataPull:DryRun = true`): pulls, checks and maps, writes run history and rejects, **commits nothing**.
+3. **Parallel run, 2–3 weeks** on staging: the pull runs every night while production still uses today's uploads; a
+   daily **reconciliation report** compares both per dataset (rows, totals) and the resulting Tool 2 decision mix and a
+   sample of Tool 1 decisions.
+4. **Go-live criteria**: 10 consecutive nights with sources ready before 06:30, control totals matching, held-aside
+   rows < 0.5 %, decision differences explained.
+5. **Go-live**: `DataPull:Enabled = true` in production; upload slots removed from Data Setup.
+6. **Rollback**: switch the pull off and re-enable uploads (`AllowManualUpload`); History can make any earlier data
+   current again.
 
-Automated tests: mapping per file (CSV fixtures for every `VMM_*` file), pivot of sales / plan, control-file mismatch,
-held-aside rows, idempotent re-delivery, BSR replace, F4 version skip, failure keeps the previous base, SQL procedures
-(SQL Server test suite).
+Automated tests: mapping per dataset, pivots, control-total mismatch, held-aside rows, re-run of a snapshot, BSR
+replace, F4 version skip, failure keeps the previous data, connector paging (API mock), procedures (SQL Server suite with
+a local linked server loop-back).
 
 ---
 
 ## 11. Plan, effort and responsibilities
 
-| Phase | Scope | Tool team | BW / SAP team | Duration |
+| Phase | Scope | Tool team | Source / IT teams | Duration |
 |---|---|---|---|---|
-| 0 | Agree file contract (§6), answer §12 | 2–3 days | Open Hub design | 1–2 weeks |
-| 1 | Importer for STOCK, OPENPO, SALES, UNIVERSE, ARTICLE, COLOUR, BSR; run log; alerts; Data Setup feed card; dry run | ~4 weeks build + test | Open Hub destinations, process chain, folder/SFTP | 5–6 weeks incl. parallel run |
-| 2 | PLAN from SFCC/SFCR; optional GRC file; SCR from a system source (if available) | ~2 weeks | SFCC/SFCR extract | 2–3 weeks |
+| 0 | Agree the source contract (§6), answer §12, network and users | 2–3 days | views / services design, DB / service users, firewall | 1–2 weeks |
+| 1 | Pull for stock, open PO, sales, universe, article, colour, BSR; staging, control totals, run log, alerts, Data Setup status page, data-source admin, dry run | ~4 weeks build + test | BW views on HANA (or DW), load-status view, linked-server setup by the DBA | 5–6 weeks incl. parallel run |
+| 2 | Plan via SFCC/SFCR API, GRC, SCR / Attr Relevance (pull or in-tool edit), remove uploads | ~2–3 weeks | plan service, GRC view | 2–3 weeks |
 | 3 | Live open-PO / stock position from SAP events; ledger off | ~5–6 weeks | confirm event rules (§12), bgRFC in production | 6–8 weeks |
 
 | Who | Responsible for |
 |---|---|
-| BW team | extraction logic, Open Hub, process chain timing, control file, re-delivery |
-| SAP team | events (already built), GRT rule, PO workflow |
-| Planning | parallel-run review, F4 until phase 2, Attr Relevance, parameters |
-| Merchandising | SCR mapping |
-| IT infrastructure | landing folder / SFTP, service account, SMTP relay, folder backup |
-| Tool team | importer, run log, portal, alerts, tests, reconciliation report |
+| BW team | source views / OData queries, load status and cut-off, control totals |
+| SAP team | plan service, events (built), GRT rule |
+| DBA / IT | linked servers, HANA ODBC driver on the tool's SQL Server, DB users, firewall, SMTP relay |
+| Planning | parallel-run review, Attr Relevance, parameters |
+| Merchandising | SCR mapping source |
+| Tool team | pull service, connectors, staging, checks, portal, alerts, tests, reconciliation report |
 
 ---
 
@@ -459,25 +504,27 @@ held-aside rows, idempotent re-delivery, BSR replace, F4 version skip, failure k
 | # | Question | Owner | Why it matters |
 |---|---|---|---|
 | 1 | Does a goods return (122 / 161) **re-open** the pending PO quantity? (handover §8 item 6) | SAP + Planning | open-PO formula, phase 3 |
-| 2 | Exact extraction list and **cut-off time**; POS posting time vs 04:00 (handover §8 item 7) | BW | `bw_snapshot`, double counting |
-| 3 | Does `Stock Qty` include **in-transit**? (today's raw export adds `Stk q + In Q`) | BW + Planning | F1 = what the engines treat as stock |
-| 4 | Can `VMM_OPENPO` add **PO Value, Vendor Name, Division, MC Desc, Season, Art Desc**; `VMM_STOCK` add **MC Desc**; `VMM_UNIVERSE` add **Brand Type, Division, MC Desc**; `VMM_ARTICLE` add **Art Desc**? | BW | fields the tool uses today (§5) |
-| 5 | Sales file **wide** (`Day 1..45`) or long? | BW | volume, pivot effort |
-| 6 | BSR day of the week; is it always all seasons in one file? | BW | BSR replace logic |
-| 7 | Folder vs SFTP; server path; who monitors | IT | §6 |
-| 8 | Who receives failure emails; is an SMTP relay available? | IT + Planning | alerts |
-| 9 | Plan (SFCC/SFCR): version field, frequency, Brand Type in the key | Planning + SAP | phase 2 |
-| 10 | Should manual upload of fed datasets stay open to planners after go-live? | Planning | §8.4 |
-| 11 | Approximate row counts per file (stock, open PO, sales) | BW | sizing; tool currently tested with 400 MB uploads |
+| 2 | Where is the source data: **BW on HANA / BW/4HANA**, classic BW on another DB, or a separate data warehouse? | BW / IT | linked-server provider vs API |
+| 3 | Is **database access** (linked server) from the tool's SQL Server to that source allowed, or only APIs? | IT security | connector per dataset |
+| 4 | Which **load-status** object tells that the night load is complete, and what is the **cut-off time**? (handover §8 item 7) | BW | readiness, `bw_snapshot`, double counting |
+| 5 | Does stock include **in-transit**? | BW + Planning | F1 = stock the engines use |
+| 6 | Can the views provide PO Value, Vendor Name, Division, MC Desc, Season, Art Desc (open PO), MC Desc (stock), Brand Type / Division / MC Desc (universe), Art Desc (article)? | BW | fields used today (§5) |
+| 7 | Sales view **wide** (`Day 1..45`) or one row per day? | BW | volume |
+| 8 | BSR refresh day; all seasons in one result? | BW | BSR replace |
+| 9 | Plan (SFCC/SFCR): service available? version field, Brand Type in the key, frequency | Planning + SAP | phase 2 |
+| 10 | Is there a system of record for the **SCR mapping** and **Attr Relevance**, or should the tool hold them? | Merchandising + Planning | §5.11 |
+| 11 | Who receives failure alerts; SMTP relay available? | IT + Planning | alerts |
+| 12 | Approximate row counts (stock, open PO, sales 45 days) | BW | sizing, pull window |
+| 13 | Keep an admin-only emergency upload for the first months after go-live? | Planning | §8.4 |
 
 ---
 
 ## Appendix A — Columns the tool reads today, per dataset (exact headers)
 
 Header matching for most engines ignores case and spaces (`SheetRow.Col`); the Recommendation, Attribute Analysis, GRC
-and Cat-Head lookups need the **exact** header — the importer therefore always writes the first name listed.
+and Cat-Head lookups need the **exact** header — the pull therefore always writes the first name listed.
 
-| Dataset | Columns (first name = the one the importer writes; alternates accepted today) |
+| Dataset | Columns (first name = the one the pull writes; alternates accepted today) |
 |---|---|
 | f1 | `Generic Material` · `Color` (Colour) · `Brand Type` · `DIV` (Division) · `MC CD` · `MC DESC` · `MRP` · `BOGO/NON-BOGO` (Flag, Article Type, Flag (BOGO/NON-BOGO)) · `OP STK` (Op Stk) |
 | f2 | `PO Number` (PO No, Purchase Order …) · `Generic Material` · `Color` · `Brand Type` · `DIV` · `MC CD` · `MC DESC` · `MRP` · `BOGO/NON-BOGO` · `Delivery Month` (`MM.YYYY`; DEL MONTH) · `Pending Qty` (Released Qty) · `PO Value` (PO Val, Value, PO Amount) · `Vendor Name` (Vendor) · `Season` · `ART DESC` |
@@ -496,9 +543,10 @@ percentage.
 
 ## Appendix B — Sources
 
-- `legacy/python-app/docs/PO_Governance_Developer_Brief_Stage1_2_3.pdf` §04 (data sources, Open Hub, file list, server
+- `legacy/python-app/docs/PO_Governance_Developer_Brief_Stage1_2_3.pdf` §04 (data sources and frequencies, server
   steps), `PO_Governance_SAP_API_Specification_v1.4.pdf` (cut-off rule, SAP fields), `DEVELOPER-HANDOVER.md` §5 and §8
-  (future sources, open items 6, 7, 9), `PO_Governance_Functional_Logic_Guide.pdf` p.2 (files).
+  (future sources, open items 6, 7, 9), `PO_Governance_Functional_Logic_Guide.pdf` p.2 (datasets).
 - Code: `DecisionEngine/Model/DatasetKeys.cs`, `Application/Services/V1/Ingest/LegacyImport.cs`,
   `DataIngestService.cs`, `Application/Services/V1/Platform/DataService.cs`, `Infrastructure/Services/V1/DatasetCache.cs`,
-  `BackupService.cs`, `database/sqlserver/05_sap_interface.sql` (`SAP_EVENTS`).
+  `BackupService.cs`, `database/sqlserver/04_api_master.sql` (`API_BASE_URL`, `API_AUTHORIZATION`),
+  `05_sap_interface.sql` (`SAP_EVENTS`).

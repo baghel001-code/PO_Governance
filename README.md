@@ -173,7 +173,7 @@ project only); `tests/POGovernance.Tests/SqlServer/SapSqlServerTests` runs the P
 ## Documents
 
 - `docs/user-manual/PO-Governance-User-Manual.md` (+ `.pdf`) — user manual for buyers, category heads, planners and admins.
-- `docs/data-automation/Data-Setup-Automation-Design.md` (+ `.pdf`) — design for replacing the manual Data Setup uploads with the BW feed and the live SAP position.
+- `docs/data-automation/Data-Setup-Automation-Design.md` (+ `.pdf`) — design for replacing the manual Data Setup uploads with direct pulls from the source systems (SQL Server linked server or API) and the live SAP position.
 - `docs/sap/SAP-API-Reference.md` (+ `.pdf`) — the SAP endpoints with requests and responses, for SAP programmers.
 - `docs/database/er-diagram.png` — the database entity diagram.
 - `docs/CONVERSION-GUIDE.md` — conventions used for the port.

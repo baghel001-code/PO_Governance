@@ -14,6 +14,8 @@ namespace Admin.Common
         /// Development only (ignored in every other environment): a fixed CAPTCHA code, for automated UI tests. Empty = random.
         /// </summary>
         public string DevCaptchaCode { get; set; } = "";
+        /// <summary>The sign-in CAPTCHA (PortalSettings:Captcha).</summary>
+        public CaptchaSettings Captcha { get; set; } = new();
         /// <summary>How often an open page re-checks the server status (seconds).</summary>
         public int StatusPollSeconds { get; set; } = 30;
         /// <summary>
@@ -21,6 +23,29 @@ namespace Admin.Common
         /// Secure, HSTS, http → https redirect. false (default, like v1.1.4 cookie_secure) for plain http://host:port.
         /// </summary>
         public bool UseHttps { get; set; }
+    }
+
+    /// <summary>
+    /// appsettings "PortalSettings:Captcha": which generator draws the sign-in CAPTCHA and how (the VmmCaptcha.Generate
+    /// parameters). QPS called Generate(3, 0, null, 30, Regular, 0) — 3 characters, no rotation, no noise lines; the
+    /// defaults here are stronger.
+    /// </summary>
+    public sealed class CaptchaSettings
+    {
+        /// <summary>"Vmm" (default) = company VmmCaptcha.dll (Windows; falls back to the built-in one when it can't draw); "Builtin" = PngCaptchaGenerator.</summary>
+        public string Engine { get; set; } = "Vmm";
+        /// <summary>Characters, 4–6 (the answer box holds 6).</summary>
+        public int Length { get; set; } = 5;
+        /// <summary>Each character is rotated by a random angle within ± this many degrees.</summary>
+        public int AngleDegrees { get; set; } = 15;
+        public string FontName { get; set; } = "Arial";
+        public int FontSize { get; set; } = 30;
+        public bool Bold { get; set; } = true;
+        public int NoiseLines { get; set; } = 8;
+        public int NoiseDots { get; set; } = 600;
+
+        public int LengthOrDefault => Math.Clamp(Length <= 0 ? 5 : Length, 4, 6);
+        public bool UseVmm => !string.Equals(Engine?.Trim(), "Builtin", StringComparison.OrdinalIgnoreCase);
     }
 
     /// <summary>appsettings "AppConfigurationSettings" (QPS names).</summary>

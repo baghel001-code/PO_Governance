@@ -252,5 +252,67 @@ namespace POGovernance.Tests.Platform
             activity.Touch();
             Assert.Equal(TimeSpan.Zero, activity.IdleFor);
         }
+    
+        private sealed class Env : Microsoft.AspNetCore.Hosting.IWebHostEnvironment
+        {
+            public string EnvironmentName { get; set; } = "Production";
+            public string ApplicationName { get; set; } = "Admin";
+            public string WebRootPath { get; set; } = "";
+            public Microsoft.Extensions.FileProviders.IFileProvider WebRootFileProvider { get; set; } = null!;
+            public string ContentRootPath { get; set; } = "";
+            public Microsoft.Extensions.FileProviders.IFileProvider ContentRootFileProvider { get; set; } = null!;
+        }
+
+        private sealed class Broken : ICaptchaGenerator
+        {
+            public int Calls;
+            public GeneratedCaptcha Generate() { Calls++; throw new PlatformNotSupportedException("no GDI+"); }
+        }
+
+        [Fact]
+        public void VmmCaptcha_dll_loads_and_draws_on_Windows_and_falls_back_elsewhere()
+        {
+            var vmm = new VmmCaptchaGenerator(new Admin.Common.CaptchaSettings());
+            if (OperatingSystem.IsWindows())
+            {
+                var g = vmm.Generate();
+                Assert.Equal(5, g.Answer.Length);
+                Assert.Equal(new byte[] { 0x89, 0x50, 0x4E, 0x47 }, Convert.FromBase64String(g.ImageBase64)[..4]);
+            }
+            else
+            {
+                // the .NET Framework 4.5 assembly and its System.Drawing reference resolve; only GDI+ is missing
+                var e = Assert.ThrowsAny<Exception>(() => vmm.Generate());
+                Assert.IsNotType<FileNotFoundException>(e);
+                Assert.IsType<PlatformNotSupportedException>(e.InnerException ?? e);
+            }
+        }
+
+        [Fact]
+        public void A_failing_VmmCaptcha_switches_to_the_builtin_generator_once()
+        {
+            var broken = new Broken();
+            var g = new FallbackCaptchaGenerator(broken, new PngCaptchaGenerator("K7MPQ"), NullLogger.Instance);
+            Assert.Equal("K7MPQ", g.Generate().Answer);
+            Assert.True(g.UsingFallback);
+            Assert.Equal("K7MPQ", g.Generate().Answer);
+            Assert.Equal(1, broken.Calls);   // not retried on every sign-in
+        }
+
+        [Fact]
+        public void The_captcha_engine_follows_the_settings_and_the_platform()
+        {
+            var settings = new Admin.Common.PortalSettings { DevCaptchaCode = "AB3CD" };
+            var log = NullLogger.Instance;
+            // the fixed code only in Development
+            Assert.Equal("AB3CD", Admin.ServiceRegistration.PortalRegistration.CaptchaGenerator(settings, new Env { EnvironmentName = "Development" }, log).Generate().Answer);
+            var prod = Admin.ServiceRegistration.PortalRegistration.CaptchaGenerator(settings, new Env(), log);
+            Assert.NotEqual("AB3CD", prod.Generate().Answer);
+            if (OperatingSystem.IsWindows()) Assert.IsType<FallbackCaptchaGenerator>(prod);
+            else Assert.IsType<PngCaptchaGenerator>(prod);
+            settings.Captcha.Engine = "Builtin";
+            Assert.IsType<PngCaptchaGenerator>(Admin.ServiceRegistration.PortalRegistration.CaptchaGenerator(settings, new Env(), log));
+            Assert.Equal(6, new Admin.Common.CaptchaSettings { Length = 9 }.LengthOrDefault);   // the answer box holds 6
+        }
     }
 }

@@ -50,8 +50,7 @@ namespace Admin.ServiceRegistration
             services.AddScoped<PortalAuthService>();
             // QPS sign-in security: CAPTCHA, one-time sign-in tickets, ended sessions, login notices, idle tracking per circuit
             services.TryAddSingleton(TimeProvider.System);
-            var devCaptcha = env.IsDevelopment() ? settings.DevCaptchaCode : null;
-            services.AddSingleton<ICaptchaGenerator>(_ => new PngCaptchaGenerator(devCaptcha));
+            services.AddSingleton<ICaptchaGenerator>(sp => CaptchaGenerator(settings, env, sp.GetRequiredService<ILoggerFactory>().CreateLogger("Captcha")));
             services.AddSingleton<CaptchaService>();
             services.AddSingleton<LoginTicketStore>();
             services.AddSingleton<EndedSessions>();
@@ -63,6 +62,34 @@ namespace Admin.ServiceRegistration
             services.AddScoped<ServerStatusService>();
             services.AddScoped<FileDownloadService>();
             return services;
+        }
+
+        /// <summary>
+        /// The sign-in CAPTCHA: the company VmmCaptcha.dll (QPS) on Windows, with the built-in generator as fallback; the
+        /// built-in one on other systems (GDI+ is Windows-only on .NET 8) or with Captcha:Engine = Builtin; a fixed code
+        /// only in Development with DevCaptchaCode (automated UI tests).
+        /// </summary>
+        public static ICaptchaGenerator CaptchaGenerator(PortalSettings settings, IWebHostEnvironment env, ILogger log)
+        {
+            if (env.IsDevelopment() && !string.IsNullOrWhiteSpace(settings.DevCaptchaCode))
+            {
+                log.LogWarning("CAPTCHA: fixed code from PortalSettings:DevCaptchaCode (Development only)");
+                return new PngCaptchaGenerator(settings.DevCaptchaCode);
+            }
+            var builtin = new PngCaptchaGenerator();
+            if (!settings.Captcha.UseVmm)
+            {
+                log.LogInformation("CAPTCHA: built-in generator (PortalSettings:Captcha:Engine = Builtin)");
+                return builtin;
+            }
+            if (!OperatingSystem.IsWindows())
+            {
+                log.LogWarning("CAPTCHA: VmmCaptcha needs Windows (GDI+); using the built-in generator on this server");
+                return builtin;
+            }
+            log.LogInformation("CAPTCHA: VmmCaptcha.dll ({Length} characters, ±{Angle}°, {Font} {Size}{Bold})", settings.Captcha.LengthOrDefault,
+                settings.Captcha.AngleDegrees, settings.Captcha.FontName, settings.Captcha.FontSize, settings.Captcha.Bold ? " bold" : "");
+            return new FallbackCaptchaGenerator(new VmmCaptchaGenerator(settings.Captcha), builtin, log);
         }
     }
 }

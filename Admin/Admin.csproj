@@ -10,6 +10,16 @@
   <ItemGroup>
     <PackageReference Include="MudBlazor" Version="7.15.0" />
     <PackageReference Include="Serilog.AspNetCore" Version="8.0.3" />
+    <!-- GDI+ for VmmCaptcha.dll (System.Drawing; Windows only on .NET 8) -->
+    <PackageReference Include="System.Drawing.Common" Version="8.0.10" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- QPS: the company CAPTCHA library (VmmCaptcha.Captcha.Generate, .NET Framework 4.5 on System.Drawing). Used on Windows
+         servers; elsewhere the portal falls back to the built-in PngCaptchaGenerator (Auth/Captcha). -->
+    <Reference Include="VmmCaptcha">
+      <HintPath>Dlls\VmmCaptcha.dll</HintPath>
+    </Reference>
   </ItemGroup>
 
   <PropertyGroup>

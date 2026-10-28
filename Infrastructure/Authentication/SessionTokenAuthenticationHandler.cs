@@ -42,8 +42,12 @@ namespace Infrastructure.Authentication
             var token = TokenFrom(Request);
             if (string.IsNullOrEmpty(token)) return AuthenticateResult.NoResult();
             // A database failure propagates → ExceptionMiddleware answers 503 (server.py route()).
-            var u = await _acc.SessionUserAsync(token, Context.RequestAborted);
-            if (u == null) return AuthenticateResult.Fail("Please log in");
+            var (u, ended) = await _acc.SessionAsync(token, Context.RequestAborted);
+            if (u == null)
+            {
+                Context.Items[EndReasonItem] = ended;   // the 401 says why (signed in elsewhere, changed by the admin, idle …)
+                return AuthenticateResult.Fail(SessionEndReasons.Message(ended));
+            }
             var claims = new List<Claim>
             {
                 new(CustomClaimTypes.Email, u.Email),
@@ -58,8 +62,11 @@ namespace Infrastructure.Authentication
             return AuthenticateResult.Success(new AuthenticationTicket(new ClaimsPrincipal(id), Scheme.Name));
         }
 
+        /// <summary>HttpContext.Items key: why the session token was refused.</summary>
+        public const string EndReasonItem = "pogov.session.end";
+
         protected override Task HandleChallengeAsync(AuthenticationProperties properties) =>
-            ExceptionMiddleware.WriteAsync(Context, 401, "Please log in");
+            ExceptionMiddleware.WriteAsync(Context, 401, SessionEndReasons.Message(Context.Items[EndReasonItem] as string));
 
         protected override Task HandleForbiddenAsync(AuthenticationProperties properties) =>
             ExceptionMiddleware.WriteAsync(Context, 403, "Not allowed");

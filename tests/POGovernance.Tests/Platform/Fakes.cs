@@ -165,7 +165,8 @@ namespace POGovernance.Tests.Platform
     {
         public FakeStore Store { get; } = new();
         public FakeClock Clock { get; } = new();
-        public PoGovSettings Cfg { get; } = new() { AdminEmail = "admin.user@x.com", LoginMode = LoginModes.Local, LoginFailureMinMs = 0 };
+        public PoGovSettings Cfg { get; } = new() { AdminEmail = "admin.user@x.com", LoginMode = LoginModes.Local, LoginFailureMinMs = 0,
+                                                  SingleSession = false, IdleTimeoutMinutes = 0, AbsoluteSessionHours = 0 };   // v1.1.4 session rules
         public FakeCache Cache { get; } = new();
         public AuditService Audit { get; }
         public AccountsService Accounts { get; }

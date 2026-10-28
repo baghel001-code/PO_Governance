@@ -76,7 +76,16 @@ namespace Domain.Entities.Store
         [JsonPropertyName("created")] public double Created { get; set; }
         [JsonPropertyName("seen")] public double Seen { get; set; }
         [JsonPropertyName("ip")] public string? Ip { get; set; }
+        /// <summary>
+        /// Epoch seconds when the session was ended by the server (another sign-in, a change by the admin, idle); 0 = live.
+        /// An ended session is kept for a day so the portal can tell the user why they were signed out.
+        /// </summary>
+        [JsonPropertyName("ended"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] public double Ended { get; set; }
+        /// <summary><see cref="Domain.Constants.SessionEndReasons"/> value.</summary>
+        [JsonPropertyName("endReason"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] public string? EndReason { get; set; }
         [JsonExtensionData] public Dictionary<string, JsonElement>? Extra { get; set; }
+
+        [JsonIgnore] public bool IsLive => Ended <= 0;
     }
 
     /// <summary>

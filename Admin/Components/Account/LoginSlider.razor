@@ -1,0 +1,153 @@
+@using MudBlazor
+@using static Microsoft.AspNetCore.Components.Web.RenderMode
+@rendermode InteractiveServer
+@implements IAsyncDisposable
+
+@*
+    QPS LoginSlider: left-panel slider on the account pages. Advances every 6 s, pauses while the pointer is over it,
+    and can be moved with the arrows or dots. The first slide is rendered on page load, so the panel
+    is complete even before the interactive connection starts.
+
+    To use your own pictures: put them in wwwroot/images/login-slides/ and set ImageUrl on a slide
+    below (landscape, about 960 × 720 px, JPG or WebP under 200 KB). Slides without ImageUrl show
+    the built-in illustration.
+*@
+<section class="pga-slider" aria-roledescription="carousel" aria-label="About PO Governance"
+         @onmouseenter="() => _hovered = true" @onmouseleave="() => _hovered = false"
+         @onfocusin="() => _hovered = true" @onfocusout="() => _hovered = false">
+
+    <div class="pga-slides" aria-live="@(_interactive && !Paused ? "off" : "polite")">
+        @for (var i = 0; i < Slides.Length; i++)
+        {
+            var slide = Slides[i];
+            var active = i == _index;
+            <article class="pga-slide @(active ? "active" : "")" aria-roledescription="slide"
+                     aria-label="@($"{i + 1} of {Slides.Length}")" aria-hidden="@(active ? "false" : "true")">
+                <h1 class="pga-headline">@slide.Title</h1>
+                <div class="pga-slide-media">
+                    @if (slide.ImageUrl is not null)
+                    {
+                        <img src="@slide.ImageUrl" alt="@slide.ImageAlt" class="pga-slide-photo" loading="@(i == 0 ? "eager" : "lazy")" />
+                    }
+                    else
+                    {
+                        if (i % 3 == 0)
+                        {
+                            <LoginIllustration />
+                        }
+                        else if (i % 3 == 1)
+                        {
+                            <LoginIllustrationRoles />
+                        }
+                        else
+                        {
+                            <LoginIllustrationSap />
+                        }
+                    }
+                </div>
+                <p class="pga-slide-caption">@slide.Caption</p>
+            </article>
+        }
+    </div>
+
+    <div class="pga-slider-nav">
+        <button type="button" class="pga-arrow" aria-label="Previous slide" @onclick="Previous">
+            <MudIcon Icon="@Icons.Material.Filled.ChevronLeft" />
+        </button>
+        <div class="pga-dots" role="group" aria-label="Choose slide">
+            @for (var i = 0; i < Slides.Length; i++)
+            {
+                var n = i;
+                <button type="button" class="pga-dotbtn @(n == _index ? "active" : "")"
+                        aria-label="@($"Slide {n + 1}: {Slides[n].Title}")" aria-current="@(n == _index ? "true" : "false")"
+                        @onclick="() => Go(n)">
+                    @if (n == _index && _interactive)
+                    {
+                        @* Fills over one interval; restarted by the key when the slide changes. *@
+                        <span @key="_changeCount" class="pga-dotbar @(Paused ? "paused" : "")"></span>
+                    }
+                </button>
+            }
+        </div>
+        <button type="button" class="pga-arrow" aria-label="Next slide" @onclick="Next">
+            <MudIcon Icon="@Icons.Material.Filled.ChevronRight" />
+        </button>
+    </div>
+</section>
+
+@code {
+    private sealed record Slide(string Title, string Caption, string? ImageUrl = null, string? ImageAlt = null);
+
+    // Edit the slides here. Example with a photo:
+    //   new("Fresh stock, checked at the DC.", "…", ImageUrl: "images/login-slides/dc.jpg", ImageAlt: "Cartons at the distribution centre"),
+    private static readonly Slide[] Slides =
+    [
+        new("Every PO checked before it is raised.",
+            "Stock, open POs, 45 days of sales and the plan decide Approve, Watch or Block for every colour."),
+        new("Buyers, category heads and planners on one page.",
+            "New requests, Watch List approvals, data set-up and history — each role sees what it needs."),
+        new("SAP asks, the tool answers in seconds.",
+            "Every PO raised in SAP is checked live, with a verdict link for the buyer."),
+    ];
+
+    private static readonly TimeSpan Interval = TimeSpan.FromSeconds(6);
+
+    private readonly CancellationTokenSource _cts = new();
+    private int _index;
+    private int _changeCount;
+    private DateTime _shownAt = DateTime.UtcNow;
+    private bool _hovered;
+    private bool _interactive;
+
+    private bool Paused => _hovered;
+
+    protected override void OnAfterRender(bool firstRender)
+    {
+        // Runs only once the page is interactive (never during prerender).
+        if (!firstRender)
+            return;
+        _interactive = true;
+        _shownAt = DateTime.UtcNow;
+        StateHasChanged();
+        _ = AutoPlayAsync();
+    }
+
+    private async Task AutoPlayAsync()
+    {
+        using var timer = new PeriodicTimer(TimeSpan.FromMilliseconds(500));
+        try
+        {
+            while (await timer.WaitForNextTickAsync(_cts.Token))
+            {
+                if (Paused)
+                {
+                    _shownAt = DateTime.UtcNow;   // resume with a full interval
+                    continue;
+                }
+                if (DateTime.UtcNow - _shownAt >= Interval)
+                    await InvokeAsync(() => { Show(_index + 1); StateHasChanged(); });
+            }
+        }
+        catch (OperationCanceledException)
+        {
+        }
+    }
+
+    private void Next() => Show(_index + 1);
+    private void Previous() => Show(_index - 1);
+    private void Go(int index) => Show(index);
+
+    private void Show(int index)
+    {
+        _index = ((index % Slides.Length) + Slides.Length) % Slides.Length;
+        _changeCount++;
+        _shownAt = DateTime.UtcNow;
+    }
+
+    public ValueTask DisposeAsync()
+    {
+        _cts.Cancel();
+        _cts.Dispose();
+        return ValueTask.CompletedTask;
+    }
+}

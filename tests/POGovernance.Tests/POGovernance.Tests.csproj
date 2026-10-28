@@ -27,6 +27,7 @@
     <ProjectReference Include="..\..\Application\Application.csproj" />
     <ProjectReference Include="..\..\Infrastructure\Infrastructure.csproj" />
     <ProjectReference Include="..\..\POGovApi\POGovApi.csproj" />
+    <ProjectReference Include="..\..\Admin\Admin.csproj" />
     <ProjectReference Include="..\..\DecisionEngine\DecisionEngine.csproj" />
     <ProjectReference Include="..\..\Domain\Domain.csproj" />
   </ItemGroup>

@@ -1,0 +1,929 @@
+/* Account pages (sign-in, change password, access denied) — the QPS sign-in design (QPS wwwroot/css/auth.css) in the
+   PO Governance colours (PortalTheme: navy #1A4FAF, pink #E8006E). Change the brand colours here. */
+.pga-auth {
+    --pga-brand: #e8006e; /* VMM pink: highlights */
+    --pga-panel: #1a4faf; /* PO Governance navy: brand panel */
+    --pga-panel-dark: #0b1f5c; /* panel gradient end */
+    --pga-primary: #d4007c; /* buttons / links: deeper pink so white text passes contrast */
+    --pga-blue: #1a4faf;
+    --pga-accent: #1a4faf;
+    --pga-ok: #00873e;
+    --pga-bg: #f3f5fb;
+    --pga-card: #ffffff;
+    --pga-ink: #0f1b3d;
+    --pga-muted: #4b587a;
+    --pga-kraft: #c99a62;
+    --pga-kraft-dark: #a97c47;
+    display: grid;
+    grid-template-columns: minmax(380px, 1.1fr) 1fr;
+    min-height: 100vh;
+    background: var(--pga-bg);
+    color: var(--pga-ink);
+    font-family: Inter, "Segoe UI", system-ui, -apple-system, Roboto, Arial, sans-serif;
+}
+
+    .pga-auth *, .pga-auth *::before, .pga-auth *::after {
+        box-sizing: border-box;
+    }
+
+/* ---------- brand panel ---------- */
+.pga-brand {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    gap: 28px;
+    padding: 40px 48px;
+    color: #fff;
+    background: radial-gradient(circle at 88% 10%, rgba(237, 1, 139, .35) 0, transparent 40%), radial-gradient(circle at 5% 95%, rgba(255, 255, 255, .12) 0, transparent 38%), linear-gradient(160deg, var(--pga-panel) 0%, var(--pga-panel-dark) 100%);
+    overflow: hidden;
+}
+    /* faint grid, like a warehouse floor plan */
+    .pga-brand::before {
+        content: "";
+        position: absolute;
+        inset: 0;
+        background-image: linear-gradient(rgba(255,255,255,.05) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,.05) 1px, transparent 1px);
+        background-size: 32px 32px;
+        pointer-events: none;
+    }
+
+    .pga-brand > * {
+        position: relative;
+    }
+
+.pga-brand-top {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.pga-logo-chip {
+    display: inline-flex;
+    align-items: center;
+    background: #fff;
+    border-radius: 10px;
+    padding: 6px 10px;
+    box-shadow: 0 6px 16px rgba(0, 30, 60, .3);
+}
+
+.pga-logo-img {
+    height: 36px;
+    width: auto;
+    display: block;
+}
+
+.pga-product {
+    border-left: 1px solid rgba(255,255,255,.45);
+    padding-left: 12px;
+}
+
+.pga-wordmark {
+    font-weight: 800;
+    font-size: 20px;
+    letter-spacing: .08em;
+    line-height: 1.1;
+}
+
+.pga-company {
+    font-size: 12px;
+    opacity: .85;
+    letter-spacing: .02em;
+}
+
+.pga-brand-body {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    gap: 20px;
+}
+
+.pga-headline {
+    margin: 0;
+    max-width: 16ch;
+    font-size: clamp(26px, 2.6vw, 36px);
+    line-height: 1.2;
+    font-weight: 700;
+    text-wrap: balance;
+}
+
+.pga-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: #fff;
+    box-shadow: 0 0 0 3px rgba(237,1,139,.6);
+    flex: none;
+}
+
+/* ---------- slider ---------- */
+.pga-slider {
+    display: flex;
+    flex-direction: column;
+    gap: 18px;
+}
+/* All slides share one grid cell, so the slider is as tall as the tallest slide and never jumps. */
+.pga-slides {
+    display: grid;
+}
+
+.pga-slide {
+    grid-area: 1 / 1;
+    display: flex;
+    flex-direction: column;
+    gap: 18px;
+    opacity: 0;
+    visibility: hidden;
+    transform: translateX(28px);
+    transition: opacity .6s ease, transform .6s ease, visibility 0s linear .6s;
+}
+
+    .pga-slide.active {
+        opacity: 1;
+        visibility: visible;
+        transform: none;
+        transition: opacity .6s ease, transform .6s ease, visibility 0s;
+    }
+
+.pga-slide-media {
+    display: flex;
+    align-items: center;
+    min-height: 0;
+}
+
+.pga-slide-photo {
+    width: 100%;
+    max-width: 480px;
+    aspect-ratio: 4 / 3;
+    object-fit: cover;
+    border-radius: 16px;
+    box-shadow: 0 18px 40px rgba(0, 25, 50, .35);
+    border: 4px solid rgba(255, 255, 255, .85);
+}
+
+.pga-slide-caption {
+    margin: 0;
+    max-width: 44ch;
+    font-size: 15px;
+    line-height: 1.5;
+    opacity: .9;
+}
+
+.pga-slider-nav {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.pga-arrow {
+    display: grid;
+    place-items: center;
+    width: 34px;
+    height: 34px;
+    border-radius: 50%;
+    border: 1px solid rgba(255,255,255,.4);
+    padding: 0;
+    box-shadow: none;
+    background: rgba(255,255,255,.08);
+    color: #fff;
+    cursor: pointer;
+    transition: background .15s;
+}
+
+    .pga-arrow .mud-icon-root {
+        width: 22px;
+        height: 22px;
+    }
+
+    .pga-arrow:hover {
+        background: rgba(255,255,255,.2);
+    }
+
+.pga-dots {
+    display: flex;
+    gap: 8px;
+}
+
+.pga-dotbtn {
+    position: relative;
+    overflow: hidden;
+    width: 10px;
+    height: 10px;
+    padding: 0;
+    border: 0;
+    border-radius: 5px;
+    box-shadow: none;
+    background: rgba(255,255,255,.45);
+    cursor: pointer;
+    transition: width .3s ease, background .3s;
+}
+
+    .pga-dotbtn.active {
+        width: 36px;
+        background: rgba(255,255,255,.35);
+    }
+
+.pga-dotbar {
+    position: absolute;
+    inset: 0;
+    transform-origin: left;
+    background: var(--pga-brand);
+    animation: pga-fill 6s linear forwards;
+}
+
+    .pga-dotbar.paused {
+        animation-play-state: paused;
+    }
+
+@keyframes pga-fill {
+    from {
+        transform: scaleX(0);
+    }
+
+    to {
+        transform: scaleX(1);
+    }
+}
+
+.pga-arrow:focus-visible, .pga-dotbtn:focus-visible {
+    outline: 2px solid #fff;
+    outline-offset: 3px;
+}
+
+.pga-headline-mobile {
+    display: none;
+}
+
+/* ---------- illustration ---------- */
+.pga-art {
+    width: 100%;
+    max-width: 460px;
+    height: auto;
+}
+
+    .pga-art .a-shadow {
+        fill: rgba(0, 25, 50, .3);
+    }
+
+    .pga-art .a-box {
+        fill: var(--pga-kraft);
+    }
+
+    .pga-art .a-box-top {
+        fill: var(--pga-kraft-dark);
+    }
+
+    .pga-art .a-tape {
+        fill: #e3c393;
+    }
+
+    .pga-art .a-label {
+        fill: #fff;
+    }
+
+    .pga-art .a-ink {
+        fill: #2f3b4a;
+    }
+
+    .pga-art .a-board {
+        fill: #7b5230;
+    }
+
+    .pga-art .a-paper {
+        fill: #fff;
+    }
+
+    .pga-art .a-clip {
+        fill: #c9d2dd;
+        stroke: #8795a6;
+        stroke-width: 2;
+    }
+
+    .pga-art .a-line {
+        fill: #dfe5ec;
+    }
+
+    .pga-art .a-ok {
+        fill: var(--pga-ok);
+    }
+
+    .pga-art .a-wait {
+        fill: none;
+        stroke: var(--pga-brand);
+        stroke-width: 3;
+        stroke-dasharray: 4 3;
+    }
+
+    .pga-art .a-tick {
+        fill: none;
+        stroke: #fff;
+        stroke-width: 2.6;
+        stroke-linecap: round;
+        stroke-linejoin: round;
+    }
+
+    .pga-art .a-tag {
+        fill: #fff;
+        stroke: var(--pga-blue);
+        stroke-width: 2;
+    }
+
+    .pga-art .a-hole {
+        fill: var(--pga-brand);
+    }
+
+    .pga-art .a-lens {
+        fill: rgba(255,255,255,.22);
+    }
+
+    .pga-art .a-ring {
+        fill: none;
+        stroke: #e8edf3;
+        stroke-width: 8;
+    }
+
+    .pga-art .a-handle {
+        stroke: #e8edf3;
+        stroke-width: 12;
+        stroke-linecap: round;
+    }
+
+    .pga-art .a-stamp-bg {
+        fill: var(--pga-brand);
+    }
+
+    .pga-art .a-stamp-ring {
+        fill: none;
+        stroke: #ffffff;
+        stroke-width: 4;
+    }
+
+        .pga-art .a-stamp-ring.thin {
+            stroke-width: 1.5;
+        }
+
+    .pga-art .a-stamp-text {
+        fill: #ffffff;
+        font: 800 20px "Segoe UI", system-ui, sans-serif;
+        letter-spacing: 2px;
+    }
+
+    .pga-art .a-stamp-small {
+        fill: #ffffff;
+        font: 700 10px "Segoe UI", system-ui, sans-serif;
+        letter-spacing: 2px;
+    }
+
+    .pga-art .a-dot {
+        fill: #fff;
+        opacity: .7;
+    }
+
+    .pga-art .a-card-shadow {
+        filter: drop-shadow(0 8px 14px rgba(0, 25, 50, .3));
+    }
+    /* slide 2: truck, ASN, calendar */
+    .pga-art .a-road {
+        fill: rgba(255,255,255,.35);
+    }
+
+    .pga-art .a-road-mark {
+        fill: rgba(255,255,255,.7);
+    }
+
+    .pga-art .a-truck-box {
+        fill: #fff;
+    }
+
+    .pga-art .a-truck-band {
+        fill: var(--pga-brand);
+    }
+
+    .pga-art .a-truck-text {
+        fill: #fff;
+        font: 800 16px "Segoe UI", system-ui, sans-serif;
+        letter-spacing: 3px;
+    }
+
+    .pga-art .a-truck-cab {
+        fill: #0b4f86;
+    }
+
+    .pga-art .a-truck-window {
+        fill: #cfe4f5;
+    }
+
+    .pga-art .a-truck-bumper {
+        fill: #093a63;
+    }
+
+    .pga-art .a-wheel {
+        fill: #1d2430;
+    }
+
+    .pga-art .a-hub {
+        fill: #c9d2dd;
+    }
+
+    .pga-art .a-pill {
+        fill: #fde6f3;
+    }
+
+    .pga-art .a-pill-text {
+        fill: var(--pga-primary);
+        font: 700 8px "Segoe UI", system-ui, sans-serif;
+        letter-spacing: 1px;
+    }
+
+    .pga-art .a-cal-head {
+        fill: var(--pga-brand);
+    }
+
+    .pga-art .a-cal-title {
+        fill: #fff;
+        font: 700 10px "Segoe UI", system-ui, sans-serif;
+        letter-spacing: 2px;
+    }
+
+    .pga-art .a-booked {
+        fill: var(--pga-blue);
+    }
+
+    .pga-art .a-drive {
+        animation: pga-drive 6s ease-in-out infinite;
+    }
+
+@keyframes pga-drive {
+    0%, 100% {
+        transform: translateX(0);
+    }
+
+    50% {
+        transform: translateX(10px);
+    }
+}
+/* slide 3: report screen */
+.pga-art .a-screen {
+    fill: #0b3d66;
+}
+
+.pga-art .a-stand {
+    fill: rgba(255,255,255,.55);
+}
+
+.pga-art .a-ring-bg {
+    fill: none;
+    stroke: #e6ebf1;
+    stroke-width: 12;
+}
+
+.pga-art .a-ring-val {
+    fill: none;
+    stroke: var(--pga-brand);
+    stroke-width: 12;
+    stroke-linecap: round;
+}
+
+.pga-art .a-big {
+    fill: #1d2430;
+    font: 800 22px "Segoe UI", system-ui, sans-serif;
+}
+
+.pga-art .a-small {
+    fill: #625c6b;
+    font: 600 9px "Segoe UI", system-ui, sans-serif;
+}
+
+.pga-art .a-bar {
+    fill: #9cc3e4;
+}
+
+    .pga-art .a-bar.hi {
+        fill: var(--pga-blue);
+    }
+
+.pga-art .a-float {
+    animation: pga-float 6s ease-in-out infinite;
+}
+
+.pga-art .a-delay {
+    animation-delay: -3s;
+}
+
+@keyframes pga-float {
+    0%, 100% {
+        transform: translateY(0);
+    }
+
+    50% {
+        transform: translateY(-8px);
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .pga-art .a-float, .pga-art .a-drive {
+        animation: none;
+    }
+
+    .pga-slide, .pga-slide.active {
+        transition: none;
+        transform: none;
+    }
+
+    .pga-dotbar {
+        animation: none;
+        transform: scaleX(1);
+    }
+}
+
+/* ---------- form side ---------- */
+.pga-panel {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 16px;
+    padding: 40px 24px 16px;
+}
+/* Card and help line stay centred; the footer sits at the bottom of the form side. */
+.pga-panel-main {
+    flex: 1;
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 16px;
+}
+
+.pga-footer {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: center;
+    gap: 4px 10px;
+    width: 100%;
+    padding-top: 14px;
+    border-top: 1px solid #e6e0ea;
+    font-size: 12px;
+    color: var(--pga-muted);
+    text-align: center;
+}
+
+    .pga-footer .pga-version {
+        margin: 0;
+        font-size: 11px;
+        color: var(--pga-blue);
+        border-color: #bcd6ec;
+    }
+
+.pga-card {
+    width: 100%;
+    max-width: 420px;
+    background: var(--pga-card);
+    border-radius: 16px;
+    padding: 36px 36px 28px;
+    box-shadow: 0 1px 2px rgba(60, 0, 35, .06), 0 14px 36px rgba(60, 0, 35, .12);
+    border-top: 4px solid transparent;
+    background-image: linear-gradient(var(--pga-card), var(--pga-card)), linear-gradient(90deg, var(--pga-brand), var(--pga-blue));
+    background-origin: border-box;
+    background-clip: padding-box, border-box;
+}
+
+.pga-help {
+    margin: 0;
+    font-size: 13px;
+    color: var(--pga-muted);
+}
+
+.pga-eyebrow {
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: .1em;
+    text-transform: uppercase;
+    color: var(--pga-blue);
+    margin-bottom: 6px;
+}
+
+.pga-title {
+    margin: 0 0 4px;
+    font-size: 26px;
+    font-weight: 700;
+    color: var(--pga-ink);
+}
+
+.pga-sub {
+    margin: 0 0 24px;
+    font-size: 14px;
+    color: var(--pga-muted);
+}
+
+/* "Keep me signed in" on the left, "Forgot password?" on the right. Own rules instead of
+   MudBlazor utility classes, because MudCheckBox's width differs between MudBlazor versions. */
+.pga-options {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 8px 16px;
+    margin: 16px 0;
+}
+
+    .pga-options .mud-input-control {
+        flex: 0 1 auto !important;
+        width: auto !important;
+        margin: 0 !important;
+    }
+
+    .pga-options .mud-checkbox {
+        margin-inline-start: -11px;
+    }
+    /* line the box up with the fields */
+    .pga-options a {
+        margin-inline-start: auto;
+        white-space: nowrap;
+    }
+
+/* Employee / Vendor switch */
+.pga-tabs {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 4px;
+    padding: 4px;
+    margin-bottom: 24px;
+    background: #f1edf3;
+    border-radius: 10px;
+}
+
+.pga-tab {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    padding: 10px 12px;
+    border: 0;
+    border-radius: 8px;
+    background: transparent;
+    color: var(--pga-muted);
+    box-shadow: none;
+    letter-spacing: normal;
+    font-family: inherit;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background .15s, color .15s, box-shadow .15s;
+}
+
+    .pga-tab:hover:not(.active) {
+        color: var(--pga-ink);
+    }
+
+    .pga-tab.active {
+        background: #fff;
+        color: var(--pga-primary);
+        box-shadow: 0 1px 3px rgba(60, 0, 35, .14);
+    }
+
+    .pga-tab:focus-visible {
+        outline: 2px solid var(--pga-blue);
+        outline-offset: 2px;
+    }
+
+    .pga-tab:disabled {
+        cursor: default;
+    }
+
+/* Employee-only help text in place of "Forgot password?" */
+.pga-note {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    margin: 18px 0 0;
+    padding: 10px 12px;
+    background: #eef5fb;
+    color: #33475b;
+    border-radius: 8px;
+    font-size: 13px;
+    line-height: 1.45;
+}
+
+    .pga-note .mud-icon-root {
+        color: var(--pga-blue);
+        flex: none;
+        margin-top: 1px;
+    }
+
+    .pga-note a {
+        color: var(--pga-blue);
+        font-weight: 600;
+        text-decoration: underline;
+        text-underline-offset: 2px;
+    }
+
+        .pga-note a:hover {
+            color: var(--pga-primary);
+        }
+
+        .pga-note a:focus-visible {
+            outline: 2px solid var(--pga-blue);
+            outline-offset: 2px;
+            border-radius: 2px;
+        }
+
+/* CAPTCHA */
+.pga-captcha {
+    display: grid;
+    gap: 10px;
+    margin-top: 16px;
+}
+
+.pga-captcha-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+/* Browser autofill: white background instead of Chrome's blue, and float the label */
+.pga-auth input:-webkit-autofill,
+.pga-auth input:-webkit-autofill:hover,
+.pga-auth input:-webkit-autofill:focus {
+    -webkit-box-shadow: 0 0 0 1000px #fff inset;
+    box-shadow: 0 0 0 1000px #fff inset;
+    -webkit-text-fill-color: var(--pga-ink);
+    caret-color: var(--pga-ink);
+    transition: background-color 9999s ease-out 0s;
+}
+
+.pga-auth .mud-input-control:has(input:-webkit-autofill) .mud-input-label-outlined,
+.pga-auth .mud-input-control:has(input:autofill) .mud-input-label-outlined {
+    transform: translate(14px, -6px) scale(0.75);
+    background-color: #fff;
+    padding: 0 4px;
+}
+/* Fixed height, natural width: fits whatever size VmmCaptcha draws. */
+.pga-captcha-img {
+    display: block;
+    height: 96px;
+    width: auto;
+    min-width: 140px;
+    max-width: calc(100% - 48px);
+    object-fit: contain;
+    border: 1px solid #d6dbe4;
+    border-radius: 8px;
+    background: #fff;
+    user-select: none;
+    -webkit-user-drag: none;
+}
+
+div.pga-captcha-img {
+    width: 180px;
+}
+
+.pga-captcha-error {
+    display: flex;
+    align-items: center;
+    padding: 0 10px;
+    background: #fdecef;
+    border-color: #f3b8c6;
+    color: #8a1538;
+    font-size: 12px;
+    line-height: 1.3;
+}
+
+.pga-captcha-loading {
+    background: linear-gradient(90deg, #f1edf3 25%, #e6e0ea 50%, #f1edf3 75%);
+    background-size: 200% 100%;
+    animation: pga-shimmer 1.2s linear infinite;
+}
+
+@keyframes pga-shimmer {
+    from {
+        background-position: 200% 0;
+    }
+
+    to {
+        background-position: -200% 0;
+    }
+}
+
+.pga-captcha-refresh {
+    display: grid;
+    place-items: center;
+    width: 36px;
+    height: 36px;
+    padding: 0;
+    border: 1px solid #d6dbe4;
+    border-radius: 50%;
+    background: #fff;
+    box-shadow: none;
+    color: var(--pga-blue);
+    cursor: pointer;
+    transition: background .15s, transform .3s;
+}
+
+    .pga-captcha-refresh:hover:not(:disabled) {
+        background: #eef5fb;
+        transform: rotate(90deg);
+    }
+
+    .pga-captcha-refresh:disabled {
+        opacity: .5;
+        cursor: default;
+    }
+
+    .pga-captcha-refresh:focus-visible {
+        outline: 2px solid var(--pga-blue);
+        outline-offset: 2px;
+    }
+
+@media (prefers-reduced-motion: reduce) {
+    .pga-captcha-loading {
+        animation: none;
+    }
+
+    .pga-captcha-refresh:hover:not(:disabled) {
+        transform: none;
+    }
+}
+
+/* /nopage */
+.pga-nopage-art {
+    display: grid;
+    place-items: center;
+    width: 96px;
+    height: 96px;
+    margin: 8px auto 24px;
+    border-radius: 50%;
+    background: #fde6f3;
+    color: var(--pga-primary);
+}
+
+/* ---------- small screens: brand panel becomes a header ---------- */
+@media (max-width: 900px) {
+    .pga-auth {
+        grid-template-columns: 1fr;
+        grid-template-rows: auto 1fr;
+    }
+
+    .pga-brand {
+        padding: 20px 20px 24px;
+        gap: 12px;
+    }
+
+    .pga-brand-body {
+        flex: none;
+        gap: 8px;
+    }
+
+    .pga-headline {
+        font-size: 20px;
+        max-width: none;
+    }
+
+    .pga-logo-img {
+        height: 28px;
+    }
+
+    .pga-slider {
+        display: none;
+    }
+
+    .pga-headline-mobile {
+        display: block;
+    }
+
+    .pga-panel {
+        padding: 24px 16px 16px;
+    }
+
+    .pga-panel-main {
+        justify-content: flex-start;
+    }
+
+    .pga-card {
+        padding: 28px 22px 22px;
+        margin-top: -8px;
+    }
+}
+
+/* ---------- PO Governance illustrations ---------- */
+.pga-art .a-head { fill: var(--pga-panel); }
+.pga-art .a-head-text { fill: #fff; font: 800 13px Inter, "Segoe UI", system-ui, sans-serif; letter-spacing: 2px; }
+.pga-art .a-plan { fill: none; stroke: var(--pga-brand); stroke-width: 3; stroke-dasharray: 6 4; stroke-linecap: round; }
+.pga-art .a-watch { fill: #fef3c7; }
+.pga-art .a-watch-text { fill: #b45309; }
+.pga-art .a-sap { fill: #0a6ed1; }
+.pga-art .a-sap-text { fill: #fff; font: 800 13px Inter, "Segoe UI", system-ui, sans-serif; letter-spacing: 2px; }
+.pga-art .a-led { fill: #34d399; }
+.pga-art .a-flow { fill: none; stroke: #fff; stroke-width: 4; stroke-linecap: round; stroke-dasharray: 2 9; }
+.pga-art .a-flow.back { stroke: var(--pga-brand); }
+.pga-art .a-flow-head { fill: none; stroke: #fff; stroke-width: 4; stroke-linecap: round; stroke-linejoin: round; }
+.pga-art .a-flow-head.back { stroke: var(--pga-brand); }
+.pga-art .a-tick.big { stroke-width: 6; }
+.pga-art .a-approve { fill: #dcfce7; }
+.pga-art .a-approve-text { fill: #00873e; font: 800 10px Inter, "Segoe UI", system-ui, sans-serif; letter-spacing: 1.5px; }
+.pga-art .a-link { fill: var(--pga-brand); }
+
+/* the existing account-page forms (change password, access denied) inside the card */
+.pga-card .pg-login-sub { text-align: left; font-size: 14px; color: var(--pga-muted); margin: 0 0 20px; }
+.pga-card .pg-primary { background: var(--pga-primary); }
+.pga-msg { margin: 0 0 16px; }

@@ -6,6 +6,9 @@
 @inject ServerStatusService Status
 @inject NavigationManager Nav
 @inject IOptions<PortalSettings> Settings
+@inject LoginNotices Notices
+@inject ISnackbar Snackbar
+@inject AuthenticationStateProvider AuthState
 
 <MudThemeProvider Theme="PortalTheme.Theme" />
 <MudPopoverProvider />
@@ -60,7 +63,7 @@
                 {
                     <MudMenuItem Href="/Account/ChangePassword" ForceLoad="true">🔑 Change password</MudMenuItem>
                 }
-                <MudMenuItem Href="/Account/Logout" ForceLoad="true">⏻ Sign out</MudMenuItem>
+                <MudMenuItem OnClick="() => _idle?.SignOut()" data-testid="menu-signout">⏻ Sign out</MudMenuItem>
             </ChildContent>
         </MudMenu>
     </div>
@@ -77,6 +80,9 @@
 <main class="pg-main">
     @Body
 </main>
+
+@* idle timeout with warning, keep-alive, and sign-out when the session ends (other device, admin change) — QPS *@
+<IdleTimeoutMonitor @ref="_idle" />
 
 <Admin.Components.Shared.Analytics.AiChatPanel />
 
@@ -102,6 +108,18 @@
         Session.Changed += OnChanged;
         Status.Changed += OnChanged;
         Status.Start(Settings.Value.StatusPollSeconds);
+    }
+
+    private IdleTimeoutMonitor? _idle;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender) return;
+        // one-time notice after sign-in: the session on the other device was ended (single session)
+        var token = (await AuthState.GetAuthenticationStateAsync()).User.FindFirst(CustomClaimTypes.SessionToken)?.Value;
+        if (Notices.Take(token) == LoginNotices.DuplicateLogin)
+            Snackbar.Add("You were signed in on another device — that session has been signed out.", Severity.Warning,
+                         o => o.VisibleStateDuration = 10000);
     }
 
     private void Switch(string view)

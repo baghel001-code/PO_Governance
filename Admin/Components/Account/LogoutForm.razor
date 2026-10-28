@@ -1,0 +1,49 @@
+@using Admin.Auth
+@inject IJSRuntime JS
+@implements IAsyncDisposable
+
+@*
+    QPS LogoutForm: hidden POST form to /account/sign-out. Put it once in a layout and call SubmitAsync() from the menu,
+    the idle-timeout monitor ("idle") or a forced sign-out ("replaced", "changed", "disabled" …). Signing out needs a real
+    HTTP request: only an HTTP response can clear the cookie.
+*@
+<form id="@_formId" method="post" action="@AccountEndpoints.SignOutPath" hidden>
+    @* The antiforgery token is added by auth.js just before posting. *@
+    <input type="hidden" name="reason" value="@_reason" />
+</form>
+
+@code {
+    private readonly string _formId = "logout-" + Guid.NewGuid().ToString("N");
+    private string _reason = "";
+    private bool _submitPending;
+    private IJSObjectReference? _module;
+
+    /// <param name="reason">Shown on the sign-in page (SignOutReasons); empty = "You have been signed out."</param>
+    public Task SubmitAsync(string reason = "") => InvokeAsync(() =>
+    {
+        _reason = reason;
+        _submitPending = true;   // submit after render, so the form carries the new reason
+        StateHasChanged();
+    });
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!_submitPending) return;
+        _submitPending = false;
+        try
+        {
+            _module ??= await JS.InvokeAsync<IJSObjectReference>("import", AccountEndpoints.AuthScriptUrl);
+            await _module.InvokeVoidAsync("submitForm", _formId, AccountEndpoints.AntiforgeryTokenPath);
+        }
+        catch (Exception ex) when (ex is JSDisconnectedException or JSException or TaskCanceledException)
+        {
+            // browser unreachable right now; the caller may retry (IdleTimeoutMonitor does every 5 s)
+        }
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        try { if (_module is not null) await _module.DisposeAsync(); }
+        catch (JSDisconnectedException) { }
+    }
+}

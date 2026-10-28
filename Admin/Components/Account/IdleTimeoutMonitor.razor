@@ -1,0 +1,188 @@
+@using Admin.Auth
+@using Microsoft.Extensions.Options
+@implements IAsyncDisposable
+@inject IJSRuntime JS
+@inject NavigationManager Nav
+@inject AuthenticationStateProvider AuthStateProvider
+@inject UserActivityState Activity
+@inject SessionEndState EndState
+@inject IOptions<PortalSettings> Portal
+
+@*
+    QPS IdleTimeoutMonitor. Place once in MainLayout. Signs the user out:
+    - after the idle timeout (PoGovSettings:IdleTimeoutMinutes of POGovApi), with a warning a minute before;
+    - at once when the session check finds the session ended (signed in on another device, roles changed or deactivated
+      by the admin, password reset) — the sign-in page then says why.
+    Activity in the page (and in other tabs of the portal) counts; it also keeps the cookie and the API session alive.
+*@
+<LogoutForm @ref="_logoutForm" />
+
+@if (_showWarning)
+{
+    <MudOverlay Visible="true" DarkBackground="true" ZIndex="10000">
+        <MudPaper Class="pa-6" Elevation="8" Style="max-width:420px" data-testid="idle-warning">
+            <MudText Typo="Typo.h6" Class="mb-2">Session about to expire</MudText>
+            <MudText Class="mb-4">
+                You have been inactive for a while. For your security you will be signed out in <b>@_secondsLeft</b> seconds.
+            </MudText>
+            <div class="d-flex justify-end gap-2">
+                <MudButton Variant="Variant.Text" OnClick="LogoutNow">Sign out</MudButton>
+                <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="StaySignedIn">Stay signed in</MudButton>
+            </div>
+        </MudPaper>
+    </MudOverlay>
+}
+
+@code {
+    private const string ScriptUrl = "js/idle-timeout.js?v=2026102801";
+    private static readonly TimeSpan WarningWindow = TimeSpan.FromSeconds(60);
+    private static readonly TimeSpan ReportThrottle = TimeSpan.FromSeconds(15);
+    private static readonly TimeSpan LogoutRetryDelay = TimeSpan.FromSeconds(5);
+
+    private LogoutForm? _logoutForm;
+    private readonly CancellationTokenSource _cts = new();
+    private TimeSpan _idleTimeout;
+    private TimeSpan _keepAliveInterval;
+    private PeriodicTimer? _timer;
+    private DotNetObjectReference<IdleTimeoutMonitor>? _selfRef;
+    private IJSObjectReference? _module;
+    private IJSObjectReference? _tracker;
+    private bool _isAuthenticated;
+    private bool _showWarning;
+    private int _secondsLeft;
+    private DateTimeOffset? _logoutRequestedAt;
+    private string _logoutReason = "";
+
+    /// <summary>Signs out now (the user menu's "Sign out").</summary>
+    public void SignOut() => Logout("");
+
+    protected override async Task OnInitializedAsync()
+    {
+        var state = await AuthStateProvider.GetAuthenticationStateAsync();
+        _isAuthenticated = state.User.Identity?.IsAuthenticated == true;
+        _idleTimeout = TimeSpan.FromMinutes(PortalAuthService.IdleMinutes(state.User, Math.Max(Portal.Value.IdleTimeoutMinutes, 1)));
+        // well under half the cookie life, so the sliding cookie is always renewed
+        _keepAliveInterval = TimeSpan.FromTicks(Math.Clamp(_idleTimeout.Ticks / 4, TimeSpan.FromSeconds(30).Ticks, TimeSpan.FromMinutes(5).Ticks));
+        AuthStateProvider.AuthenticationStateChanged += OnAuthenticationStateChanged;
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        // only once the circuit is interactive (never during prerender)
+        if (!firstRender || !_isAuthenticated) return;
+        Activity.Touch();
+        _ = RunTimerAsync();
+        try
+        {
+            _selfRef = DotNetObjectReference.Create(this);
+            _module = await JS.InvokeAsync<IJSObjectReference>("import", Nav.ToAbsoluteUri(ScriptUrl).ToString());
+            _tracker = await _module.InvokeAsync<IJSObjectReference>("start", _selfRef, new
+            {
+                reportThrottleMs = (int)ReportThrottle.TotalMilliseconds,
+                keepAliveUrl = Nav.ToAbsoluteUri(AccountEndpoints.KeepAlivePath.TrimStart('/')).ToString(),
+                keepAliveIntervalMs = (int)_keepAliveInterval.TotalMilliseconds
+            });
+        }
+        catch (JSDisconnectedException)
+        {
+            // circuit went away while starting; DisposeAsync cleans up
+        }
+    }
+
+    [JSInvokable]
+    public void ReportActivity()
+    {
+        if (_logoutRequestedAt is not null) return;
+        Activity.Touch();
+        if (_showWarning)
+        {
+            _showWarning = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task RunTimerAsync()
+    {
+        _timer = new PeriodicTimer(TimeSpan.FromSeconds(1));
+        try
+        {
+            while (await _timer.WaitForNextTickAsync(_cts.Token)) await InvokeAsync(CheckIdle);
+        }
+        catch (OperationCanceledException)
+        {
+        }
+    }
+
+    private void CheckIdle()
+    {
+        if (_logoutRequestedAt is { } requestedAt)
+        {
+            // a form post sent while the circuit was disconnected is lost; retry until it lands
+            if (DateTimeOffset.UtcNow - requestedAt >= LogoutRetryDelay) Logout(_logoutReason);
+            return;
+        }
+        var remaining = _idleTimeout - Activity.IdleFor;
+        if (remaining <= TimeSpan.Zero)
+        {
+            Logout(SessionEndReasons.Idle);
+            return;
+        }
+        var show = remaining <= WarningWindow;
+        var secondsLeft = (int)Math.Ceiling(remaining.TotalSeconds);
+        if (show != _showWarning || (show && secondsLeft != _secondsLeft))
+        {
+            _showWarning = show;
+            _secondsLeft = secondsLeft;
+            StateHasChanged();
+        }
+    }
+
+    private void StaySignedIn()
+    {
+        Activity.Touch();
+        _showWarning = false;
+    }
+
+    private void LogoutNow() => Logout("");
+
+    private void Logout(string reason)
+    {
+        _logoutRequestedAt = DateTimeOffset.UtcNow;
+        _logoutReason = reason;
+        _showWarning = false;
+        // a real HTTP POST clears the cookie and ends the API session; without it F5 would sign the user straight back in
+        _ = _logoutForm?.SubmitAsync(reason);
+    }
+
+    private void OnAuthenticationStateChanged(Task<AuthenticationState> task)
+    {
+        _ = InvokeAsync(async () =>
+        {
+            var state = await task;
+            // the session check ended the session (another device, admin change, idle backstop): finish by clearing the cookie
+            if (state.User.Identity?.IsAuthenticated != true && _logoutRequestedAt is null)
+                Logout(EndState.Reason ?? SessionEndReasons.Expired);
+        });
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        AuthStateProvider.AuthenticationStateChanged -= OnAuthenticationStateChanged;
+        _cts.Cancel();
+        _timer?.Dispose();
+        try
+        {
+            if (_tracker is not null)
+            {
+                await _tracker.InvokeVoidAsync("dispose");
+                await _tracker.DisposeAsync();
+            }
+            if (_module is not null) await _module.DisposeAsync();
+        }
+        catch (JSDisconnectedException)
+        {
+        }
+        _selfRef?.Dispose();
+        _cts.Dispose();
+    }
+}

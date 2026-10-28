@@ -33,13 +33,14 @@ namespace POGovApi.Controllers.V1
             await Task.Delay(300, ct);   // slows password guessing
             // Employee ID (HRMS sign-in: HRMS is asked only for employees registered here) or email (local accounts)
             var login = string.IsNullOrWhiteSpace(req.LoginId) ? req.Email ?? "" : req.LoginId;
-            var (token, err) = await _acc.LoginAsync(login, req.Password ?? "", ClientIp(HttpContext), ct);
-            if (err != null) throw new AppException(401, err);
+            var res = await _acc.LoginAsync(login, req.Password ?? "", ClientIp(HttpContext), ct);
+            if (res.Error != null) throw new AppException(401, res.Error);
+            var token = res.Token;
             var u = await _acc.SessionUserAsync(token, ct) ?? throw new AppException(401, "Sign in failed");
             return Success(new LoginResponse
             {
                 Token = token!, MustChange = u.MustChange, Name = u.Name, User = _acc.Public(u),
-                ExpiresIn = (int)_cfg.SessionIdleSeconds
+                ExpiresIn = (int)_cfg.SessionIdleSeconds, ReplacedOtherSession = res.ReplacedOther
             });
         }
 
@@ -56,7 +57,7 @@ namespace POGovApi.Controllers.V1
         {
             var err = await _acc.ChangePasswordAsync(Me.Email, req.Old ?? "", req.New ?? "", ct);
             if (err != null) throw new AppValidationException(err);
-            await _acc.EndSessionsAsync(Me.Email, Me.SessionToken, ct);   // sign out other devices
+            await _acc.EndSessionsAsync(Me.Email, Me.SessionToken, Domain.Constants.SessionEndReasons.Password, ct);   // sign out other devices
             return Success(OkResponse.Instance);
         }
 
@@ -65,7 +66,8 @@ namespace POGovApi.Controllers.V1
         public async Task<ActionResult<ApiDataResponse<MeResponse>>> AuthMe(CancellationToken ct) =>
             Success(new MeResponse
             {
-                User = await _status.MePublicAsync(Me, ct), PasswordMinLength = _cfg.PasswordMinLengthOrDefault, HrmsPasswordUrl = _cfg.HrmsPasswordUrl
+                User = await _status.MePublicAsync(Me, ct), PasswordMinLength = _cfg.PasswordMinLengthOrDefault, HrmsPasswordUrl = _cfg.HrmsPasswordUrl,
+                IdleTimeoutMinutes = _cfg.IdleMinutes, AbsoluteSessionHours = _cfg.AbsoluteSessionHours
             });
     }
 

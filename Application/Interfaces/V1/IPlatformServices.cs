@@ -45,14 +45,17 @@ namespace Application.Interfaces.V1
         /// Returns (token, null) or (null, error message). <paramref name="login"/> = Employee ID (HRMS sign-in: the password is
         /// checked by HRMS, and only for employees registered here) or email (local accounts).
         /// </summary>
-        Task<(string? Token, string? Error)> LoginAsync(string login, string password, string ip, CancellationToken ct = default);
+        Task<LoginResult> LoginAsync(string login, string password, string ip, CancellationToken ct = default);
         /// <summary>The active user of a live session (idle timeout; "last seen" persisted every 5 min), else null.</summary>
         Task<AppUser?> SessionUserAsync(string? token, CancellationToken ct = default);
+        /// <summary>As <see cref="SessionUserAsync"/>, plus why the session ended (Domain.Constants.SessionEndReasons; null = unknown token).</summary>
+        Task<(AppUser? User, string? EndReason)> SessionAsync(string? token, CancellationToken ct = default);
         Task LogoutAsync(string token, CancellationToken ct = default);
         /// <summary>Null on success, else the error message.</summary>
         Task<string?> ChangePasswordAsync(string email, string oldPassword, string newPassword, CancellationToken ct = default);
         string? ValidateNewPassword(string email, string password);
-        Task EndSessionsAsync(string email, string? keep = null, CancellationToken ct = default);
+        /// <summary>Ends the user's sessions except <paramref name="keep"/>; they are told <paramref name="reason"/> (SessionEndReasons).</summary>
+        Task EndSessionsAsync(string email, string? keep = null, string reason = Domain.Constants.SessionEndReasons.Changed, CancellationToken ct = default);
 
         /// <summary>A local account (Local sign-in mode only).</summary>
         Task<AppUser> AddUserAsync(string email, string name, IEnumerable<string> roles, string by, string source = "manual", CancellationToken ct = default);

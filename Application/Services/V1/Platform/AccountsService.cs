@@ -355,7 +355,9 @@ namespace Application.Services.V1.Platform
                 });
                 if (admins == 0) throw new AppValidationException("At least one active admin must remain");
                 _users[email] = nw;
-                if (!nw.Active) await EndSessionsLockedAsync(email, null, ct);
+                // QPS: deactivating or changing the roles signs the user out everywhere (the portal's cookie holds the roles)
+                if (!nw.Active) await EndSessionsLockedAsync(email, null, SessionEndReasons.Disabled, ct);
+                else if (!nw.Roles.SequenceEqual(u.Roles)) await EndSessionsLockedAsync(email, null, SessionEndReasons.Changed, ct);
                 await SaveUsersLockedAsync(ct);
                 result = nw.Clone();
             }
@@ -378,7 +380,7 @@ namespace Application.Services.V1.Platform
                 u.Failed = 0;
                 u.LockedUntil = 0;
                 await SaveUsersLockedAsync(ct);
-                await EndSessionsLockedAsync(email, null, ct);
+                await EndSessionsLockedAsync(email, null, SessionEndReasons.Password, ct);
             }
             await _audit.AppendAsync(by, "password-reset", email, ct);
         }
@@ -392,7 +394,7 @@ namespace Application.Services.V1.Platform
                 await ReloadUsersLockedAsync(ct);
                 if (!_users.Remove(email)) throw new NotFoundException("No such user");
                 await SaveUsersLockedAsync(ct);
-                await EndSessionsLockedAsync(email, null, ct);
+                await EndSessionsLockedAsync(email, null, SessionEndReasons.Disabled, ct);
             }
             await _audit.AppendAsync(by, "user-delete", email, ct);
         }
@@ -441,7 +443,7 @@ namespace Application.Services.V1.Platform
         /// for the built-in admin while <see cref="PoGovSettings.AllowAdminLocalLogin"/> is on. Local mode: email + the
         /// password kept here (v1.1.4). Every failure takes at least <see cref="PoGovSettings.LoginFailureMinMs"/>.
         /// </summary>
-        public async Task<(string? Token, string? Error)> LoginAsync(string login, string password, string ip, CancellationToken ct = default)
+        public async Task<LoginResult> LoginAsync(string login, string password, string ip, CancellationToken ct = default)
         {
             await InitializeAsync(ct);
             var started = Stopwatch.GetTimestamp();
@@ -456,7 +458,7 @@ namespace Application.Services.V1.Platform
 
         public const string BadEmployeeLogin = "Employee ID or password is incorrect";
 
-        private async Task<(string? Token, string? Error)> LoginCoreAsync(string login, string password, string ip, CancellationToken ct)
+        private async Task<LoginResult> LoginCoreAsync(string login, string password, string ip, CancellationToken ct)
         {
             if (!_cfg.HrmsLogin) return await LocalLoginAsync(NormEmail(login), password, ip, ct);
             if (login.Contains('@'))
@@ -466,12 +468,12 @@ namespace Application.Services.V1.Platform
                     && await GetUserAsync(email, ct) is { IsEmployee: false })
                     return await LocalLoginAsync(email, password, ip, ct);
                 await _audit.AppendAsync(email.Length > 0 ? email : "?", "login-fail", $"email sign-in refused (HRMS sign-in) ip={ip}", ct);
-                return (null, "Sign in with your Employee ID and HRMS password.");
+                return LoginResult.Fail("Sign in with your Employee ID and HRMS password.");
             }
             return await EmployeeLoginAsync(NormEmpCode(login), password, ip, ct);
         }
 
-        private async Task<(string? Token, string? Error)> EmployeeLoginAsync(string code, string password, string ip, CancellationToken ct)
+        private async Task<LoginResult> EmployeeLoginAsync(string code, string password, string ip, CancellationToken ct)
         {
             await MaybeReloadAsync(ct);
             string? email = null, refused = null, lockedText = null;
@@ -487,9 +489,9 @@ namespace Application.Services.V1.Platform
             {
                 // not registered here (or deactivated): HRMS is not asked, whatever the password
                 await _audit.AppendAsync(code.Length > 0 ? "emp:" + PlatformCore.Trunc(code, 30) : "?", "login-fail", $"{refused} ip={ip}", ct);
-                return (null, BadEmployeeLogin);
+                return LoginResult.Fail(BadEmployeeLogin);
             }
-            if (lockedText != null || email == null) return (null, lockedText ?? BadEmployeeLogin);
+            if (lockedText != null || email == null) return LoginResult.Fail(lockedText ?? BadEmployeeLogin);
 
             var r = await _hrms.VerifyPasswordAsync(code, password, ct);
             if (r.Status == HrmsStatus.Ok && !SameCode(r.Employee?.EmpCode, code)) r = r with { Status = HrmsStatus.Invalid, Message = "HRMS answered for another employee code" };
@@ -497,28 +499,28 @@ namespace Application.Services.V1.Platform
             {
                 case HrmsStatus.Unavailable:
                     await _audit.AppendAsync(email, "login-error", $"HRMS unavailable: {PlatformCore.Trunc(r.Message ?? "", 200)} ip={ip}", ct);
-                    return (null, "Sign-in is temporarily unavailable (HRMS did not answer). Please try again in a few minutes.");
+                    return LoginResult.Fail("Sign-in is temporarily unavailable (HRMS did not answer). Please try again in a few minutes.");
                 case HrmsStatus.LockedInHrms:
                     await _audit.AppendAsync(email, "login-fail", $"locked in HRMS ip={ip}", ct);
-                    return (null, "Your HRMS account is locked after too many wrong passwords. Unlock it in MyVishal (My Page → Unlock User) or try again in about 30 minutes.");
+                    return LoginResult.Fail("Your HRMS account is locked after too many wrong passwords. Unlock it in MyVishal (My Page → Unlock User) or try again in about 30 minutes.");
                 case HrmsStatus.Ok when !r.Employee!.IsWorking:
                     await _audit.AppendAsync(email, "login-fail", $"HRMS: employee {code} resigned / inactive ip={ip}", ct);
-                    return (null, "Your HRMS record is not active. Contact the administrator.");
+                    return LoginResult.Fail("Your HRMS record is not active. Contact the administrator.");
             }
 
             var audits = new List<(string, string, string)>();
-            (string? Token, string? Error) result;
+            LoginResult result;
             using (await LockAsync(ct))
             {
                 await ReloadUsersLockedAsync(ct);
                 await RefreshSessionsLockedAsync(ct);
                 // re-read: the admin may have deactivated or re-linked the user while HRMS was answering
                 if (!_users.TryGetValue(email, out var u) || !u.Active || !SameCode(u.EmpCode, code))
-                    result = (null, BadEmployeeLogin);
+                    result = LoginResult.Fail(BadEmployeeLogin);
                 else if (r.Status != HrmsStatus.Ok)
-                    result = (null, await RecordFailureLockedAsync(u, BadEmployeeLogin, ip, audits, ct));
+                    result = LoginResult.Fail(await RecordFailureLockedAsync(u, BadEmployeeLogin, ip, audits, ct));
                 else
-                    result = (await StartSessionLockedAsync(u, ip, audits, ct), null);
+                    result = await StartSessionLockedAsync(u, ip, audits, ct);
             }
             foreach (var (w, a, d) in audits) await _audit.AppendAsync(w, a, d, ct);
             return result;
@@ -547,8 +549,12 @@ namespace Application.Services.V1.Platform
             return error;
         }
 
-        /// <summary>Right password: clears the failures and opens a session (caller holds the lock).</summary>
-        private async Task<string> StartSessionLockedAsync(AppUser u, string ip, List<(string, string, string)> audits, CancellationToken ct)
+        /// <summary>
+        /// Right password: clears the failures and opens a session (caller holds the lock). Single session (QPS
+        /// ISingleSessionGuard): the user's other live sessions end as "replaced" — that device is signed out at its next
+        /// check and told why.
+        /// </summary>
+        private async Task<LoginResult> StartSessionLockedAsync(AppUser u, string ip, List<(string, string, string)> audits, CancellationToken ct)
         {
             u.Failed = 0;
             u.LockedUntil = 0;
@@ -556,19 +562,33 @@ namespace Application.Services.V1.Platform
             await SaveUsersLockedAsync(ct);
             var token = NewToken();
             var now = Now;
+            var (upserted, removed) = PruneSessionsLocked();
+            var replaced = new List<string>();
+            if (_cfg.SingleSession)
+                foreach (var (t, other) in _sessions.Where(kv => kv.Value.Email == u.Email && kv.Value.IsLive))
+                {
+                    End(other, SessionEndReasons.Replaced, now);
+                    replaced.Add(t);
+                }
             _sessions[token] = new SessionRecord { Email = u.Email, Created = now, Seen = now, Ip = ip };
-            var pruned = PruneSessionsLocked();
-            await SaveSessionsLockedAsync(new[] { token }, pruned, ct);
-            audits.Add((u.Email, "login", u.IsEmployee ? $"hrms emp={u.EmpCode} ip={ip}" : $"ip={ip}"));
-            return token;
+            await SaveSessionsLockedAsync(upserted.Concat(replaced).Append(token), removed, ct);
+            audits.Add((u.Email, "login", (u.IsEmployee ? $"hrms emp={u.EmpCode} " : "") + $"ip={ip}"
+                                          + (replaced.Count > 0 ? $" (signed out {replaced.Count} other session(s))" : "")));
+            return new LoginResult(token, null, replaced.Count > 0);
+        }
+
+        private static void End(SessionRecord s, string reason, double now)
+        {
+            s.Ended = now;
+            s.EndReason = reason;
         }
 
         /// <summary>Email + the password kept by the tool (Local mode, and the built-in admin in HRMS mode).</summary>
-        private async Task<(string? Token, string? Error)> LocalLoginAsync(string email, string password, string ip, CancellationToken ct)
+        private async Task<LoginResult> LocalLoginAsync(string email, string password, string ip, CancellationToken ct)
         {
             await MaybeReloadAsync(ct);
             var audits = new List<(string, string, string)>();
-            string? token = null, error = null;
+            LoginResult result;
             using (await LockAsync(ct))
             {
                 await ReloadUsersLockedAsync(ct);
@@ -576,17 +596,17 @@ namespace Application.Services.V1.Platform
                 if (!_users.TryGetValue(email, out var u) || !u.Active)
                 {
                     audits.Add((email.Length > 0 ? email : "?", "login-fail", $"unknown or inactive user ip={ip}"));
-                    error = "Email or password is incorrect";
+                    result = LoginResult.Fail("Email or password is incorrect");
                 }
                 else if (u.LockedUntil > Now)
-                    error = LockedText(u);
+                    result = LoginResult.Fail(LockedText(u));
                 else if (!_hasher.Verify(password, u.Pw))
-                    error = await RecordFailureLockedAsync(u, "Email or password is incorrect", ip, audits, ct);
+                    result = LoginResult.Fail(await RecordFailureLockedAsync(u, "Email or password is incorrect", ip, audits, ct));
                 else
-                    token = await StartSessionLockedAsync(u, ip, audits, ct);
+                    result = await StartSessionLockedAsync(u, ip, audits, ct);
             }
             foreach (var (w, a, d) in audits) await _audit.AppendAsync(w, a, d, ct);
-            return (token, error);
+            return result;
         }
 
         // ── employees registered from HRMS (admin) ──────────────────
@@ -649,6 +669,7 @@ namespace Application.Services.V1.Platform
                 }
                 ApplyEmployee(u, emp, by);
                 await SaveUsersLockedAsync(ct);
+                if (linked) await EndSessionsLockedAsync(key, null, SessionEndReasons.Changed, ct);   // now signs in with the Employee ID
                 result = u.Clone();
             }
             await _audit.AppendAsync(by, linked ? "user-link-hrms" : "user-add",
@@ -678,8 +699,10 @@ namespace Application.Services.V1.Platform
                 if (!_users.TryGetValue(email, out var u)) throw new NotFoundException("No such user");
                 if (_users.Values.FirstOrDefault(x => x != u && SameCode(x.EmpCode, code)) is { } other)
                     throw new AppValidationException($"Employee ID {code} is already registered ({other.Email})");
+                var relinked = !SameCode(u.EmpCode, code);
                 ApplyEmployee(u, emp, by);
                 await SaveUsersLockedAsync(ct);
+                if (relinked) await EndSessionsLockedAsync(email, null, SessionEndReasons.Changed, ct);
                 result = u.Clone();
             }
             await _audit.AppendAsync(by, current.IsEmployee && SameCode(current.EmpCode, code) ? "user-hrms-refresh" : "user-link-hrms",
@@ -709,41 +732,67 @@ namespace Application.Services.V1.Platform
         private static string NewToken() =>
             Convert.ToBase64String(RandomNumberGenerator.GetBytes(32)).TrimEnd('=').Replace('+', '-').Replace('/', '_');
 
-        /// <summary>Removes idle sessions; returns their tokens.</summary>
-        private List<string> PruneSessionsLocked()
+        /// <summary>An ended session is kept this long (seconds) so the portal can still learn why it ended.</summary>
+        private const double EndedKeepSeconds = 24 * 3600;
+
+        private bool IdleOver(SessionRecord s, double now) => now - s.Seen > _cfg.SessionIdleSeconds;
+        private bool LifetimeOver(SessionRecord s, double now) => _cfg.AbsoluteSessionHours > 0 && now - s.Created > _cfg.AbsoluteSessionHours * 3600;
+
+        /// <summary>
+        /// Ends idle / expired live sessions (kept as ended) and drops sessions ended more than a day ago.
+        /// Returns the changed and the removed tokens (caller holds the lock and saves).
+        /// </summary>
+        private (List<string> Upserted, List<string> Removed) PruneSessionsLocked()
         {
-            var idle = _cfg.SessionIdleSeconds;
             var now = Now;
-            var gone = _sessions.Where(kv => now - kv.Value.Seen > idle).Select(kv => kv.Key).ToList();
-            foreach (var t in gone) _sessions.Remove(t);
-            return gone;
+            var upserted = new List<string>();
+            var removed = new List<string>();
+            foreach (var (t, s) in _sessions.ToList())
+            {
+                if (!s.IsLive)
+                {
+                    if (now - s.Ended > EndedKeepSeconds) { _sessions.Remove(t); removed.Add(t); }
+                }
+                else if (IdleOver(s, now) || LifetimeOver(s, now))
+                {
+                    End(s, IdleOver(s, now) ? SessionEndReasons.Idle : SessionEndReasons.Expired, now);
+                    upserted.Add(t);
+                }
+            }
+            return (upserted, removed);
         }
 
-        public async Task<AppUser?> SessionUserAsync(string? token, CancellationToken ct = default)
+        public async Task<AppUser?> SessionUserAsync(string? token, CancellationToken ct = default) => (await SessionAsync(token, ct)).User;
+
+        /// <summary>
+        /// The user of a live session, or null with the reason the session ended (<see cref="SessionEndReasons"/>; null =
+        /// unknown token). Idle timeout and absolute lifetime are checked here; "last seen" is persisted every 5 minutes.
+        /// </summary>
+        public async Task<(AppUser? User, string? EndReason)> SessionAsync(string? token, CancellationToken ct = default)
         {
-            if (string.IsNullOrEmpty(token)) return null;
+            if (string.IsNullOrEmpty(token)) return (null, null);
             await InitializeAsync(ct);
-            var idle = _cfg.SessionIdleSeconds;
             await MaybeReloadAsync(ct);
             using (await LockAsync(ct))
             {
                 await RefreshSessionsLockedAsync(ct);   // a session signed in / out on another API instance
-                if (!_sessions.TryGetValue(token, out var s)) return null;
+                if (!_sessions.TryGetValue(token, out var s)) return (null, null);
+                if (!s.IsLive) return (null, s.EndReason ?? SessionEndReasons.Expired);
                 var now = Now;
-                if (now - s.Seen > idle)
+                if (IdleOver(s, now) || LifetimeOver(s, now))
                 {
-                    _sessions.Remove(token);
-                    await SaveSessionsLockedAsync(Array.Empty<string>(), new[] { token }, ct);
-                    return null;
+                    End(s, IdleOver(s, now) ? SessionEndReasons.Idle : SessionEndReasons.Expired, now);
+                    await SaveSessionsLockedAsync(new[] { token }, Array.Empty<string>(), ct);
+                    return (null, s.EndReason);
                 }
-                if (!_users.TryGetValue(s.Email, out var u) || !u.Active) return null;
+                if (!_users.TryGetValue(s.Email, out var u) || !u.Active) return (null, SessionEndReasons.Disabled);
                 if (now - s.Seen > 300)
                 {
                     s.Seen = now;   // persist "last seen" at most every 5 min
                     await SaveSessionsLockedAsync(new[] { token }, Array.Empty<string>(), ct);
                 }
                 else s.Seen = now;
-                return u.Clone();
+                return (u.Clone(), null);
             }
         }
 
@@ -757,21 +806,23 @@ namespace Application.Services.V1.Platform
                 _sessions.Remove(token, out s);
                 await SaveSessionsLockedAsync(Array.Empty<string>(), new[] { token }, ct);
             }
-            if (s != null) await _audit.AppendAsync(s.Email, "logout", "", ct);
+            if (s is { IsLive: true }) await _audit.AppendAsync(s.Email, "logout", "", ct);
         }
 
-        public async Task EndSessionsAsync(string email, string? keep = null, CancellationToken ct = default)
+        public async Task EndSessionsAsync(string email, string? keep = null, string reason = SessionEndReasons.Changed, CancellationToken ct = default)
         {
             await InitializeAsync(ct);
-            using (await LockAsync(ct)) await EndSessionsLockedAsync(email, keep, ct);
+            using (await LockAsync(ct)) await EndSessionsLockedAsync(NormEmail(email), keep, reason, ct);
         }
 
-        private async Task EndSessionsLockedAsync(string email, string? keep, CancellationToken ct)
+        /// <summary>Ends every live session of <paramref name="email"/> except <paramref name="keep"/>, with the reason (caller holds the lock).</summary>
+        private async Task EndSessionsLockedAsync(string email, string? keep, string reason, CancellationToken ct)
         {
             await RefreshSessionsLockedAsync(ct);
-            var gone = _sessions.Where(kv => kv.Value.Email == email && kv.Key != keep).Select(kv => kv.Key).ToList();
-            foreach (var t in gone) _sessions.Remove(t);
-            await SaveSessionsLockedAsync(Array.Empty<string>(), gone, ct);
+            var now = Now;
+            var ended = _sessions.Where(kv => kv.Value.Email == email && kv.Key != keep && kv.Value.IsLive).Select(kv => kv.Key).ToList();
+            foreach (var t in ended) End(_sessions[t], reason, now);
+            if (ended.Count > 0) await SaveSessionsLockedAsync(ended, Array.Empty<string>(), ct);
         }
 
         // ── SCR products → users, scope, approvers ──────────────────
@@ -911,6 +962,7 @@ namespace Application.Services.V1.Platform
                     }
                 }
                 if (res.Added.Count > 0 || res.Updated.Count > 0) await SaveUsersLockedAsync(ct);
+                foreach (var email in res.Updated) await EndSessionsLockedAsync(email, null, SessionEndReasons.Changed, ct);   // new roles: sign in again
             }
             _scopeCache = null;
             await _audit.AppendAsync(by, "scr-sync", $"added={res.Added.Count} updated={res.Updated.Count}", ct);

@@ -1,0 +1,93 @@
+@using System.Linq.Expressions
+@using Admin.Auth.Captcha
+@using MudBlazor
+@inject CaptchaService Captchas
+@inject ILogger<CaptchaField> Logger
+@implements IDisposable
+
+@*
+    QPS CaptchaField: image CAPTCHA (drawn on the server by PngCaptchaGenerator) with a refresh button and the answer box.
+    Nothing is stored in the session: CaptchaService keeps the answer in server memory and this
+    component holds only the challenge id, which never goes to the browser. Bind the typed text with
+    @bind-Value, then in the submit handler:
+        var ok = Captchas.Validate(captchaField.ChallengeId, model.Captcha);
+        await captchaField.RefreshAsync();   // the challenge is used up either way
+    The image is created after the page becomes interactive, so a prerendered page
+    never shows a code that is thrown away a moment later.
+*@
+<div class="pga-captcha">
+    <div class="pga-captcha-row">
+        @if (_challenge is not null)
+        {
+            <img class="pga-captcha-img" src="@_challenge.ImageDataUrl"
+                 alt="Security code image. If you can't read it, use the refresh button for a new one." />
+        }
+        else if (_failed)
+        {
+            <div class="pga-captcha-img pga-captcha-error" role="alert">Couldn't load the code. Use refresh to try again.</div>
+        }
+        else
+        {
+            <div class="pga-captcha-img pga-captcha-loading" aria-hidden="true"></div>
+        }
+        <button type="button" class="pga-captcha-refresh" title="Show a different code" aria-label="Show a different code"
+                disabled="@(Disabled || (_challenge is null && !_failed))" @onclick="RefreshAsync">
+            <MudIcon Icon="@Icons.Material.Filled.Refresh" Size="Size.Small" />
+        </button>
+    </div>
+
+
+    <MudTextField T="string" Value="@Value" ValueChanged="@ValueChanged" For="@For"
+                  Label="Security code" Variant="Variant.Outlined" Disabled="@Disabled"
+                  MaxLength="@CaptchaService.MaxLength" HelperText="Type the 5 characters shown (not case-sensitive)."
+                  autocomplete="off" autocapitalize="characters" spellcheck="false" />
+</div>
+
+@code {
+    [Parameter] public string Value { get; set; } = "";
+    [Parameter] public EventCallback<string> ValueChanged { get; set; }
+    [Parameter] public Expression<Func<string>>? For { get; set; }
+    [Parameter] public bool Disabled { get; set; }
+
+    private CaptchaService.Challenge? _challenge;
+    private bool _failed;
+
+    /// <summary>Id of the image on screen; pass it to CaptchaService.Validate.</summary>
+    public string? ChallengeId => _challenge?.Id;
+
+    protected override void OnAfterRender(bool firstRender)
+    {
+        if (!firstRender)
+            return;
+        LoadNew();
+        StateHasChanged();
+    }
+
+    /// <summary>Shows a new image and clears the answer box.</summary>
+    public async Task RefreshAsync()
+    {
+        LoadNew();
+        await ValueChanged.InvokeAsync("");
+        StateHasChanged();
+    }
+
+    private void LoadNew()
+    {
+        Captchas.Discard(_challenge?.Id);
+        _challenge = null;
+        try
+        {
+            _challenge = Captchas.Create();
+            _failed = false;
+        }
+        catch (Exception ex)
+        {
+            // e.g. VmmCaptcha/System.Drawing failing on the server. The form stays usable:
+            // Validate returns false without a challenge, so sign-in can't skip the check.
+            Logger.LogError(ex, "Could not generate a CAPTCHA image");
+            _failed = true;
+        }
+    }
+
+    public void Dispose() => Captchas.Discard(_challenge?.Id);
+}

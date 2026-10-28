@@ -7,24 +7,35 @@ using Microsoft.Extensions.Options;
 namespace Admin.Auth
 {
     /// <summary>
-    /// Re-checks the session with POGovApi (PO_AUTH_ME with the cookie's session token) every
-    /// AppConfigurationSettings:UserRevalidateInSeconds while a page is open: a password reset, deactivation or idle
-    /// expiry on the server signs the open page out (v1.1.4 behaviour: "Changing or resetting a password signs that
-    /// person out everywhere else"). Transient failures (API restarting, network) are tolerated for a few checks so a
-    /// short API restart doesn't sign everyone out (QPS CustomRevalidatingAuthenticationStateProvider).
+    /// QPS AppRevalidatingAuthStateProvider. An open interactive page makes no HTTP requests, so the cookie handler never
+    /// sees it: this re-checks the circuit's session with POGovApi every AppConfigurationSettings:UserRevalidateInSeconds.
+    /// The session ends when the user signed in on another device, the admin changed their roles or deactivated them, the
+    /// password was reset, or the idle / absolute timeout passed — the page becomes anonymous and the layout signs the user
+    /// out with the reason. Also the server-side idle backstop (when the page's JavaScript is not running). Transient
+    /// failures (API restarting) are tolerated for a few checks so a short outage doesn't sign everyone out.
     /// </summary>
     public sealed class ApiRevalidatingAuthStateProvider : RevalidatingServerAuthenticationStateProvider
     {
         private const int MaxConsecutiveFailures = 5;
         private readonly IServiceScopeFactory _scopes;
         private readonly AppConfigurationSettings _settings;
+        private readonly PortalSettings _portal;
+        private readonly SessionEndState _endState;
+        private readonly EndedSessions _ended;
+        private readonly UserActivityState _activity;
         private readonly ILogger _log;
         private int _failures;
 
-        public ApiRevalidatingAuthStateProvider(ILoggerFactory lf, IServiceScopeFactory scopes, IOptions<AppConfigurationSettings> settings) : base(lf)
+        public ApiRevalidatingAuthStateProvider(ILoggerFactory lf, IServiceScopeFactory scopes, IOptions<AppConfigurationSettings> settings,
+                                                IOptions<PortalSettings> portal, SessionEndState endState, EndedSessions ended, UserActivityState activity)
+            : base(lf)
         {
             _scopes = scopes;
             _settings = settings.Value;
+            _portal = portal.Value;
+            _endState = endState;
+            _ended = ended;
+            _activity = activity;
             _log = lf.CreateLogger<ApiRevalidatingAuthStateProvider>();
         }
 
@@ -32,23 +43,46 @@ namespace Admin.Auth
 
         protected override async Task<bool> ValidateAuthenticationStateAsync(AuthenticationState state, CancellationToken ct)
         {
+            if (state.User.Identity?.IsAuthenticated != true) return true;
             var token = state.User.FindFirst(CustomClaimTypes.SessionToken)?.Value;
-            if (string.IsNullOrEmpty(token)) return false;
-            // Runs on a timer of the circuit: own DI scope.
-            await using var scope = _scopes.CreateAsyncScope();
-            var auth = scope.ServiceProvider.GetRequiredService<PortalAuthService>();
-            var res = await auth.MeAsync(token, ct);
-            if (res.IsSuccess) { _failures = 0; return true; }
-            // 401 "Please log in" = the session ended; a 401 from the static-token check is a configuration problem, not the user's.
-            if (res.responseCode is 401 && res.responseMessage != Infrastructure.Middleware.StaticTokenMiddleware.Unauthorized) return false;
-            if (res.responseCode is 403) return true; // mustChange — handled by the layout
-            if (++_failures < MaxConsecutiveFailures)
+
+            // idle backstop: IdleTimeoutMonitor (browser) normally signs the user out first, with a warning
+            if (_activity.IdleFor >= TimeSpan.FromMinutes(PortalAuthService.IdleMinutes(state.User, _portal.IdleTimeoutMinutes)))
+                return End(token, SessionEndReasons.Idle);
+            if (PortalAuthService.AuthTime(state.User) is { } since && _portal.AbsoluteLifetimeHours > 0
+                && DateTimeOffset.UtcNow - since >= TimeSpan.FromHours(_portal.AbsoluteLifetimeHours))
+                return End(token, SessionEndReasons.Expired);
+
+            try
             {
-                _log.LogWarning("Session revalidation failed ({Code}: {Message}) {Count}/{Max}; keeping the user signed in until the next check.",
-                    res.responseCode, res.responseMessage, _failures, MaxConsecutiveFailures);
-                return true;
+                // runs on a timer of the circuit: own DI scope
+                await using var scope = _scopes.CreateAsyncScope();
+                var reason = await scope.ServiceProvider.GetRequiredService<PortalAuthService>().CheckSessionAsync(token, ct);
+                _failures = 0;
+                return reason == null || End(token, reason);
             }
-            _log.LogError("Session revalidation failed {Count} times in a row; signing the user out.", _failures);
+            catch (Exception) when (ct.IsCancellationRequested)
+            {
+                throw;   // circuit closing
+            }
+            catch (Exception ex)
+            {
+                if (++_failures < MaxConsecutiveFailures)
+                {
+                    _log.LogWarning("Session check failed ({Message}) {Count}/{Max}; keeping the user signed in until the next check.",
+                        ex.Message, _failures, MaxConsecutiveFailures);
+                    return true;
+                }
+                _log.LogError(ex, "Session check failed {Count} times in a row; signing the user out.", _failures);
+                return End(token, SessionEndReasons.Expired);
+            }
+        }
+
+        /// <summary>The layout reads the reason and posts the sign-out form; the cookie is refused on its next request already.</summary>
+        private bool End(string? token, string reason)
+        {
+            _endState.Reason = reason;
+            _ended.Add(token, reason);
             return false;
         }
     }

@@ -1,7 +1,18 @@
+@using Admin.Auth
 @inject NavigationManager Nav
+@inject SessionEndState EndState
+
+@if (EndState.Reason != null)
+{
+    <div class="pg-loading">Signing out…</div>
+}
+
 @code {
     protected override void OnInitialized()
     {
+        // The session check just ended the session: IdleTimeoutMonitor posts the sign-out form (clears the cookie, ends the
+        // API session, shows the reason on the sign-in page) — don't navigate away from under it.
+        if (EndState.Reason != null) return;
         var back = Uri.EscapeDataString("/" + Nav.ToBaseRelativePath(Nav.Uri));
         Nav.NavigateTo("/Account/Login?next=" + back, forceLoad: true);
     }

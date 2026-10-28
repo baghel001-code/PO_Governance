@@ -1,0 +1,38 @@
+@* Slide 1 art: a purchase order checked line by line, with the verdict stamp. Styled by wwwroot/css/auth.css. *@
+<svg class="pga-art" viewBox="0 0 480 360" role="img" aria-label="A purchase order checked line by line and stamped approved">
+    <ellipse cx="240" cy="330" rx="200" ry="16" class="a-shadow" />
+    <!-- PO document -->
+    <rect x="118" y="34" width="230" height="286" rx="14" class="a-paper a-card-shadow" />
+    <rect x="118" y="34" width="230" height="46" rx="14" class="a-head" />
+    <rect x="118" y="62" width="230" height="18" class="a-head" />
+    <text x="140" y="64" class="a-head-text">PURCHASE ORDER</text>
+    <rect x="140" y="98" width="110" height="8" rx="4" class="a-ink" />
+    <rect x="140" y="114" width="70" height="6" rx="3" class="a-line" />
+    <!-- lines with checks -->
+    <g>
+        <circle cx="150" cy="150" r="10" class="a-ok" /><path d="M145 150 l4 4 l7 -8" class="a-tick" />
+        <rect x="170" y="144" width="120" height="6" rx="3" class="a-line" /><rect x="170" y="155" width="70" height="5" rx="2.5" class="a-line" />
+        <circle cx="150" cy="190" r="10" class="a-ok" /><path d="M145 190 l4 4 l7 -8" class="a-tick" />
+        <rect x="170" y="184" width="140" height="6" rx="3" class="a-line" /><rect x="170" y="195" width="90" height="5" rx="2.5" class="a-line" />
+        <circle cx="150" cy="230" r="10" class="a-wait" />
+        <rect x="170" y="224" width="110" height="6" rx="3" class="a-line" /><rect x="170" y="235" width="60" height="5" rx="2.5" class="a-line" />
+    </g>
+    <rect x="140" y="270" width="96" height="8" rx="4" class="a-ink" />
+    <rect x="140" y="286" width="60" height="6" rx="3" class="a-line" />
+    <!-- verdict stamp -->
+    <g class="a-float" transform="rotate(-12 330 250)">
+        <circle cx="330" cy="250" r="56" class="a-stamp-bg" />
+        <circle cx="330" cy="250" r="48" class="a-stamp-ring" />
+        <circle cx="330" cy="250" r="42" class="a-stamp-ring thin" />
+        <text x="330" y="246" text-anchor="middle" class="a-stamp-small">PO CHECK</text>
+        <text x="330" y="267" text-anchor="middle" class="a-stamp-text" style="font-size:14px;letter-spacing:1px">APPROVE</text>
+    </g>
+    <!-- magnifier -->
+    <g class="a-float a-delay">
+        <circle cx="96" cy="118" r="30" class="a-lens" />
+        <circle cx="96" cy="118" r="30" class="a-ring" />
+        <line x1="118" y1="140" x2="140" y2="162" class="a-handle" />
+    </g>
+    <circle cx="420" cy="80" r="4" class="a-dot" />
+    <circle cx="44" cy="250" r="3" class="a-dot" />
+</svg>

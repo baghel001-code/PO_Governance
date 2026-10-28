@@ -1,70 +1,227 @@
 @page "/Account/Login"
 @layout AccountLayout
+@rendermode InteractiveServer
 @attribute [AllowAnonymous]
-@using Admin.Auth
+@using System.ComponentModel.DataAnnotations
+@using Admin.Auth.Captcha
+@inject PortalAuthService Auth
 @inject LoginModeService LoginMode
+@inject LoginTicketStore Tickets
+@inject CaptchaService Captchas
+@inject IJSRuntime JS
+@inject ILogger<Login> Logger
+@implements IAsyncDisposable
 
+@*
+    QPS sign-in (Admin/Components/Pages/Account/Login.razor). Interactive: the CAPTCHA answer stays on the server.
+    1. CAPTCHA first (a new image after every attempt, right or wrong).
+    2. POGovApi checks the Employee ID: only employees registered by the admin; the HRMS password is checked by POGovApi
+       with HRMS (the portal never calls HRMS). Signing in ends the user's session on any other device.
+    3. The API session token goes, through a one-time ticket, to /account/complete-login, which sets the cookie.
+*@
 <PageTitle>Sign in · VMM PO Governance</PageTitle>
 
-<div class="pg-login-sub">@(_hrms ? "Sign in with your Employee ID and HRMS password" : "Sign in with your company email")</div>
+<div class="pga-eyebrow">PO Governance Platform</div>
+<h2 class="pga-title">Sign in</h2>
+<p class="pga-sub">@(_hrms ? "Use your Employee ID and your HRMS (MyVishal) password." : "Use your company email and password.")</p>
 
-@* A plain form: it posts to AccountEndpoints (/Account/SignIn), which sets the cookie and redirects. The portal only calls
-   POGovApi; POGovApi checks that the employee is registered here before it asks HRMS for the password. *@
-<form method="post" action="@AccountEndpoints.SignInPath">
-    <AntiforgeryToken />
-    <input type="hidden" name="Next" value="@AccountEndpoints.SafeNext(Next)" />
-    @if (!string.IsNullOrEmpty(Error))
-    {
-        <div class="pg-msg err">@Error</div>
-    }
-    @if (_hrms)
-    {
-        <div class="pg-field">
-            <label for="login">Employee ID</label>
-            <input id="login" name="LoginId" type="text" value="@LoginValue" autocomplete="username" required maxlength="100"
-                   placeholder="e.g. 102345" autofocus="@string.IsNullOrEmpty(LoginValue)" />
-        </div>
-    }
-    else
-    {
-        <div class="pg-field">
-            <label for="login">Email</label>
-            <input id="login" name="LoginId" type="email" value="@LoginValue" autocomplete="username" required placeholder="name@vishalwholesale.co.in" autofocus="@string.IsNullOrEmpty(LoginValue)" />
-        </div>
-    }
-    <div class="pg-field">
-        <label for="pw">@(_hrms ? "HRMS password" : "Password")</label>
-        <input id="pw" name="Password" type="password" autocomplete="current-password" required autofocus="@(!string.IsNullOrEmpty(LoginValue))" />
+@if (_notice is not null)
+{
+    <MudAlert Severity="@(_noticeWarn ? Severity.Warning : Severity.Info)" Dense="true" Class="mb-4" data-testid="login-notice">@_notice</MudAlert>
+}
+@if (_error is not null)
+{
+    <MudAlert Severity="Severity.Error" Dense="true" Class="mb-4" role="alert" data-testid="login-error">@_error</MudAlert>
+}
+
+<EditForm Model="_model" OnValidSubmit="SignInAsync">
+    <DataAnnotationsValidator />
+    <MudTextField @bind-Value="_model.Login" For="@(() => _model.Login)" Label="@(_hrms ? "Employee ID" : "Email")"
+                  Variant="Variant.Outlined" Class="mb-4" AutoFocus="true" Disabled="_busy" MaxLength="100"
+                  InputId="login" autocomplete="username" spellcheck="false" />
+    <MudTextField @bind-Value="_model.Password" For="@(() => _model.Password)" Label="@(_hrms ? "HRMS password" : "Password")"
+                  Variant="Variant.Outlined" InputId="pw"
+                  InputType="@(_showPassword ? InputType.Text : InputType.Password)"
+                  Adornment="Adornment.End"
+                  AdornmentIcon="@(_showPassword ? Icons.Material.Filled.VisibilityOff : Icons.Material.Filled.Visibility)"
+                  AdornmentAriaLabel="@(_showPassword ? "Hide password" : "Show password")"
+                  OnAdornmentClick="() => _showPassword = !_showPassword"
+                  Disabled="_busy" autocomplete="current-password" />
+    <CaptchaField @ref="_captcha" @bind-Value="_model.Captcha" For="@(() => _model.Captcha)" Disabled="_busy" />
+
+    <div class="pga-options">
+        <MudCheckBox T="bool" @bind-Value="_model.RememberMe" Label="Keep me signed in" Disabled="_busy" Color="Color.Primary" />
+        @if (_hrms && !string.IsNullOrEmpty(_passwordUrl))
+        {
+            <MudLink Href="@_passwordUrl" Target="_blank" Typo="Typo.body2">Forgot password?</MudLink>
+        }
     </div>
-    <button class="pg-primary" type="submit">Sign in</button>
-    @if (_hrms)
-    {
-        <div class="pg-foot">
-            Use the same password as MyVishal (HRMS).
+
+    <MudButton ButtonType="ButtonType.Submit" Variant="Variant.Filled" Color="Color.Secondary" Size="Size.Large" FullWidth="true"
+               Disabled="_busy" data-testid="login-submit">
+        @if (_busy)
+        {
+            <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
+            <span>Signing in…</span>
+        }
+        else
+        {
+            <span>Sign in</span>
+        }
+    </MudButton>
+</EditForm>
+
+@if (_hrms)
+{
+    <p class="pga-note">
+        <MudIcon Icon="@Icons.Material.Outlined.Info" Size="Size.Small" />
+        <span>
+            Only employees registered by the PO Governance administrator can sign in. Forgot or locked your HRMS password?
             @if (!string.IsNullOrEmpty(_passwordUrl))
             {
-                <a class="pg-link" href="@_passwordUrl" target="_blank" rel="noopener">Forgot or locked? Open MyVishal ↗</a>
+                <a href="@_passwordUrl" target="_blank" rel="noopener">Open MyVishal</a>
             }
-            <br />Only employees registered by the administrator can sign in. No access yet? Ask the administrator.
-        </div>
-    }
-    else
-    {
-        <div class="pg-foot">Forgot your password? Ask the administrator to reset it.<br />First time here? Your starting password was given to you by the administrator.</div>
-    }
-</form>
+            else
+            {
+                <span>Use MyVishal.</span>
+            }
+        </span>
+    </p>
+}
+else
+{
+    <p class="pga-note">
+        <MudIcon Icon="@Icons.Material.Outlined.Info" Size="Size.Small" />
+        <span>Forgot your password? Ask the administrator to reset it.</span>
+    </p>
+}
+
+@*
+    Credentials were verified over the circuit. This form turns that into a real HTTP POST, whose response sets the
+    auth cookie. It carries a one-time ticket, never the password.
+*@
+@if (_ticket is not null)
+{
+    <form id="@CompleteFormId" method="post" action="@AccountEndpoints.CompleteLoginPath" hidden>
+        <input type="hidden" name="ticket" value="@_ticket" />
+        <input type="hidden" name="next" value="@_next" />
+    </form>
+}
 
 @code {
+    private const string CompleteFormId = "login-complete";
+
     [SupplyParameterFromQuery(Name = "next")] private string? Next { get; set; }
+    [SupplyParameterFromQuery(Name = "reason")] private string? Reason { get; set; }
     [SupplyParameterFromQuery(Name = "error")] private string? Error { get; set; }
-    [SupplyParameterFromQuery(Name = "login")] private string? LoginValue { get; set; }
+
+    private readonly LoginModel _model = new();
+    private CaptchaField? _captcha;
     private bool _hrms = true;
     private string? _passwordUrl;
+    private string _next = "/";
+    private string? _notice;
+    private bool _noticeWarn;
+    private string? _error;
+    private string? _ticket;
+    private bool _busy;
+    private bool _showPassword;
+    private bool _submitPending;
+    private IJSObjectReference? _module;
 
     protected override async Task OnInitializedAsync()
     {
+        _next = AccountEndpoints.SafeNext(Next);
         var info = await LoginMode.GetAsync();
         _hrms = LoginModeService.IsHrms(info);
         _passwordUrl = info.HrmsPasswordUrl;
+        _notice = SignOutReasons.Text(Reason);
+        _noticeWarn = Reason is SessionEndReasons.Replaced or SessionEndReasons.Changed or SessionEndReasons.Disabled;
+        _error = Error switch
+        {
+            "expired" => "Sign-in took too long to complete. Please try again.",
+            "unavailable" => "Sign-in is temporarily unavailable. Please try again in a few minutes.",
+            _ => null,
+        };
+    }
+
+    private async Task SignInAsync()
+    {
+        if (_busy) return;
+        _busy = true;
+        _error = _notice = null;
+        try
+        {
+            // Checked first, so nobody can try passwords without solving a new image each time. Validate uses the
+            // image up, so show a fresh one whatever the outcome.
+            var captchaOk = Captchas.Validate(_captcha?.ChallengeId, _model.Captcha);
+            if (_captcha is not null) await _captcha.RefreshAsync();
+            if (!captchaOk)
+            {
+                _error = "The security code didn't match. Type the characters in the new image.";
+                _busy = false;
+                return;
+            }
+
+            var (login, error) = await Auth.VerifyAsync(_model.Login, _model.Password);
+            _model.Password = "";   // don't keep the password in circuit memory
+            if (login is null)
+            {
+                _error = error;
+                _busy = false;
+                return;
+            }
+            _ticket = Tickets.Issue(login.Token, _model.RememberMe, login.ReplacedOtherSession);
+            _submitPending = true;   // posted in OnAfterRenderAsync; _busy stays on until the page reloads
+        }
+        catch (Exception ex)
+        {
+            _model.Password = "";
+            Logger.LogError(ex, "Sign-in failed unexpectedly");
+            _error = "Something went wrong. Please try again.";
+            _busy = false;
+        }
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!_submitPending) return;
+        _submitPending = false;
+        try
+        {
+            _module ??= await JS.InvokeAsync<IJSObjectReference>("import", AccountEndpoints.AuthScriptUrl);
+            await _module.InvokeVoidAsync("submitForm", CompleteFormId, AccountEndpoints.AntiforgeryTokenPath);
+        }
+        catch (Exception ex) when (ex is JSException or TaskCanceledException)
+        {
+            Logger.LogWarning(ex, "Could not post the sign-in form");
+            _ticket = null;
+            _busy = false;
+            _error = "Sign-in couldn't be completed. Please try again.";
+            StateHasChanged();
+        }
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        try { if (_module is not null) await _module.DisposeAsync(); }
+        catch (JSDisconnectedException) { }
+    }
+
+    private sealed class LoginModel
+    {
+        [Required(ErrorMessage = "Enter your Employee ID.")]
+        [StringLength(100)]
+        public string Login { get; set; } = "";
+
+        [Required(ErrorMessage = "Enter your password.")]
+        [StringLength(256)]
+        public string Password { get; set; } = "";
+
+        public bool RememberMe { get; set; }
+
+        [Required(ErrorMessage = "Enter the security code.")]
+        [StringLength(CaptchaService.MaxLength)]
+        public string Captcha { get; set; } = "";
     }
 }

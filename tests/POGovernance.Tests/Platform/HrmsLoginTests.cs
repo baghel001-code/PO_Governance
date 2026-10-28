@@ -70,7 +70,7 @@ namespace POGovernance.Tests.Platform
                 Hrms.Add("400004", "No Mail", "", "Hrms#4");
             }
 
-            public Task<(string? Token, string? Error)> Login(string id, string pw) => Accounts.LoginAsync(id, pw, "10.0.0.1");
+            public Task<Application.DTOs.Platform.LoginResult> Login(string id, string pw) => Accounts.LoginAsync(id, pw, "10.0.0.1");
         }
 
         [Fact]

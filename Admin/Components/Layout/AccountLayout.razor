@@ -1,8 +1,41 @@
 @inherits LayoutComponentBase
-<div class="pg-login-bg">
-    <div class="pg-login-card">
-        <img class="pg-login-logo" src="img/logo.png" alt="Vishal Mega Mart" />
-        <h1 class="pg-login-title">PO Governance Platform</h1>
-        @Body
-    </div>
+
+@* QPS AuthLayout: split screen for the account pages — brand panel with the slider on the left, the form card on the right.
+   Styles: wwwroot/css/auth.css (brand colours at the top; keep them in line with PortalTheme). *@
+<HeadContent>
+    <link rel="stylesheet" href="css/auth.css?v=2026102801" />
+</HeadContent>
+
+<MudThemeProvider Theme="PortalTheme.Theme" />
+
+<div class="pga-auth">
+    <aside class="pga-brand">
+        <div class="pga-brand-top">
+            <span class="pga-logo-chip"><img src="img/logo.png" alt="Vishal Mega Mart" class="pga-logo-img" /></span>
+            <div class="pga-product">
+                <div class="pga-wordmark">PO GOVERNANCE</div>
+                <div class="pga-company">Purchase order checks · Vishal Mega Mart</div>
+            </div>
+        </div>
+
+        <div class="pga-brand-body">
+            <LoginSlider />
+            @* Phones hide the slider and show this line instead. *@
+            <p class="pga-headline pga-headline-mobile">Every PO checked before it is raised.</p>
+        </div>
+    </aside>
+
+    <main class="pga-panel">
+        <div class="pga-panel-main">
+            <div class="pga-card">
+                @Body
+            </div>
+            <p class="pga-help">Trouble signing in? Contact the PO Governance administrator.</p>
+        </div>
+
+        <footer class="pga-footer">
+            <span>Copyright © @DateTime.Now.ToString("yyyy") Vishal Mega Mart</span>
+            <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined" Class="pga-version">v@(AppConstants.AppVersion)</MudChip>
+        </footer>
+    </main>
 </div>

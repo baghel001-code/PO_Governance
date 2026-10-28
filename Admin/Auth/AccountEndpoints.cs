@@ -2,40 +2,42 @@ using System.Security.Claims;
 using System.Text.RegularExpressions;
 using Domain.Constants;
 using Microsoft.AspNetCore.Antiforgery;
+using Microsoft.AspNetCore.Authentication;
 
 namespace Admin.Auth
 {
     /// <summary>
-    /// Sign-in, password change, sign-out and the "/" start page as plain HTTP endpoints.
+    /// Sign-in completion, sign-out, password change, keep-alive and the "/" start page as plain HTTP endpoints (QPS
+    /// AccountEndpoints): only an HTTP response can set or clear the auth cookie.
     /// <para>
-    /// They set the auth cookie and answer with HTTP redirects. Doing this inside a Blazor page during server-side
-    /// rendering only works through <c>NavigationManager.NavigateTo</c>, which in .NET 8 throws a
-    /// <c>NavigationException</c> on purpose (caught by the framework) — harmless, but Visual Studio stops on it on
-    /// every sign-in. The pages (Login.razor, ChangePassword.razor) only render the forms; the forms post here.
+    /// The sign-in page (Login.razor, interactive) checks the CAPTCHA and the credentials (through POGovApi) and gets a
+    /// one-time ticket; auth.js then posts it with an antiforgery token to <see cref="CompleteLoginPath"/>, which sets the
+    /// cookie. There is no endpoint that takes a password, so the CAPTCHA cannot be skipped.
     /// </para>
     /// </summary>
     public static class AccountEndpoints
     {
         public const string LoginPath = "/Account/Login";
-        public const string SignInPath = "/Account/SignIn";
         public const string ChangePasswordPath = "/Account/ChangePassword";
         public const string SavePasswordPath = "/Account/SavePassword";
+        // Lower-case paths that are not page routes (routing ignores case: /account/logout would collide with a page)
+        public const string CompleteLoginPath = "/account/complete-login";
+        public const string SignOutPath = "/account/sign-out";
+        public const string AntiforgeryTokenPath = "/account/antiforgery-token";
+        public const string KeepAlivePath = "/account/keepalive";
+        /// <summary>Bump when wwwroot/js/auth.js changes (browsers cache import() modules hard).</summary>
+        public const string AuthScriptUrl = "./js/auth.js?v=2026102801";
 
         public static IEndpointRouteBuilder MapAccountEndpoints(this IEndpointRouteBuilder app)
         {
             // Start page: staff (admin / planner) → Data Setup, everyone else → New Request.
             app.MapGet("/", (HttpContext http) => Results.Redirect(StartPage(http.User))).RequireAuthorization();
 
-            app.MapPost(SignInPath, SignInAsync).AllowAnonymous().DisableAntiforgery();
+            app.MapPost(CompleteLoginPath, CompleteLoginAsync).AllowAnonymous().DisableAntiforgery();
+            app.MapPost(SignOutPath, SignOutAsync).AllowAnonymous().DisableAntiforgery();
+            app.MapGet(AntiforgeryTokenPath, GetAntiforgeryToken).AllowAnonymous();
+            app.MapPost(KeepAlivePath, KeepAliveAsync).RequireAuthorization().DisableAntiforgery();
             app.MapPost(SavePasswordPath, SavePasswordAsync).RequireAuthorization().DisableAntiforgery();
-
-            async Task<IResult> SignOut(HttpContext http, PortalAuthService auth)
-            {
-                await auth.SignOutAsync(http);
-                return Results.Redirect(LoginPath);
-            }
-            app.MapGet("/Account/Logout", SignOut);
-            app.MapPost("/Account/Logout", SignOut);
             return app;
         }
 
@@ -65,21 +67,81 @@ namespace Admin.Auth
             await next();
         });
 
-        private static async Task<IResult> SignInAsync(HttpContext http, PortalAuthService auth, IAntiforgery antiforgery)
+        /// <summary>
+        /// The ticket from the sign-in page → the auth cookie. Antiforgery stops "login CSRF" (another site posting a ticket
+        /// of its own account to sign the victim in as the attacker).
+        /// </summary>
+        private static async Task<IResult> CompleteLoginAsync(HttpContext http, IAntiforgery antiforgery, LoginTicketStore tickets,
+                                                              PortalAuthService auth, LoginNotices notices, ILoggerFactory lf)
         {
-            if (!await antiforgery.IsRequestValidAsync(http)) return Results.Redirect(LoginPath);
-            var form = await http.Request.ReadFormAsync();
-            var login = (form.ContainsKey("LoginId") ? form["LoginId"] : form["Email"]).ToString().Trim();
-            var password = form["Password"].ToString();
-            var next = SafeNext(form["Next"]);
-            if (login.Length == 0 || password.Length == 0)
-                return Back(LoginPath, next, "Enter your Employee ID and password.", login);
+            if (!await antiforgery.IsRequestValidAsync(http)) return Results.BadRequest();
+            var form = await http.Request.ReadFormAsync(http.RequestAborted);
+            var next = SafeNext(form["next"]);
+            var ticket = tickets.Redeem(form["ticket"]);
+            if (ticket == null) return Results.LocalRedirect(LoginPath + "?error=expired&next=" + Uri.EscapeDataString(next));
+            var res = await auth.CompleteSignInAsync(http, ticket.SessionToken, ticket.RememberMe);
+            if (!res.Ok) return Results.LocalRedirect(LoginPath + "?error=unavailable&next=" + Uri.EscapeDataString(next));
+            // shown once on the first page: "you were signed in on another device; that session has been ended"
+            if (ticket.ReplacedOtherSession) notices.Add(ticket.SessionToken, LoginNotices.DuplicateLogin);
+            lf.CreateLogger("Auth").LogInformation("Signed in {User}{Replaced}", http.User.Identity?.Name ?? "",
+                ticket.ReplacedOtherSession ? " (the session on another device was ended)" : "");
+            http.Response.Headers.CacheControl = "no-store";
+            return Results.LocalRedirect(res.MustChange ? ChangePasswordPath + "?forced=1&next=" + Uri.EscapeDataString(next) : next);
+        }
 
-            var res = await auth.SignInAsync(http, login, password);
-            if (!res.Ok) return Back(LoginPath, next, res.Error ?? "Sign in failed", login);
-            return Results.Redirect(res.MustChange
-                ? ChangePasswordPath + "?forced=1&next=" + Uri.EscapeDataString(next)
-                : next);
+        /// <summary>
+        /// POST + antiforgery (an &lt;img src=…&gt; on another site can't sign users out). Ends the API session (unless the API
+        /// already ended it), clears the cookie and shows the reason on the sign-in page.
+        /// </summary>
+        private static async Task<IResult> SignOutAsync(HttpContext http, IAntiforgery antiforgery, PortalAuthService auth, EndedSessions ended, ILoggerFactory lf)
+        {
+            if (!await antiforgery.IsRequestValidAsync(http)) return Results.BadRequest();
+            var form = await http.Request.ReadFormAsync(http.RequestAborted);
+            var reason = SignOutReasons.Normalize(form["reason"]);
+            var token = http.User.FindFirst(CustomClaimTypes.SessionToken)?.Value;
+            ended.Add(token, reason == SignOutReasons.SignedOut ? SessionEndReasons.Expired : reason);   // a copy of this cookie stops working at once
+            try
+            {
+                await auth.SignOutAsync(http);
+            }
+            catch (Exception ex) when (!http.RequestAborted.IsCancellationRequested)
+            {
+                lf.CreateLogger("Auth").LogWarning(ex, "Could not end the API session; signing out anyway");
+                await http.SignOutAsync(AppConstants.PortalAuthScheme);
+            }
+            http.Response.Headers.CacheControl = "no-store";
+            http.Response.Headers["Clear-Site-Data"] = "\"cache\"";   // drop cached signed-in pages
+            return Results.LocalRedirect(LoginPath + "?reason=" + reason);
+        }
+
+        /// <summary>
+        /// An interactive page's &lt;AntiforgeryToken /&gt; is only filled in when it was prerendered, so auth.js asks here right
+        /// before posting. Other sites can't read this answer (same-origin policy), so they still can't forge the POST.
+        /// </summary>
+        private static IResult GetAntiforgeryToken(HttpContext http, IAntiforgery antiforgery)
+        {
+            var tokens = antiforgery.GetAndStoreTokens(http);
+            http.Response.Headers.CacheControl = "no-store";
+            return Results.Json(new { field = tokens.FormFieldName, token = tokens.RequestToken });
+        }
+
+        /// <summary>
+        /// Called by idle-timeout.js while the user is active (QPS SessionKeepAliveController): Blazor interaction runs over
+        /// the WebSocket, so without it the sliding cookie and the API session would expire although the user is working.
+        /// The cookie check renews the cookie; PO_AUTH_ME counts as activity for the API session.
+        /// </summary>
+        private static async Task<IResult> KeepAliveAsync(HttpContext http, PortalAuthService auth)
+        {
+            http.Response.Headers.CacheControl = "no-store";
+            var token = http.User.FindFirst(CustomClaimTypes.SessionToken)?.Value;
+            try
+            {
+                return await auth.CheckSessionAsync(token, http.RequestAborted) == null ? Results.NoContent() : Results.Unauthorized();
+            }
+            catch (SessionCheckUnavailableException)
+            {
+                return Results.NoContent();
+            }
         }
 
         private static async Task<IResult> SavePasswordAsync(HttpContext http, PortalAuthService auth, IAntiforgery antiforgery)
@@ -101,9 +163,6 @@ namespace Admin.Auth
             var error = await auth.ChangePasswordAsync(http, token, form["Old"].ToString(), newPassword);
             return error == null ? Results.Redirect(next) : Results.Redirect(back + Query(next, error));
         }
-
-        private static IResult Back(string page, string next, string error, string? login = null) =>
-            Results.Redirect(page + "?" + Query(next, error) + (string.IsNullOrEmpty(login) ? "" : "&login=" + Uri.EscapeDataString(login.Length > 100 ? login[..100] : login)));
 
         private static string Query(string next, string error) =>
             "next=" + Uri.EscapeDataString(next) + "&error=" + Uri.EscapeDataString(error.Length > 400 ? error[..400] : error);

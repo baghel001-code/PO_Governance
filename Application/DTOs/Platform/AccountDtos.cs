@@ -11,6 +11,16 @@ namespace Application.DTOs.Platform
         [JsonPropertyName("password")] public string? Password { get; set; }
     }
 
+    /// <summary>
+    /// A sign-in: the session token, or the error. <see cref="ReplacedOther"/> = the user was signed in on another device and
+    /// that session was ended (single session).
+    /// </summary>
+    public sealed record LoginResult(string? Token, string? Error, bool ReplacedOther = false)
+    {
+        public static LoginResult Fail(string error) => new(null, error);
+        public void Deconstruct(out string? token, out string? error) => (token, error) = (Token, Error);
+    }
+
     public sealed class LoginResponse
     {
         [JsonPropertyName("ok")] public bool Ok { get; set; } = true;
@@ -21,6 +31,8 @@ namespace Application.DTOs.Platform
         [JsonPropertyName("user")] public UserPublicDto? User { get; set; }
         /// <summary>Idle timeout of the session in seconds (server.py cookie Max-Age).</summary>
         [JsonPropertyName("expiresIn")] public int ExpiresIn { get; set; }
+        /// <summary>The user was signed in on another device; that session has been ended (single session).</summary>
+        [JsonPropertyName("replacedOtherSession")] public bool ReplacedOtherSession { get; set; }
     }
 
     public sealed class ChangePasswordRequest
@@ -69,6 +81,10 @@ namespace Application.DTOs.Platform
         [JsonPropertyName("passwordMinLength")] public int PasswordMinLength { get; set; }
         /// <summary>Where HRMS passwords are changed (MyVishal).</summary>
         [JsonPropertyName("hrmsPasswordUrl")] public string? HrmsPasswordUrl { get; set; }
+        /// <summary>Idle timeout (minutes): the portal warns a minute before and signs the user out.</summary>
+        [JsonPropertyName("idleTimeoutMinutes")] public int IdleTimeoutMinutes { get; set; }
+        /// <summary>Signed out this long after signing in (hours, 0 = no limit).</summary>
+        [JsonPropertyName("absoluteSessionHours")] public double AbsoluteSessionHours { get; set; }
     }
 
     /// <summary>How people sign in (anonymous: the sign-in page reads it through Health).</summary>

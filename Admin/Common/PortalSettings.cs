@@ -3,8 +3,17 @@ namespace Admin.Common
     /// <summary>appsettings "PortalSettings". (Where POGovApi is: MasterApiSettings:Api_Url, then the API_MASTER rows.)</summary>
     public sealed class PortalSettings
     {
-        /// <summary>Signed out after this long without using the site (config.json session_idle_hours).</summary>
-        public double SessionIdleHours { get; set; } = 12;
+        /// <summary>
+        /// Sliding life of the sign-in cookie, minutes (QPS Auth:IdleTimeoutMinutes). Keep it equal to
+        /// PoGovSettings:IdleTimeoutMinutes of POGovApi, which drives the idle warning and sign-out on the page.
+        /// </summary>
+        public int IdleTimeoutMinutes { get; set; } = 30;
+        /// <summary>Signed out this many hours after signing in, even when active (QPS Auth:AbsoluteLifetimeHours).</summary>
+        public double AbsoluteLifetimeHours { get; set; } = 12;
+        /// <summary>
+        /// Development only (ignored in every other environment): a fixed CAPTCHA code, for automated UI tests. Empty = random.
+        /// </summary>
+        public string DevCaptchaCode { get; set; } = "";
         /// <summary>How often an open page re-checks the server status (seconds).</summary>
         public int StatusPollSeconds { get; set; } = 30;
         /// <summary>

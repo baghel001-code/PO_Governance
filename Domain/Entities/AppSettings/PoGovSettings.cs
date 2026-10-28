@@ -31,6 +31,15 @@ namespace Domain.Entities.AppSettings
         public int LoginFailureMinMs { get; set; } = 1000;
         public int PasswordMinLength { get; set; } = 8;
         public double SessionIdleHours { get; set; } = 12;
+        /// <summary>
+        /// Signed out after this many minutes without using the portal (QPS Auth:IdleTimeoutMinutes). 0 = use
+        /// <see cref="SessionIdleHours"/> (v1.1.4). The portal warns a minute before and signs out at the same time.
+        /// </summary>
+        public int IdleTimeoutMinutes { get; set; } = 30;
+        /// <summary>Signed out this many hours after signing in, even when active (QPS Auth:AbsoluteLifetimeHours). 0 = no limit.</summary>
+        public double AbsoluteSessionHours { get; set; } = 12;
+        /// <summary>One session per user: signing in on another device signs the first one out ("signed in on another device").</summary>
+        public bool SingleSession { get; set; } = true;
         public int MaxFailedLogins { get; set; } = 5;
         public int LockoutMinutes { get; set; } = 15;
         /// <summary>Buyers / category heads only see requests on their own MCs (SCR products file).</summary>
@@ -69,7 +78,9 @@ namespace Domain.Entities.AppSettings
         // accounts.py helpers with the config.json fallbacks ("x or default")
         public string DefaultPasswordOrDefault => string.IsNullOrEmpty(DefaultPassword) ? "1234" : DefaultPassword;
         public int PasswordMinLengthOrDefault => PasswordMinLength > 0 ? PasswordMinLength : 8;
-        public double SessionIdleSeconds => (SessionIdleHours > 0 ? SessionIdleHours : 12) * 3600;
+        public double SessionIdleSeconds => IdleTimeoutMinutes > 0 ? IdleTimeoutMinutes * 60.0 : (SessionIdleHours > 0 ? SessionIdleHours : 12) * 3600;
+        /// <summary>Idle timeout in minutes as the portal uses it (warning + sign-out).</summary>
+        public int IdleMinutes => (int)Math.Ceiling(SessionIdleSeconds / 60);
         public int MaxFailedLoginsOrDefault => MaxFailedLogins > 0 ? MaxFailedLogins : 5;
         public int LockoutMinutesOrDefault => LockoutMinutes > 0 ? LockoutMinutes : 15;
         public int BackupKeepDaysOrDefault => BackupKeepDays > 0 ? BackupKeepDays : 30;

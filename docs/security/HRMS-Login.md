@@ -69,6 +69,25 @@ cannot sign in until the admin links one (**Edit → Fetch from HRMS → Link**,
 (`PO_USER_LINK_EMPLOYEE`). `UserAdd` and `UsersBulk` now take `empCode`. `AuthLogin` takes `loginId` (`email` is still
 read). `Health` reports the sign-in mode, so the sign-in page asks for the Employee ID or the email.
 
+## 2a. Sign-in page and session security (as in QPS)
+
+| Feature | How |
+|---|---|
+| **QPS sign-in screen** | `AccountLayout` + `LoginSlider` (brand panel with three PO Governance slides), form card, `wwwroot/css/auth.css` (QPS `auth.css` in the PO Governance colours) |
+| **CAPTCHA** | `Admin/Auth/Captcha`: `CaptchaService` (QPS) keeps the answer in server memory: single-use, 5 minutes. The image is drawn by `PngCaptchaGenerator` (5 characters without look-alikes, built-in font, PNG). QPS uses `VmmCaptcha.dll`, which needs Windows System.Drawing and is not in the repository; to use it, register a generator over it as `ICaptchaGenerator`. Checked **before** the password, a new image after every attempt. There is no endpoint that takes a password (the old `/Account/SignIn` is removed), so it cannot be skipped. |
+| **Sign-in hand-over** | The interactive page verifies the CAPTCHA and the credentials (POGovApi) and gets a one-time 60-second ticket. `auth.js` posts it with an antiforgery token to `/account/complete-login`, which sets the cookie (HttpOnly, SameSite=Strict, "Keep me signed in" = persistent). |
+| **Single device** | `PoGovSettings:SingleSession` (on). A sign-in ends the user's other sessions as `replaced`. The old device is signed out at its next check ("signed in on another device"); the new one gets a notice. |
+| **Forced sign-out** | Role change (admin or SCR file), deactivate / delete, password reset, Employee ID linked: the user's sessions end with the reason `changed` / `disabled` / `password`. |
+| **Idle time-out** | `PoGovSettings:IdleTimeoutMinutes` (30), `PortalSettings:IdleTimeoutMinutes` (30, the cookie). `IdleTimeoutMonitor` warns 60 s before and signs out. Activity in any tab counts (`idle-timeout.js`, localStorage), and the keep-alive (`/account/keepalive`) keeps the cookie and API session alive. A server-side backstop in the circuit check covers a page whose JavaScript is not running. |
+| **Absolute lifetime** | 12 hours (`AbsoluteSessionHours` / `AbsoluteLifetimeHours`). |
+| **Checks** | Every HTTP request: `CookieValidator` checks the absolute lifetime and the ended-session list, and asks POGovApi at most every `UserRevalidateInSeconds` (60). Open pages: `ApiRevalidatingAuthStateProvider` checks at the same interval. POGovApi answers 401 with the reason; the sign-in page shows it (`?reason=`). |
+| **Sign-out** | POST + antiforgery to `/account/sign-out`: ends the API session and clears the cookie. A copied cookie is refused at once. |
+
+Tested end-to-end: a wrong CAPTCHA was refused, and the old endpoint answered 404. A second device signed in (with the
+notice) and the first was signed out with the reason. A role change by the admin signed the user out with "changed".
+The 2-minute test idle time-out showed the warning and then signed the user out. Menu sign-out worked, and a replayed
+cookie was refused.
+
 ## 3. Set-up
 
 ### 3.1 HRMS endpoints (once per database)

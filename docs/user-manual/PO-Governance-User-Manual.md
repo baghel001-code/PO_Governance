@@ -33,7 +33,10 @@ automatically when a PO is released.
 ![Sign-in page](img/01-sign-in.png)
 
 1. Open the portal address your administrator gave you (for example `http://<server>:8177`).
-2. Enter your **Employee ID** and your **HRMS password** (the same password as MyVishal), then click **Sign in**.
+2. Enter your **Employee ID** and your **HRMS password** (the same password as MyVishal).
+3. Type the **security code** shown in the picture (5 characters, not case-sensitive; ↻ shows a new picture). A new
+   picture appears after every attempt.
+4. Tick **Keep me signed in** if the browser should remember you after it is closed, then click **Sign in**.
 
 Good to know:
 
@@ -43,7 +46,14 @@ Good to know:
 - After **5 wrong passwords** your account is locked here for **15 minutes** ("Too many wrong attempts — locked for 15
   minutes."). The administrator can unlock you earlier. HRMS has its own lock: "Your HRMS account is locked…" — unlock
   it in MyVishal (My Page → Unlock User) or wait about 30 minutes.
-- You stay signed in for **12 hours** of inactivity; after that, sign in again.
+- **One device at a time.** Signing in on another computer or browser signs out the first one ("You were signed out
+  because your account was signed in on another device."); the new one shows "You were signed in on another device —
+  that session has been signed out."
+- **Idle time-out.** After **30 minutes** without using the portal you are signed out; a minute before, a box asks
+  **Stay signed in** or **Sign out**. Working in another tab of the portal counts as activity. After **12 hours** you are
+  signed out even when active.
+- **When the administrator changes you.** If your roles are changed, your account is deactivated or your Employee ID is
+  linked, you are signed out within a minute and asked to sign in again (the sign-in page says why).
 - **Forgot your password?** Use **Forgot or locked? Open MyVishal ↗** on the sign-in page — the portal keeps no
   password for you, so the administrator cannot reset it here.
 
@@ -532,6 +542,10 @@ slow seller is sent as HOLD with reason BLOCK).
 
 | Message | What to do |
 |---|---|
+| "The security code didn't match…" | Type the characters of the new picture (↻ for another one) |
+| "You were signed out because your account was signed in on another device." | Only one device at a time — sign in again here to continue (that signs out the other one) |
+| "Your access was changed by the administrator. Please sign in again." | Sign in again to get your new roles |
+| "You were signed out after a period of inactivity." | 30 minutes without activity — sign in again |
 | "Employee ID or password is incorrect" | Check the Employee ID and HRMS password; if both are right, you are not registered — ask the administrator. After 5 tries you are locked for 15 minutes |
 | "Sign in with your Employee ID and HRMS password." | You typed an email: use your Employee ID |
 | "Your HRMS account is locked…" | Unlock it in MyVishal (My Page → Unlock User) or wait about 30 minutes |

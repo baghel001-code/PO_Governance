@@ -17,7 +17,7 @@ namespace POGovernance.Tests.Platform
         {
             public FakeStore Store { get; } = new();
             public FakeClock Clock { get; } = new();
-            public PoGovSettings Cfg { get; } = new() { AdminEmail = "admin.user@x.com" };
+            public PoGovSettings Cfg { get; } = new() { AdminEmail = "admin.user@x.com", LoginMode = LoginModes.Local, LoginFailureMinMs = 0 };
             public AccountsService A { get; }
             public AccountsService B { get; }
 

@@ -1,0 +1,38 @@
+@* The employee as HRMS has them ("Fetch from HRMS" on the Users tab). *@
+<div class="card" style="padding:10px 14px;margin-bottom:10px;background:var(--bg2, #F8FAFC)" data-testid="hr-card">
+    <div style="display:flex;flex-wrap:wrap;gap:6px 18px;font-size:12px">
+        <div><span class="pf-lbl">Name</span><br /><strong>@Hr.Name</strong></div>
+        <div><span class="pf-lbl">Employee ID</span><br /><span class="pf-mono">@Hr.EmpCode</span></div>
+        <div><span class="pf-lbl">Email</span><br />@(string.IsNullOrEmpty(Hr.Email) ? "—" : Hr.Email)</div>
+        <div><span class="pf-lbl">Department</span><br />@Dash(Hr.Department)</div>
+        <div><span class="pf-lbl">Designation</span><br />@Dash(Hr.Designation)</div>
+        <div><span class="pf-lbl">Location</span><br />@Dash(Hr.Location)@(string.IsNullOrEmpty(Hr.LocationCode) ? "" : " (" + Hr.LocationCode + ")")</div>
+        <div><span class="pf-lbl">Mobile</span><br />@Dash(Hr.Mobile)</div>
+        <div><span class="pf-lbl">Reporting manager</span><br />@Dash(Hr.Manager)</div>
+        <div><span class="pf-lbl">Grade</span><br />@Dash(Hr.Grade)</div>
+        <div>
+            <span class="pf-lbl">HRMS status</span><br />
+            @if (Hr.Resigned)
+            {
+                <span style="color:#DC2626;font-weight:700">Resigned</span>
+            }
+            else if (!Hr.Active)
+            {
+                <span style="color:#DC2626;font-weight:700">Inactive</span>
+            }
+            else
+            {
+                <span style="color:#00873E;font-weight:700">Active</span>
+            }
+        </div>
+    </div>
+    @if (Hr.Problem != null)
+    {
+        <div style="margin-top:8px;color:#DC2626;font-weight:700;font-size:12px" data-testid="hr-problem">✖ @Hr.Problem</div>
+    }
+</div>
+
+@code {
+    [Parameter, EditorRequired] public HrmsLookupResponse Hr { get; set; } = default!;
+    private static string Dash(string? s) => string.IsNullOrWhiteSpace(s) ? "—" : s;
+}

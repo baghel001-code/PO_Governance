@@ -41,6 +41,11 @@ namespace Application.Interfaces.V1
     {
         Task<ApiMasterRes> GetAllApi(CancellationToken ct = default);
         Task<ApiMasterRes> GetSpecificApiData(string? taskName, string? param, CancellationToken ct = default);
+        /// <summary>
+        /// A server-only row (API_MASTER.Api_Scope = SERVER: an outside API POGovApi calls itself, e.g. HRMS) — never part of
+        /// <see cref="GetAllApi"/> / <see cref="GetSpecificApiData"/>, so the portal never receives it.
+        /// </summary>
+        Task<ApiMasterRes> GetServerApiData(string taskName, CancellationToken ct = default);
         /// <summary>The environment whose API_BASE_URL / API_AUTHORIZATION rows are used (Development / Staging / Production).</summary>
         string Environment { get; }
         /// <summary>The active API_BASE_URL base URL of <paramref name="baseUrlKey"/> in this environment (ends with /); null when none.</summary>

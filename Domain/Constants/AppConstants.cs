@@ -17,5 +17,8 @@ namespace Domain.Constants
         public const string SessionToken = "pogov:session";
         public const string MustChange = "pogov:mustchange";
         public const string Email = "pogov:email";
+        /// <summary>"hrms" (Employee ID + HRMS password) or "local" (email + password kept by the tool).</summary>
+        public const string LoginType = "pogov:logintype";
+        public const string EmpCode = "pogov:empcode";
     }
 }

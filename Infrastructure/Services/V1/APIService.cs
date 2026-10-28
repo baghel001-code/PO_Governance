@@ -59,6 +59,18 @@ namespace Infrastructure.Services.V1
             return await RunAsync(p, ct);
         }
 
+        public async Task<ApiMasterRes> GetServerApiData(string taskName, CancellationToken ct = default)
+        {
+            if (string.IsNullOrWhiteSpace(taskName)) return new ApiMasterRes { responseCode = 400, responseMessage = "TaskName is required" };
+            if (_db == null)
+                return new ApiMasterRes { responseCode = 404, responseMessage = $"{taskName}: server-only APIs (HRMS) need the SQL Server API master" };
+            var p = DapperHelper.AddErrorOutputs(new DynamicParameters());
+            p.Add("@Cmd", "SERVER_TASK", DbType.String);
+            p.Add("@Task_Name", taskName, DbType.String);
+            p.Add("@Environment", Environment, DbType.String);
+            return await RunAsync(p, ct);
+        }
+
         public async Task<string?> GetBaseUrlAsync(string baseUrlKey, CancellationToken ct = default)
         {
             if (_db == null || string.IsNullOrWhiteSpace(baseUrlKey)) return null;

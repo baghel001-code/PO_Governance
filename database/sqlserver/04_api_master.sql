@@ -33,6 +33,21 @@
      -- a new static token (My_Encode of it, same value in both appsettings files):
      UPDATE dbo.API_MASTER SET Api_Authorization = N'<My_Encode(new token)>', Updated_At = SYSDATETIME();
 
+   SERVER-ONLY ROWS (Api_Scope = SERVER): APIs that POGovApi itself calls — the HRMS employee API used for sign-in
+   (HRP_GET_EMP_LOGIN_API: checks an employee's HRMS password) and for registering users (HRP_GET_EMP_DETAIL_CODE:
+   employee details by code). PRO_GET_ALL_API never gives them to the portal (not in ALL, not in BY_TASK / GetSpecificApi)
+   and the '*' API_AUTHORIZATION token is never applied to them, so the portal never sees an HRMS URL or credential.
+   They use Base_Url_Key HRMS_API, added INACTIVE with a placeholder URL in every environment: set the real HRMS host
+   (the same one as the QPS API_MASTER rows of these task names) and the paths, then activate:
+     UPDATE dbo.API_BASE_URL SET Base_Url = N'https://<hrms host>/', Active_Status = 1, Updated_At = SYSDATETIME()
+     WHERE Base_Url_Key = N'HRMS_API' AND Environment = N'Production';
+     UPDATE dbo.API_MASTER SET Api_Url = N'<path of the HRMS login API>', Updated_At = SYSDATETIME() WHERE Task_Name = N'HRP_GET_EMP_LOGIN_API';
+     UPDATE dbo.API_MASTER SET Api_Url = N'<path of the employee-by-code API>', Updated_At = SYSDATETIME() WHERE Task_Name = N'HRP_GET_EMP_DETAIL_CODE';
+     -- or a full URL, the same in every environment (copied from QPS):
+     UPDATE dbo.API_MASTER SET Base_Url_Key = NULL, Api_Url = N'https://<hrms host>/<path>' WHERE Task_Name = N'HRP_GET_EMP_LOGIN_API';
+     -- HRMS token / proxy: Api_Authorization (My_Encode) or Api_Username + Api_Pwd (My_Encode) = Basic; Api_Proxy / Api_Port
+   POGovApi re-reads these rows every 5 minutes.
+
    Then restart the portal (it reads the rows at start-up). CREATE OR ALTER / IF NOT EXISTS: safe to run again.
    ═══════════════════════════════════════════════════════════════════════════ */
 SET NOCOUNT ON;
@@ -91,6 +106,11 @@ GO
 IF COL_LENGTH(N'dbo.API_MASTER', N'Base_Url_Key') IS NULL
     ALTER TABLE dbo.API_MASTER ADD Base_Url_Key NVARCHAR(50) NULL;   -- API_BASE_URL.Base_Url_Key; NULL = Api_Url is a full URL
 GO
+-- PORTAL = a POGovApi action the portal calls (GetAllApi list); SERVER = an outside API POGovApi calls itself (HRMS), never sent to the portal
+IF COL_LENGTH(N'dbo.API_MASTER', N'Api_Scope') IS NULL
+    ALTER TABLE dbo.API_MASTER ADD Api_Scope NVARCHAR(10) NOT NULL CONSTRAINT DF_API_MASTER_Scope DEFAULT (N'PORTAL')
+        CONSTRAINT CK_API_MASTER_Scope CHECK (Api_Scope IN (N'PORTAL', N'SERVER'));
+GO
 /* Authorization token per API per environment. Task_Name = an API_MASTER task, or '*' = every API of the environment
    (except PO_GET_ALL_API, which always uses the start-up token MasterApiSettings:Api_Authorization = JwtSettings:SecretKey).
    Resolution: the task's row > the '*' row > API_MASTER.Api_Authorization. Api_Authorization = My_Encode of the token. */
@@ -113,15 +133,16 @@ END
 GO
 
 /* The API master list, with the URLs of one environment.
-   @Cmd ALL     (default) -> every active row, ordered by Task_Name
-        BY_TASK           -> the active row of @Task_Name (QPS GetSpecificApiData; @Parm is accepted and ignored)
+   @Cmd ALL     (default) -> every active PORTAL row, ordered by Task_Name
+        BY_TASK           -> the active PORTAL row of @Task_Name (QPS GetSpecificApiData; @Parm is accepted and ignored)
+        SERVER_TASK       -> the active SERVER row of @Task_Name (APIs POGovApi calls itself, e.g. HRMS; never the portal)
         BASE_URL          -> the active API_BASE_URL row of key @Parm in @Environment, as Api_Url (e.g. POGOV_PORTAL: the
                              portal address in the SAP verdict links); 50404 when there is none
    @Environment             Development / Staging / Production (NULL = Production). Api_Url of a row with a Base_Url_Key =
                             the active API_BASE_URL base URL of that key and environment + the row's path; without a key = Api_Url.
    @Error_Code / @Error_Message OUTPUT: 0 / '' = success; 50001 unknown @Cmd; 50404 no row for @Task_Name;
    50424 a row needs a base URL that has no active API_BASE_URL row for @Environment.
-   Api_Authorization(_Type) = the API_AUTHORIZATION row of the task and @Environment, else its '*' row, else API_MASTER's;
+   Api_Authorization(_Type) = the API_AUTHORIZATION row of the task and @Environment, else its '*' row (PORTAL rows only), else API_MASTER's;
    Auth_Source = TASK / ENVIRONMENT / MASTER says which (POGovApi accepts per path the token resolved here). */
 CREATE OR ALTER PROCEDURE dbo.PRO_GET_ALL_API
     @Cmd            NVARCHAR(20)  = NULL,
@@ -136,7 +157,7 @@ BEGIN
     SELECT @Error_Code = 0, @Error_Message = N'';
     BEGIN TRY
         IF @Cmd IS NULL SET @Cmd = CASE WHEN @Task_Name IS NULL THEN N'ALL' ELSE N'BY_TASK' END;
-        IF @Cmd NOT IN (N'ALL', N'BY_TASK', N'BASE_URL') THROW 50001, N'PRO_GET_ALL_API: unknown @Cmd.', 1;
+        IF @Cmd NOT IN (N'ALL', N'BY_TASK', N'SERVER_TASK', N'BASE_URL') THROW 50001, N'PRO_GET_ALL_API: unknown @Cmd.', 1;
         SET @Environment = ISNULL(NULLIF(LTRIM(RTRIM(@Environment)), N''), N'Production');
         IF @Cmd = N'BASE_URL'
         BEGIN
@@ -150,8 +171,10 @@ BEGIN
         DECLARE @rows TABLE (Task_Name NVARCHAR(100) PRIMARY KEY, Base_Url_Key NVARCHAR(50) NULL);
         INSERT INTO @rows (Task_Name, Base_Url_Key)
         SELECT Task_Name, Base_Url_Key FROM dbo.API_MASTER
-        WHERE Active_Status = 1 AND (@Cmd = N'ALL' OR Task_Name = @Task_Name);
-        IF @Cmd = N'BY_TASK' AND NOT EXISTS (SELECT 1 FROM @rows)
+        WHERE Active_Status = 1
+          AND Api_Scope = CASE WHEN @Cmd = N'SERVER_TASK' THEN N'SERVER' ELSE N'PORTAL' END
+          AND (@Cmd = N'ALL' OR Task_Name = @Task_Name);
+        IF @Cmd IN (N'BY_TASK', N'SERVER_TASK') AND NOT EXISTS (SELECT 1 FROM @rows)
         BEGIN
             SELECT @Error_Code = 50404, @Error_Message = N'No active API_MASTER row for task ' + ISNULL(@Task_Name, N'(null)');
             RETURN;
@@ -189,7 +212,7 @@ BEGIN
                             CASE WHEN a.Task_Name = N'*' THEN N'ENVIRONMENT' ELSE N'TASK' END AS Src
                      FROM dbo.API_AUTHORIZATION a
                      WHERE a.Environment = @Environment AND a.Active_Status = 1 AND m.Task_Name <> N'PO_GET_ALL_API'
-                       AND (a.Task_Name = m.Task_Name OR a.Task_Name = N'*')
+                       AND (a.Task_Name = m.Task_Name OR (a.Task_Name = N'*' AND m.Api_Scope = N'PORTAL'))
                      ORDER BY CASE WHEN a.Task_Name = N'*' THEN 1 ELSE 0 END) t
         ORDER BY m.Task_Name;
     END TRY
@@ -199,7 +222,7 @@ BEGIN
 END
 GO
 
-/* Seed: one row per POGovApi portal action (91; the SAP-facing endpoints under /api/sap/v1 are called by SAP directly, not listed). Only missing task names are inserted. */
+/* Seed: one row per POGovApi portal action (93; the SAP-facing endpoints under /api/sap/v1 are called by SAP directly, not listed). Only missing task names are inserted. */
 DECLARE @ApiEnv   NVARCHAR(30)   = N'Development';                 -- environment of the server this script is run for
 DECLARE @ApiBase  NVARCHAR(400)  = N'http://localhost:5080/';      -- base URL of POGovApi in @ApiEnv (ends with /)
 DECLARE @ApiToken NVARCHAR(1000) = N'7VmtFgfO7g5YDVUW175UDqe7FIOUFq8cxpTI17P0fJiSHbePHN';   -- My_Encode(static API token) = JwtSettings:SecretKey
@@ -242,7 +265,9 @@ INSERT INTO @seed (Api_Name, Task_Name, Action_Name, Api_Http_Method, Api_Conten
         (N'UsersList', N'PO_USERS_LIST', N'UsersList', N'POST', N'application/json', 60, N'Users (admin)'),
         (N'UsersScr', N'PO_USERS_SCR', N'UsersScr', N'POST', N'application/json', 120, N'SCR products file analysis (admin)'),
         (N'UserAdd', N'PO_USER_ADD', N'UserAdd', N'POST', N'application/json', 60, N'Add a user (admin)'),
-        (N'UsersBulk', N'PO_USERS_BULK', N'UsersBulk', N'POST', N'application/json', 120, N'Add several users (admin)'),
+        (N'UsersBulk', N'PO_USERS_BULK', N'UsersBulk', N'POST', N'application/json', 300, N'Add several users (admin; employees fetched from HRMS)'),
+        (N'UserHrmsLookup', N'PO_USER_HRMS_LOOKUP', N'UserHrmsLookup', N'POST', N'application/json', 60, N'Employee details from HRMS by Employee ID (admin, before adding)'),
+        (N'UserLinkEmployee', N'PO_USER_LINK_EMPLOYEE', N'UserLinkEmployee', N'POST', N'application/json', 60, N'Link a login to an Employee ID / refresh its HRMS details (admin)'),
         (N'UsersScrSync', N'PO_USERS_SCR_SYNC', N'UsersScrSync', N'POST', N'application/json', 120, N'Create logins from the SCR file (admin)'),
         (N'UsersScrMapping', N'PO_USERS_SCR_MAPPING', N'UsersScrMapping', N'POST', N'application/json', 120, N'Save the SCR column mapping, then sync (admin)'),
         (N'UserUpdate', N'PO_USER_UPDATE', N'UserUpdate', N'POST', N'application/json', 60, N'Change name / roles / active / unlock (admin)'),
@@ -304,13 +329,13 @@ INSERT INTO @seed (Api_Name, Task_Name, Action_Name, Api_Http_Method, Api_Conten
         (N'SapDocumentReportExport', N'PO_SAP_DOCUMENT_REPORT_EXPORT', N'SapDocumentReportExport', N'POST', N'application/json', 300, N'SAP interface: PO document report as Excel'),
         (N'SapVerdictView', N'PO_SAP_VERDICT_VIEW', N'SapVerdictView', N'POST', N'application/json', 60, N'SAP verdict link page (no sign-in, token)');
 
--- one-time move of full URLs (a database from before API_BASE_URL: no row has a Base_Url_Key yet): their most common
+-- one-time move of full URLs (a database from before API_BASE_URL: no portal row has a Base_Url_Key yet): their most common
 -- base URL becomes the @ApiEnv base URL. Later runs leave rows that were given a full URL on purpose alone.
 DECLARE @oldBase NVARCHAR(400) = NULL;
-IF NOT EXISTS (SELECT 1 FROM dbo.API_MASTER WHERE Base_Url_Key IS NOT NULL)
+IF NOT EXISTS (SELECT 1 FROM dbo.API_MASTER WHERE Base_Url_Key IS NOT NULL AND Api_Scope = N'PORTAL')
     SET @oldBase =
         (SELECT TOP 1 LEFT(Api_Url, CHARINDEX(N'api/v1/', Api_Url) - 1)
-         FROM dbo.API_MASTER WHERE CHARINDEX(N'api/v1/', Api_Url) > 1
+         FROM dbo.API_MASTER WHERE CHARINDEX(N'api/v1/', Api_Url) > 1 AND Api_Scope = N'PORTAL'
          GROUP BY LEFT(Api_Url, CHARINDEX(N'api/v1/', Api_Url) - 1) ORDER BY COUNT(*) DESC);
 IF @oldBase IS NOT NULL
 BEGIN
@@ -319,7 +344,7 @@ BEGIN
         VALUES (N'POGOV_API', @ApiEnv, @oldBase, N'POGovApi (taken over from the API_MASTER URLs)');
     UPDATE dbo.API_MASTER
     SET Base_Url_Key = N'POGOV_API', Api_Url = SUBSTRING(Api_Url, LEN(@oldBase) + 1, 500), Updated_At = SYSDATETIME()
-    WHERE Base_Url_Key IS NULL AND LEFT(Api_Url, LEN(@oldBase)) = @oldBase;
+    WHERE Base_Url_Key IS NULL AND Api_Scope = N'PORTAL' AND LEFT(Api_Url, LEN(@oldBase)) = @oldBase;
 END
 -- base URLs of POGovApi: @ApiEnv from the variables above, then the defaults (only missing rows are added).
 -- Production is added inactive until its real URL is set (UPDATE dbo.API_BASE_URL … Active_Status = 1, see the header).
@@ -343,4 +368,25 @@ SELECT s.Api_Name, s.Task_Name, N'POGOV_API', N'api/v1/' + s.Action_Name, s.Api_
        @ApiToken, s.Api_Timeout, 1, s.Description
 FROM @seed s
 WHERE NOT EXISTS (SELECT 1 FROM dbo.API_MASTER m WHERE m.Task_Name = s.Task_Name);
+GO
+
+/* Server-only rows: the HRMS employee API (sign-in and user registration), called by POGovApi only. Added inactive-by-
+   base-URL: set the HRMS_API base URL of each environment and the two paths (see SERVER-ONLY ROWS in the header). */
+INSERT INTO dbo.API_BASE_URL (Base_Url_Key, Environment, Base_Url, Active_Status, Description)
+SELECT d.k, d.env, d.url, 0, d.descr
+FROM (VALUES (N'HRMS_API', N'Development', N'https://hrms.change-me.local/', N'HRMS employee API - set the real URL, then Active_Status = 1'),
+             (N'HRMS_API', N'Staging',     N'https://hrms.change-me.local/', N'HRMS employee API - set the real URL, then Active_Status = 1'),
+             (N'HRMS_API', N'Production',  N'https://hrms.change-me.local/', N'HRMS employee API - set the real URL, then Active_Status = 1')
+     ) d (k, env, url, descr)
+WHERE NOT EXISTS (SELECT 1 FROM dbo.API_BASE_URL b WHERE b.Base_Url_Key = d.k AND b.Environment = d.env);
+
+INSERT INTO dbo.API_MASTER (Api_Name, Task_Name, Base_Url_Key, Api_Url, Api_Http_Method, Api_Content_Type, Api_Authorization_Type,
+                            Api_Authorization, Api_Timeout, Active_Status, Api_Scope, Description)
+SELECT h.api, h.task, N'HRMS_API', h.path, N'POST', N'application/json', N'Bearer', NULL, 30, 1, N'SERVER', h.descr
+FROM (VALUES (N'HrmsEmployeeLogin', N'HRP_GET_EMP_LOGIN_API', N'change-me/employee-login',
+              N'HRMS: checks an employee''s password at sign-in (POGovApi only; only for registered employees)'),
+             (N'HrmsEmployeeByCode', N'HRP_GET_EMP_DETAIL_CODE', N'change-me/employee-by-code',
+              N'HRMS: employee details by Employee ID when the admin registers a user (POGovApi only)')
+     ) h (api, task, path, descr)
+WHERE NOT EXISTS (SELECT 1 FROM dbo.API_MASTER m WHERE m.Task_Name = h.task);
 GO

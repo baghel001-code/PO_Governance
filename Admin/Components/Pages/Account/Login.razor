@@ -2,12 +2,14 @@
 @layout AccountLayout
 @attribute [AllowAnonymous]
 @using Admin.Auth
+@inject LoginModeService LoginMode
 
 <PageTitle>Sign in · VMM PO Governance</PageTitle>
 
-<div class="pg-login-sub">Sign in with your company email</div>
+<div class="pg-login-sub">@(_hrms ? "Sign in with your Employee ID and HRMS password" : "Sign in with your company email")</div>
 
-@* A plain form: it posts to AccountEndpoints (/Account/SignIn), which sets the cookie and redirects. *@
+@* A plain form: it posts to AccountEndpoints (/Account/SignIn), which sets the cookie and redirects. The portal only calls
+   POGovApi; POGovApi checks that the employee is registered here before it asks HRMS for the password. *@
 <form method="post" action="@AccountEndpoints.SignInPath">
     <AntiforgeryToken />
     <input type="hidden" name="Next" value="@AccountEndpoints.SafeNext(Next)" />
@@ -15,20 +17,54 @@
     {
         <div class="pg-msg err">@Error</div>
     }
+    @if (_hrms)
+    {
+        <div class="pg-field">
+            <label for="login">Employee ID</label>
+            <input id="login" name="LoginId" type="text" value="@LoginValue" autocomplete="username" required maxlength="100"
+                   placeholder="e.g. 102345" autofocus="@string.IsNullOrEmpty(LoginValue)" />
+        </div>
+    }
+    else
+    {
+        <div class="pg-field">
+            <label for="login">Email</label>
+            <input id="login" name="LoginId" type="email" value="@LoginValue" autocomplete="username" required placeholder="name@vishalwholesale.co.in" autofocus="@string.IsNullOrEmpty(LoginValue)" />
+        </div>
+    }
     <div class="pg-field">
-        <label for="email">Email</label>
-        <input id="email" name="Email" type="email" value="@Email" autocomplete="username" required placeholder="name@vishalwholesale.co.in" autofocus="@string.IsNullOrEmpty(Email)" />
-    </div>
-    <div class="pg-field">
-        <label for="pw">Password</label>
-        <input id="pw" name="Password" type="password" autocomplete="current-password" required autofocus="@(!string.IsNullOrEmpty(Email))" />
+        <label for="pw">@(_hrms ? "HRMS password" : "Password")</label>
+        <input id="pw" name="Password" type="password" autocomplete="current-password" required autofocus="@(!string.IsNullOrEmpty(LoginValue))" />
     </div>
     <button class="pg-primary" type="submit">Sign in</button>
-    <div class="pg-foot">Forgot your password? Ask the administrator to reset it.<br />First time here? Your starting password was given to you by the administrator.</div>
+    @if (_hrms)
+    {
+        <div class="pg-foot">
+            Use the same password as MyVishal (HRMS).
+            @if (!string.IsNullOrEmpty(_passwordUrl))
+            {
+                <a class="pg-link" href="@_passwordUrl" target="_blank" rel="noopener">Forgot or locked? Open MyVishal ↗</a>
+            }
+            <br />Only employees registered by the administrator can sign in. No access yet? Ask the administrator.
+        </div>
+    }
+    else
+    {
+        <div class="pg-foot">Forgot your password? Ask the administrator to reset it.<br />First time here? Your starting password was given to you by the administrator.</div>
+    }
 </form>
 
 @code {
     [SupplyParameterFromQuery(Name = "next")] private string? Next { get; set; }
     [SupplyParameterFromQuery(Name = "error")] private string? Error { get; set; }
-    [SupplyParameterFromQuery(Name = "email")] private string? Email { get; set; }
+    [SupplyParameterFromQuery(Name = "login")] private string? LoginValue { get; set; }
+    private bool _hrms = true;
+    private string? _passwordUrl;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var info = await LoginMode.GetAsync();
+        _hrms = LoginModeService.IsHrms(info);
+        _passwordUrl = info.HrmsPasswordUrl;
+    }
 }

@@ -124,13 +124,14 @@ namespace POGovernance.Tests.SqlServer
         [SqlServerFact]
         public async Task Full_urls_from_before_API_BASE_URL_move_to_the_base_url_table()
         {
-            await Sql("UPDATE dbo.API_MASTER SET Base_Url_Key = NULL, Api_Url = N'http://192.168.0.175:8178/' + Api_Url");
+            await Sql("UPDATE dbo.API_MASTER SET Base_Url_Key = NULL, Api_Url = N'http://192.168.0.175:8178/' + Api_Url WHERE Api_Scope = N'PORTAL'");
             await Sql("DELETE FROM dbo.API_BASE_URL WHERE Base_Url_Key = N'POGOV_API' AND Environment = N'QA'");
             try
             {
                 await SqlServerSchema.ApplyAsync(_fx.ConnectionString, new[] { SqlServerSchema.ApiMasterScript }, null, null, default, "QA");
                 await using var c = new SqlConnection(_fx.ConnectionString);
                 Assert.Equal(0, await c.ExecuteScalarAsync<int>("SELECT COUNT(*) FROM dbo.API_MASTER WHERE Base_Url_Key IS NULL"));
+                Assert.Equal(2, await c.ExecuteScalarAsync<int>("SELECT COUNT(*) FROM dbo.API_MASTER WHERE Base_Url_Key = N'HRMS_API'"));
                 Assert.Equal("http://192.168.0.175:8178/", await c.ExecuteScalarAsync<string>(
                     "SELECT Base_Url FROM dbo.API_BASE_URL WHERE Base_Url_Key = N'POGOV_API' AND Environment = N'QA'"));
                 var qa = (await Service("QA").GetAllApi()).ApiData!;
@@ -140,6 +141,46 @@ namespace POGovernance.Tests.SqlServer
             finally
             {
                 await Sql("DELETE FROM dbo.API_BASE_URL WHERE Environment = N'QA'");
+            }
+        }
+    
+        [SqlServerFact]
+        public async Task HRMS_rows_are_server_only_and_never_get_the_portal_token()
+        {
+            var env = Infrastructure.Middleware.StaticTokenMiddleware.EncodeToken("all-staging");
+            await Sql($"INSERT INTO dbo.API_AUTHORIZATION (Task_Name, Environment, Api_Authorization) VALUES (N'*', N'Staging', N'{env}')");
+            try
+            {
+                // not in the portal's list, not reachable through GetSpecificApi
+                var all = await Service("Staging").GetAllApi();
+                Assert.Equal(0, all.responseCode);   // the inactive HRMS_API base URL does not break the portal's list
+                Assert.DoesNotContain(all.ApiData!, r => r.Task_Name!.StartsWith("HRP_"));
+                Assert.Equal(404, (await Service("Staging").GetSpecificApiData("HRP_GET_EMP_LOGIN_API", null)).responseCode);
+
+                // POGovApi's own lookup: needs an active HRMS_API base URL
+                var inactive = await Service("Staging").GetServerApiData("HRP_GET_EMP_LOGIN_API");
+                Assert.Equal(50424, inactive.responseCode);
+                Assert.Contains("HRMS_API", inactive.responseMessage);
+
+                await Sql("UPDATE dbo.API_BASE_URL SET Base_Url = N'https://hrms.example/', Active_Status = 1 WHERE Base_Url_Key = N'HRMS_API' AND Environment = N'Staging'");
+                await Sql("UPDATE dbo.API_MASTER SET Api_Url = N'api/EmpLogin' WHERE Task_Name = N'HRP_GET_EMP_LOGIN_API'");
+                var row = Assert.Single((await Service("Staging").GetServerApiData("HRP_GET_EMP_LOGIN_API")).ApiData!);
+                Assert.Equal("https://hrms.example/api/EmpLogin", row.Api_Url);
+                Assert.Null(row.Api_Authorization);   // the '*' token of the portal APIs is never sent to HRMS
+                Assert.Equal("MASTER", row.Auth_Source);
+                Assert.Equal(404, (await Service("Staging").GetServerApiData("PO_AUTH_LOGIN")).responseCode);   // portal rows are not server rows
+
+                // a token of its own is used
+                var hrmsToken = Infrastructure.Middleware.StaticTokenMiddleware.EncodeToken("hrms-key");
+                await Sql($"INSERT INTO dbo.API_AUTHORIZATION (Task_Name, Environment, Api_Authorization) VALUES (N'HRP_GET_EMP_LOGIN_API', N'Staging', N'{hrmsToken}')");
+                row = Assert.Single((await Service("Staging").GetServerApiData("HRP_GET_EMP_LOGIN_API")).ApiData!);
+                Assert.Equal((hrmsToken, "TASK"), (row.Api_Authorization, row.Auth_Source));
+            }
+            finally
+            {
+                await Sql("DELETE FROM dbo.API_AUTHORIZATION");
+                await Sql("UPDATE dbo.API_BASE_URL SET Base_Url = N'https://hrms.change-me.local/', Active_Status = 0 WHERE Base_Url_Key = N'HRMS_API'");
+                await Sql("UPDATE dbo.API_MASTER SET Api_Url = N'change-me/employee-login' WHERE Task_Name = N'HRP_GET_EMP_LOGIN_API'");
             }
         }
     }

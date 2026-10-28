@@ -69,6 +69,9 @@ namespace Infrastructure.ServicesConfiguration
             services.AddSingleton<IDatasetCache, DatasetCache>();
             services.AddSingleton<IBackupService, BackupService>();
             services.AddSingleton<IAiClient, AiClient>();
+            // HRMS employee API (sign-in password check, employee lookup): API_MASTER rows with Api_Scope = SERVER
+            services.AddSingleton<IHrmsClient, HrmsApiClient>();
+            services.AddHttpClient(HrmsApiClient.HttpClientName, c => c.Timeout = Timeout.InfiniteTimeSpan);
 
             services.AddHttpClient(AiClient.HttpClientName, c => c.Timeout = TimeSpan.FromSeconds(90))
                 .ConfigurePrimaryHttpMessageHandler(sp =>

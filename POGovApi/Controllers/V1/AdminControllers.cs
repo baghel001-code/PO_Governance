@@ -43,7 +43,8 @@ namespace POGovApi.Controllers.V1
             {
                 Users = users,
                 Roles = Roles.All.Select(r => new RoleDto(r, Roles.Labels[r])).ToList(),
-                DefaultPassword = _acc.DefaultPassword
+                DefaultPassword = _acc.DefaultPassword,
+                Login = new LoginInfo { Mode = _cfg.HrmsLogin ? LoginModes.Hrms : LoginModes.Local, HrmsPasswordUrl = _cfg.HrmsPasswordUrl }
             });
         }
 
@@ -67,11 +68,52 @@ namespace POGovApi.Controllers.V1
             });
         }
 
+        /// <summary>
+        /// HRMS sign-in: {EmpCode, Roles, Email?} — the employee's details are fetched from HRMS here (the portal's copy is
+        /// not trusted); Email is only used when HRMS has none. Local sign-in: {Email, Name, Roles}.
+        /// </summary>
         [HttpPost]
         public async Task<ActionResult<ApiDataResponse<UserResponse>>> UserAdd([FromBody] AddUserRequest req, CancellationToken ct)
         {
             RequireAdmin();
-            var u = await _acc.AddUserAsync(req.Email ?? "", (req.Name ?? "").Trim(), req.Roles ?? new List<string>(), Me.Email, "manual", ct);
+            var u = await AddAsync(req, "manual", ct);
+            return Success(new UserResponse { User = _acc.Public(u) });
+        }
+
+        private Task<AppUser> AddAsync(AddUserRequest req, string source, CancellationToken ct) =>
+            _cfg.HrmsLogin || !string.IsNullOrWhiteSpace(req.EmpCode)
+                ? _acc.AddEmployeeAsync(req.EmpCode ?? "", req.Roles ?? new List<string>(), Me.Email, req.Email, source, ct)
+                : _acc.AddUserAsync(req.Email ?? "", (req.Name ?? "").Trim(), req.Roles ?? new List<string>(), Me.Email, source, ct);
+
+        /// <summary>"Fetch from HRMS" (admin): the employee's HRMS details and whether they can be added.</summary>
+        [HttpPost]
+        public async Task<ActionResult<ApiDataResponse<HrmsLookupResponse>>> UserHrmsLookup([FromBody] EmpCodeRequest req, CancellationToken ct)
+        {
+            RequireAdmin();
+            var (e, registered) = await _acc.LookupEmployeeAsync(req.EmpCode ?? "", ct);
+            var email = PoGovSettingsExt.Norm(e.EmpMailId);
+            var existing = email.Length > 0 ? await _acc.GetUserAsync(email, ct) : null;
+            return Success(new HrmsLookupResponse
+            {
+                EmpCode = (e.EmpCode ?? "").Trim(), Name = e.EmpName?.Trim(), Email = email, Department = e.EmpDeptName, Designation = e.EmpDesig,
+                Location = e.EmpLocation, LocationCode = e.EmpLocCode, Mobile = e.EmpContactNo, Manager = e.EmpRptMng,
+                Grade = string.IsNullOrWhiteSpace(e.EmpGradeDesc) ? (e.EmpGrade > 0 ? e.EmpGrade.ToString() : null) : e.EmpGradeDesc,
+                Active = e.EmpStatus, Resigned = e.IsResign, RegisteredAs = registered?.Email,
+                LinksExisting = registered == null && existing is { IsEmployee: false },
+                Problem = registered != null ? $"Already registered ({registered.Email})"
+                        : e.IsResign ? "Resigned in HRMS — can't be added"
+                        : !e.EmpStatus ? "Not active in HRMS — can't be added"
+                        : existing is { IsEmployee: true } ? $"{email} is already registered with Employee ID {existing.EmpCode}"
+                        : null
+            });
+        }
+
+        /// <summary>{Email, EmpCode?}: links a login to an Employee ID (fetched from HRMS), or re-reads its HRMS details.</summary>
+        [HttpPost]
+        public async Task<ActionResult<ApiDataResponse<UserResponse>>> UserLinkEmployee([FromBody] LinkEmployeeRequest req, CancellationToken ct)
+        {
+            var e = await ExistingAsync(req.Email, ct);
+            var u = await _acc.LinkEmployeeAsync(e, req.EmpCode, Me.Email, ct);
             return Success(new UserResponse { User = _acc.Public(u) });
         }
 
@@ -84,10 +126,15 @@ namespace POGovApi.Controllers.V1
             {
                 try
                 {
-                    await _acc.AddUserAsync(row.Email ?? "", (row.Name ?? "").Trim(), row.Roles ?? new List<string>(), Me.Email, "bulk", ct);
-                    res.Added.Add(row.Email);
+                    var u = await AddAsync(row, "bulk", ct);
+                    res.Added.Add(u.Email);
                 }
                 catch (AppValidationException e) { res.Errors.Add(e.Message); }
+                catch (AppException e) when (e.Status == 503)
+                {
+                    res.Errors.Add(e.Message);
+                    break;   // HRMS is down: the other rows would fail the same way
+                }
             }
             return Success(res);
         }

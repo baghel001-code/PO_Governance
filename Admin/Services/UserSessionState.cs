@@ -21,6 +21,9 @@ namespace Admin.Services
         public string Name => _user?.FindFirst(ClaimTypes.Name)?.Value ?? "";
         public IReadOnlyList<string> Roles => _user?.FindAll(ClaimTypes.Role).Select(c => c.Value).ToList() ?? new List<string>();
         public bool MustChange => _user?.FindFirst(CustomClaimTypes.MustChange)?.Value == "true";
+        /// <summary>Signs in with Employee ID + HRMS password (the password is changed in MyVishal, not here).</summary>
+        public bool IsHrmsLogin => _user?.FindFirst(CustomClaimTypes.LoginType)?.Value == "hrms";
+        public string EmpCode => _user?.FindFirst(CustomClaimTypes.EmpCode)?.Value ?? "";
 
         public bool Has(params string[] roles) => roles.Any(r => Roles.Contains(r));
         public bool IsAdmin => Has(Domain.Constants.Roles.Admin);

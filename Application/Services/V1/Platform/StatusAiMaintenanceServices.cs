@@ -71,7 +71,11 @@ namespace Application.Services.V1.Platform
             };
         }
 
-        public HealthResponse Health() => new() { Version = AppConstants.AppVersion, Storage = _store.Kind };
+        public HealthResponse Health() => new()
+        {
+            Version = AppConstants.AppVersion, Storage = _store.Kind,
+            Login = new LoginInfo { Mode = _cfg.HrmsLogin ? LoginModes.Hrms : LoginModes.Local, HrmsPasswordUrl = _cfg.HrmsPasswordUrl }
+        };
     }
 
     /// <summary>server.py api_POST_ai (enable checks, limits, audit lines).</summary>

@@ -5,6 +5,8 @@ namespace Application.DTOs.Platform
 {
     public sealed class LoginRequest
     {
+        /// <summary>Employee ID (HRMS sign-in), or the email of a local account. <see cref="Email"/> is read when this is empty.</summary>
+        [JsonPropertyName("loginId")] public string? LoginId { get; set; }
         [JsonPropertyName("email")] public string? Email { get; set; }
         [JsonPropertyName("password")] public string? Password { get; set; }
     }
@@ -41,6 +43,19 @@ namespace Application.DTOs.Platform
         [JsonPropertyName("lastLogin")] public string? LastLogin { get; set; }
         [JsonPropertyName("lockedUntil")] public double LockedUntil { get; set; }
         [JsonPropertyName("locked")] public bool Locked { get; set; }
+        /// <summary>Employee ID (HRMS sign-in); null for a local account.</summary>
+        [JsonPropertyName("empCode")] public string? EmpCode { get; set; }
+        /// <summary>"hrms" = Employee ID + HRMS password; "local" = email + password kept by the tool.</summary>
+        [JsonPropertyName("loginType")] public string LoginType { get; set; } = "local";
+        /// <summary>HRMS sign-in is on and this login has no Employee ID yet: it can't sign in until the admin links one.</summary>
+        [JsonPropertyName("needsEmpCode")] public bool NeedsEmpCode { get; set; }
+        [JsonPropertyName("department")] public string? Department { get; set; }
+        [JsonPropertyName("designation")] public string? Designation { get; set; }
+        [JsonPropertyName("location")] public string? Location { get; set; }
+        [JsonPropertyName("mobile")] public string? Mobile { get; set; }
+        [JsonPropertyName("manager")] public string? Manager { get; set; }
+        [JsonPropertyName("hrEmail")] public string? HrEmail { get; set; }
+        [JsonPropertyName("hrFetchedAt")] public string? HrFetchedAt { get; set; }
 
         [JsonPropertyName("mcCount"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] public int? McCount { get; set; }
         [JsonPropertyName("roleLabels"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] public List<string>? RoleLabels { get; set; }
@@ -52,6 +67,16 @@ namespace Application.DTOs.Platform
     {
         [JsonPropertyName("user")] public UserPublicDto? User { get; set; }
         [JsonPropertyName("passwordMinLength")] public int PasswordMinLength { get; set; }
+        /// <summary>Where HRMS passwords are changed (MyVishal).</summary>
+        [JsonPropertyName("hrmsPasswordUrl")] public string? HrmsPasswordUrl { get; set; }
+    }
+
+    /// <summary>How people sign in (anonymous: the sign-in page reads it through Health).</summary>
+    public sealed class LoginInfo
+    {
+        /// <summary>"Hrms" (Employee ID + HRMS password) or "Local" (email + password).</summary>
+        [JsonPropertyName("mode")] public string Mode { get; set; } = "Hrms";
+        [JsonPropertyName("hrmsPasswordUrl")] public string? HrmsPasswordUrl { get; set; }
     }
 
     public sealed record RoleDto([property: JsonPropertyName("id")] string Id, [property: JsonPropertyName("label")] string Label);
@@ -61,13 +86,51 @@ namespace Application.DTOs.Platform
         [JsonPropertyName("users")] public List<UserPublicDto> Users { get; set; } = new();
         [JsonPropertyName("roles")] public List<RoleDto> Roles { get; set; } = new();
         [JsonPropertyName("defaultPassword")] public string DefaultPassword { get; set; } = "";
+        [JsonPropertyName("login")] public LoginInfo Login { get; set; } = new();
     }
 
     public sealed class AddUserRequest
     {
+        /// <summary>HRMS sign-in: the Employee ID (details are fetched from HRMS by the API). Email / name are then only used when HRMS has no email.</summary>
+        [JsonPropertyName("empCode")] public string? EmpCode { get; set; }
         [JsonPropertyName("email")] public string? Email { get; set; }
         [JsonPropertyName("name")] public string? Name { get; set; }
         [JsonPropertyName("roles")] public List<string>? Roles { get; set; }
+    }
+
+    public sealed class EmpCodeRequest
+    {
+        [JsonPropertyName("empCode")] public string? EmpCode { get; set; }
+    }
+
+    /// <summary>Links a login to an Employee ID, or re-reads its HRMS details (empCode empty).</summary>
+    public sealed class LinkEmployeeRequest
+    {
+        [JsonPropertyName("email")] public string? Email { get; set; }
+        [JsonPropertyName("empCode")] public string? EmpCode { get; set; }
+    }
+
+    /// <summary>"Fetch from HRMS": the employee as HRMS has them, and the login already registered with that code.</summary>
+    public sealed class HrmsLookupResponse
+    {
+        [JsonPropertyName("empCode")] public string EmpCode { get; set; } = "";
+        [JsonPropertyName("name")] public string? Name { get; set; }
+        [JsonPropertyName("email")] public string? Email { get; set; }
+        [JsonPropertyName("department")] public string? Department { get; set; }
+        [JsonPropertyName("designation")] public string? Designation { get; set; }
+        [JsonPropertyName("location")] public string? Location { get; set; }
+        [JsonPropertyName("locationCode")] public string? LocationCode { get; set; }
+        [JsonPropertyName("mobile")] public string? Mobile { get; set; }
+        [JsonPropertyName("manager")] public string? Manager { get; set; }
+        [JsonPropertyName("grade")] public string? Grade { get; set; }
+        [JsonPropertyName("active")] public bool Active { get; set; }
+        [JsonPropertyName("resigned")] public bool Resigned { get; set; }
+        /// <summary>Email of the login already registered with this Employee ID (null = not registered).</summary>
+        [JsonPropertyName("registeredAs")] public string? RegisteredAs { get; set; }
+        /// <summary>A login with the HRMS email exists without an Employee ID: adding links it.</summary>
+        [JsonPropertyName("linksExisting")] public bool LinksExisting { get; set; }
+        /// <summary>Why the employee can't be added (resigned, inactive, already registered); null = can be added.</summary>
+        [JsonPropertyName("problem")] public string? Problem { get; set; }
     }
 
     public sealed class UserResponse

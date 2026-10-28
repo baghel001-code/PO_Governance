@@ -41,6 +41,7 @@ namespace Admin.ServiceRegistration
             services.AddScoped<AuthenticationStateProvider, ApiRevalidatingAuthStateProvider>();
 
             services.AddScoped<PortalAuthService>();
+            services.AddScoped<LoginModeService>();
             services.AddScoped<UserSessionState>();
             services.AddScoped<ServerStatusService>();
             services.AddScoped<FileDownloadService>();

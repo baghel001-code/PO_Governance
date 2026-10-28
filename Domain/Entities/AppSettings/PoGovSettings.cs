@@ -11,6 +11,24 @@ namespace Domain.Entities.AppSettings
         /// <summary>Created automatically as Admin + Planner (config.json admin_email).</summary>
         public string AdminEmail { get; set; } = "kosaraju.srihari@vishalwholesale.co.in";
         public string DefaultPassword { get; set; } = "1234";
+
+        /// <summary>
+        /// "Hrms" (default): employees sign in with their Employee ID and HRMS password. Only employees the admin registered
+        /// (Users → Add user → fetch from HRMS) can sign in; POGovApi calls the HRMS login API only for them.
+        /// "Local": email + password stored in this tool (machines without HRMS access, e.g. a developer laptop).
+        /// </summary>
+        public string LoginMode { get; set; } = LoginModes.Hrms;
+        /// <summary>
+        /// In Hrms mode, the built-in admin (<see cref="AdminEmail"/>) may still sign in with email + local password — for the
+        /// first set-up and when HRMS is down. Set <see cref="AdminEmpCode"/> and switch this off once that admin signs in with HRMS.
+        /// </summary>
+        public bool AllowAdminLocalLogin { get; set; } = true;
+        /// <summary>Employee ID of the built-in admin (registered as an HRMS login at start-up when set).</summary>
+        public string AdminEmpCode { get; set; } = "";
+        /// <summary>Where employees change / unlock their HRMS password (shown on the sign-in page).</summary>
+        public string HrmsPasswordUrl { get; set; } = "https://myvishal.vishalmegamart.com:8025/login/login.aspx";
+        /// <summary>Every failed sign-in takes at least this long (unknown ID, wrong password and HRMS call look alike).</summary>
+        public int LoginFailureMinMs { get; set; } = 1000;
         public int PasswordMinLength { get; set; } = 8;
         public double SessionIdleHours { get; set; } = 12;
         public int MaxFailedLogins { get; set; } = 5;
@@ -56,7 +74,15 @@ namespace Domain.Entities.AppSettings
         public int LockoutMinutesOrDefault => LockoutMinutes > 0 ? LockoutMinutes : 15;
         public int BackupKeepDaysOrDefault => BackupKeepDays > 0 ? BackupKeepDays : 30;
         public string AdminEmailOrDefault => string.IsNullOrWhiteSpace(AdminEmail) ? "kosaraju.srihari@vishalwholesale.co.in" : AdminEmail;
+        public bool HrmsLogin => !string.Equals(LoginMode?.Trim(), LoginModes.Local, StringComparison.OrdinalIgnoreCase);
         public bool AiChatEnabled => !string.IsNullOrEmpty(AnthropicApiKey);
         public bool AiInsightsEnabled => !string.IsNullOrEmpty(GroqApiKey) || !string.IsNullOrEmpty(AnthropicApiKey);
+    }
+
+    /// <summary>Values of <see cref="PoGovSettings.LoginMode"/>.</summary>
+    public static class LoginModes
+    {
+        public const string Hrms = "Hrms";
+        public const string Local = "Local";
     }
 }

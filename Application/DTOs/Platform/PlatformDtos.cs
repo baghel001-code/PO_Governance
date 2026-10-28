@@ -32,6 +32,8 @@ namespace Application.DTOs.Platform
         [JsonPropertyName("ok")] public bool Ok { get; set; } = true;
         [JsonPropertyName("version")] public string Version { get; set; } = "";
         [JsonPropertyName("storage")] public string Storage { get; set; } = "";
+        /// <summary>How people sign in (the portal's sign-in page shows Employee ID or Email from it).</summary>
+        [JsonPropertyName("login")] public LoginInfo? Login { get; set; }
     }
 
     // ── audit / backups ─────────────────────────────────────────────

@@ -41,8 +41,11 @@ namespace Application.Interfaces.V1
         string DefaultPassword { get; }
         UserPublicDto Public(AppUser u);
 
-        /// <summary>Returns (token, null) or (null, error message).</summary>
-        Task<(string? Token, string? Error)> LoginAsync(string email, string password, string ip, CancellationToken ct = default);
+        /// <summary>
+        /// Returns (token, null) or (null, error message). <paramref name="login"/> = Employee ID (HRMS sign-in: the password is
+        /// checked by HRMS, and only for employees registered here) or email (local accounts).
+        /// </summary>
+        Task<(string? Token, string? Error)> LoginAsync(string login, string password, string ip, CancellationToken ct = default);
         /// <summary>The active user of a live session (idle timeout; "last seen" persisted every 5 min), else null.</summary>
         Task<AppUser?> SessionUserAsync(string? token, CancellationToken ct = default);
         Task LogoutAsync(string token, CancellationToken ct = default);
@@ -51,7 +54,14 @@ namespace Application.Interfaces.V1
         string? ValidateNewPassword(string email, string password);
         Task EndSessionsAsync(string email, string? keep = null, CancellationToken ct = default);
 
+        /// <summary>A local account (Local sign-in mode only).</summary>
         Task<AppUser> AddUserAsync(string email, string name, IEnumerable<string> roles, string by, string source = "manual", CancellationToken ct = default);
+        /// <summary>The employee as HRMS has them, and the login already registered with that code.</summary>
+        Task<(HrmsEmployee Employee, AppUser? Registered)> LookupEmployeeAsync(string empCode, CancellationToken ct = default);
+        /// <summary>Registers an employee with the details fetched from HRMS (signs in with Employee ID + HRMS password).</summary>
+        Task<AppUser> AddEmployeeAsync(string empCode, IEnumerable<string> roles, string by, string? email = null, string source = "manual", CancellationToken ct = default);
+        /// <summary>Links a login to an Employee ID, or re-reads its HRMS details (<paramref name="empCode"/> empty).</summary>
+        Task<AppUser> LinkEmployeeAsync(string email, string? empCode, string by, CancellationToken ct = default);
         /// <summary>changes: {name?, roles?, active?, unlock?} — every check runs before anything is applied.</summary>
         Task<AppUser> UpdateUserAsync(string email, JsonObject changes, string by, CancellationToken ct = default);
         Task ResetPasswordAsync(string email, string by, CancellationToken ct = default);

@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Security.Cryptography;
 using System.Text.Json.Nodes;
 using System.Text.RegularExpressions;
@@ -31,6 +32,7 @@ namespace Application.Services.V1.Platform
         private readonly IAuditService _audit;
         private readonly IPasswordHasher _hasher;
         private readonly IScrSource _scr;
+        private readonly IHrmsClient _hrms;
 
         private readonly SemaphoreSlim _gate = new(1, 1);   // accounts.py self.lock
         private Dictionary<string, AppUser> _users = new();
@@ -43,8 +45,9 @@ namespace Application.Services.V1.Platform
         private volatile ScopeCacheEntry? _scopeCache;   // swapped as one reference
 
         public AccountsService(IStore store, IOptions<PoGovSettings> cfg, IAppClock clock, IAuditService audit,
-                               IPasswordHasher hasher, IScrSource scr)
+                               IPasswordHasher hasher, IScrSource scr, IHrmsClient? hrms = null)
         {
+            _hrms = hrms ?? NoHrms.Instance;
             _store = store;
             _cfg = cfg.Value;
             _clock = clock;
@@ -75,6 +78,16 @@ namespace Application.Services.V1.Platform
         }
 
         public string DefaultPassword => _cfg.DefaultPasswordOrDefault;
+
+        /// <summary>HRMS employee codes: letters, digits and . _ - (up to 30); compared case-insensitively.</summary>
+        private static readonly Regex EmpCodeRe = new(@"^[A-Za-z0-9._-]{1,30}\z", RegexOptions.Compiled);
+
+        public static string NormEmpCode(string? code) => (code ?? "").Trim().ToUpperInvariant();
+
+        private static bool SameCode(string? a, string? b) => a != null && b != null && NormEmpCode(a) == NormEmpCode(b);
+
+        /// <summary>The registered login with this employee code (caller holds the lock).</summary>
+        private AppUser? FindByEmpCodeLocked(string code) => _users.Values.FirstOrDefault(u => SameCode(u.EmpCode, code));
 
         private double Now => _clock.Epoch();
 
@@ -219,6 +232,15 @@ namespace Application.Services.V1.Platform
                 u.Roles = OrderRoles(u.Roles.Concat(new[] { Roles.Admin, Roles.Planner }));
                 await SaveUsersLockedAsync(ct);
             }
+            // PoGovSettings:AdminEmpCode: the built-in admin signs in with that Employee ID and the HRMS password
+            var code = NormEmpCode(_cfg.AdminEmpCode);
+            u = _users[admin];
+            if (code.Length > 0 && EmpCodeRe.IsMatch(code) && !u.IsEmployee && FindByEmpCodeLocked(code) == null)
+            {
+                u.EmpCode = code;
+                u.MustChange = false;
+                await SaveUsersLockedAsync(ct);
+            }
         }
 
         private AppUser NewUser(string email, string? name, IEnumerable<string> roles, string by, string source = "manual") => new()
@@ -257,8 +279,16 @@ namespace Application.Services.V1.Platform
         {
             Email = u.Email, Name = u.Name, Roles = u.Roles.ToList(), Active = u.Active, MustChange = u.MustChange,
             CreatedAt = u.CreatedAt, CreatedBy = u.CreatedBy, Source = u.Source, LastLogin = u.LastLogin,
-            LockedUntil = u.LockedUntil, Locked = u.LockedUntil > Now
+            LockedUntil = u.LockedUntil, Locked = u.LockedUntil > Now,
+            EmpCode = u.EmpCode, LoginType = u.IsEmployee ? LoginTypes.Hrms : LoginTypes.Local,
+            NeedsEmpCode = _cfg.HrmsLogin && !u.IsEmployee && !IsBreakGlassAdmin(u),
+            Department = u.Hr?.Department, Designation = u.Hr?.Designation, Location = u.Hr?.Location,
+            Mobile = u.Hr?.Mobile, Manager = u.Hr?.Manager, HrEmail = u.Hr?.Email, HrFetchedAt = u.Hr?.FetchedAt
         };
+
+        /// <summary>The built-in admin while it may still sign in with email + local password (AllowAdminLocalLogin).</summary>
+        private bool IsBreakGlassAdmin(AppUser u) =>
+            _cfg.AllowAdminLocalLogin && !u.IsEmployee && u.Email == NormEmail(_cfg.AdminEmailOrDefault);
 
         public async Task<AppUser> AddUserAsync(string email, string name, IEnumerable<string> roles, string by, string source = "manual", CancellationToken ct = default)
         {
@@ -267,6 +297,8 @@ namespace Application.Services.V1.Platform
             if (!EmailFull.IsMatch(email)) throw new AppValidationException($"Not a valid email: {email}");
             var rl = (roles ?? Enumerable.Empty<string>()).Where(r => Roles.All.Contains(r)).ToList();
             if (rl.Count == 0) throw new AppValidationException("Pick at least one role");
+            if (_cfg.HrmsLogin)
+                throw new AppValidationException("Users sign in with their Employee ID and HRMS password: add them by Employee ID (fetched from HRMS), not by email.");
             AppUser created;
             using (await LockAsync(ct))
             {
@@ -339,6 +371,8 @@ namespace Application.Services.V1.Platform
             {
                 await ReloadUsersLockedAsync(ct);
                 if (!_users.TryGetValue(email, out var u)) throw new NotFoundException("No such user");
+                if (u.IsEmployee)
+                    throw new AppValidationException($"{email} signs in with Employee ID {u.EmpCode} and the HRMS password — it is changed or unlocked in MyVishal (HRMS), not here.");
                 u.Pw = _hasher.Hash(DefaultPassword);
                 u.MustChange = true;
                 u.Failed = 0;
@@ -384,6 +418,8 @@ namespace Application.Services.V1.Platform
             using (await LockAsync(ct))
             {
                 await ReloadUsersLockedAsync(ct);
+                if (_users.TryGetValue(email, out var emp) && emp.IsEmployee)
+                    return "You sign in with your HRMS password: change it in MyVishal (HRMS).";
                 if (!_users.TryGetValue(email, out var u) || !_hasher.Verify(oldPassword, u.Pw))
                     return "Current password is incorrect";
                 var err = ValidateNewPassword(email, newPassword);
@@ -398,13 +434,139 @@ namespace Application.Services.V1.Platform
 
         // ── login / sessions ────────────────────────────────────────
 
-        public async Task<(string? Token, string? Error)> LoginAsync(string email, string password, string ip, CancellationToken ct = default)
+        /// <summary>
+        /// Signs in. HRMS mode (<see cref="PoGovSettings.LoginMode"/>): <paramref name="login"/> is the Employee ID and the
+        /// password is checked by HRMS — but only for an employee the admin registered here (active, not locked): for any
+        /// other ID HRMS is not called at all, so an HRMS account alone never opens the tool. Email sign-in is refused, except
+        /// for the built-in admin while <see cref="PoGovSettings.AllowAdminLocalLogin"/> is on. Local mode: email + the
+        /// password kept here (v1.1.4). Every failure takes at least <see cref="PoGovSettings.LoginFailureMinMs"/>.
+        /// </summary>
+        public async Task<(string? Token, string? Error)> LoginAsync(string login, string password, string ip, CancellationToken ct = default)
         {
             await InitializeAsync(ct);
-            email = NormEmail(email);
+            var started = Stopwatch.GetTimestamp();
+            var res = await LoginCoreAsync((login ?? "").Trim(), password ?? "", ip, ct);
+            if (res.Token == null)
+            {
+                var rest = TimeSpan.FromMilliseconds(Math.Max(0, _cfg.LoginFailureMinMs)) - Stopwatch.GetElapsedTime(started);
+                if (rest > TimeSpan.Zero) await Task.Delay(rest, ct);
+            }
+            return res;
+        }
+
+        public const string BadEmployeeLogin = "Employee ID or password is incorrect";
+
+        private async Task<(string? Token, string? Error)> LoginCoreAsync(string login, string password, string ip, CancellationToken ct)
+        {
+            if (!_cfg.HrmsLogin) return await LocalLoginAsync(NormEmail(login), password, ip, ct);
+            if (login.Contains('@'))
+            {
+                var email = NormEmail(login);
+                if (_cfg.AllowAdminLocalLogin && email == NormEmail(_cfg.AdminEmailOrDefault)
+                    && await GetUserAsync(email, ct) is { IsEmployee: false })
+                    return await LocalLoginAsync(email, password, ip, ct);
+                await _audit.AppendAsync(email.Length > 0 ? email : "?", "login-fail", $"email sign-in refused (HRMS sign-in) ip={ip}", ct);
+                return (null, "Sign in with your Employee ID and HRMS password.");
+            }
+            return await EmployeeLoginAsync(NormEmpCode(login), password, ip, ct);
+        }
+
+        private async Task<(string? Token, string? Error)> EmployeeLoginAsync(string code, string password, string ip, CancellationToken ct)
+        {
             await MaybeReloadAsync(ct);
-            var maxFail = _cfg.MaxFailedLoginsOrDefault;
+            string? email = null, refused = null, lockedText = null;
+            using (await LockAsync(ct))
+            {
+                await ReloadUsersLockedAsync(ct);
+                var u = EmpCodeRe.IsMatch(code) ? FindByEmpCodeLocked(code) : null;
+                if (u == null || !u.Active) refused = u == null ? "not a registered employee" : "inactive user " + u.Email;
+                else if (u.LockedUntil > Now) lockedText = LockedText(u);
+                else email = u.Email;
+            }
+            if (refused != null)
+            {
+                // not registered here (or deactivated): HRMS is not asked, whatever the password
+                await _audit.AppendAsync(code.Length > 0 ? "emp:" + PlatformCore.Trunc(code, 30) : "?", "login-fail", $"{refused} ip={ip}", ct);
+                return (null, BadEmployeeLogin);
+            }
+            if (lockedText != null || email == null) return (null, lockedText ?? BadEmployeeLogin);
+
+            var r = await _hrms.VerifyPasswordAsync(code, password, ct);
+            if (r.Status == HrmsStatus.Ok && !SameCode(r.Employee?.EmpCode, code)) r = r with { Status = HrmsStatus.Invalid, Message = "HRMS answered for another employee code" };
+            switch (r.Status)
+            {
+                case HrmsStatus.Unavailable:
+                    await _audit.AppendAsync(email, "login-error", $"HRMS unavailable: {PlatformCore.Trunc(r.Message ?? "", 200)} ip={ip}", ct);
+                    return (null, "Sign-in is temporarily unavailable (HRMS did not answer). Please try again in a few minutes.");
+                case HrmsStatus.LockedInHrms:
+                    await _audit.AppendAsync(email, "login-fail", $"locked in HRMS ip={ip}", ct);
+                    return (null, "Your HRMS account is locked after too many wrong passwords. Unlock it in MyVishal (My Page → Unlock User) or try again in about 30 minutes.");
+                case HrmsStatus.Ok when !r.Employee!.IsWorking:
+                    await _audit.AppendAsync(email, "login-fail", $"HRMS: employee {code} resigned / inactive ip={ip}", ct);
+                    return (null, "Your HRMS record is not active. Contact the administrator.");
+            }
+
+            var audits = new List<(string, string, string)>();
+            (string? Token, string? Error) result;
+            using (await LockAsync(ct))
+            {
+                await ReloadUsersLockedAsync(ct);
+                await RefreshSessionsLockedAsync(ct);
+                // re-read: the admin may have deactivated or re-linked the user while HRMS was answering
+                if (!_users.TryGetValue(email, out var u) || !u.Active || !SameCode(u.EmpCode, code))
+                    result = (null, BadEmployeeLogin);
+                else if (r.Status != HrmsStatus.Ok)
+                    result = (null, await RecordFailureLockedAsync(u, BadEmployeeLogin, ip, audits, ct));
+                else
+                    result = (await StartSessionLockedAsync(u, ip, audits, ct), null);
+            }
+            foreach (var (w, a, d) in audits) await _audit.AppendAsync(w, a, d, ct);
+            return result;
+        }
+
+        private string LockedText(AppUser u)
+        {
+            var mins = (int)Math.Floor((u.LockedUntil - Now) / 60) + 1;
+            return $"Too many wrong attempts. Try again in {mins} minute(s), or ask the admin to unlock you.";
+        }
+
+        /// <summary>One more wrong password; locks after MaxFailedLogins. Returns the message (caller holds the lock).</summary>
+        private async Task<string> RecordFailureLockedAsync(AppUser u, string error, string ip, List<(string, string, string)> audits, CancellationToken ct)
+        {
             var lockMin = _cfg.LockoutMinutesOrDefault;
+            u.Failed += 1;
+            if (u.Failed >= _cfg.MaxFailedLoginsOrDefault)
+            {
+                u.LockedUntil = Now + lockMin * 60;
+                u.Failed = 0;
+                error = $"Too many wrong attempts — locked for {lockMin} minutes.";
+                audits.Add((u.Email, "locked", $"ip={ip}"));
+            }
+            await SaveUsersLockedAsync(ct);
+            audits.Add((u.Email, "login-fail", $"ip={ip}"));
+            return error;
+        }
+
+        /// <summary>Right password: clears the failures and opens a session (caller holds the lock).</summary>
+        private async Task<string> StartSessionLockedAsync(AppUser u, string ip, List<(string, string, string)> audits, CancellationToken ct)
+        {
+            u.Failed = 0;
+            u.LockedUntil = 0;
+            u.LastLogin = _clock.NowIso;
+            await SaveUsersLockedAsync(ct);
+            var token = NewToken();
+            var now = Now;
+            _sessions[token] = new SessionRecord { Email = u.Email, Created = now, Seen = now, Ip = ip };
+            var pruned = PruneSessionsLocked();
+            await SaveSessionsLockedAsync(new[] { token }, pruned, ct);
+            audits.Add((u.Email, "login", u.IsEmployee ? $"hrms emp={u.EmpCode} ip={ip}" : $"ip={ip}"));
+            return token;
+        }
+
+        /// <summary>Email + the password kept by the tool (Local mode, and the built-in admin in HRMS mode).</summary>
+        private async Task<(string? Token, string? Error)> LocalLoginAsync(string email, string password, string ip, CancellationToken ct)
+        {
+            await MaybeReloadAsync(ct);
             var audits = new List<(string, string, string)>();
             string? token = null, error = null;
             using (await LockAsync(ct))
@@ -417,40 +579,130 @@ namespace Application.Services.V1.Platform
                     error = "Email or password is incorrect";
                 }
                 else if (u.LockedUntil > Now)
-                {
-                    var mins = (int)Math.Floor((u.LockedUntil - Now) / 60) + 1;
-                    error = $"Too many wrong attempts. Try again in {mins} minute(s), or ask the admin to unlock you.";
-                }
+                    error = LockedText(u);
                 else if (!_hasher.Verify(password, u.Pw))
-                {
-                    u.Failed += 1;
-                    error = "Email or password is incorrect";
-                    if (u.Failed >= maxFail)
-                    {
-                        u.LockedUntil = Now + lockMin * 60;
-                        u.Failed = 0;
-                        error = $"Too many wrong attempts — locked for {lockMin} minutes.";
-                        audits.Add((email, "locked", $"ip={ip}"));
-                    }
-                    await SaveUsersLockedAsync(ct);
-                    audits.Add((email, "login-fail", $"ip={ip}"));
-                }
+                    error = await RecordFailureLockedAsync(u, "Email or password is incorrect", ip, audits, ct);
                 else
-                {
-                    u.Failed = 0;
-                    u.LockedUntil = 0;
-                    u.LastLogin = _clock.NowIso;
-                    await SaveUsersLockedAsync(ct);
-                    token = NewToken();
-                    var now = Now;
-                    _sessions[token] = new SessionRecord { Email = email, Created = now, Seen = now, Ip = ip };
-                    var pruned = PruneSessionsLocked();
-                    await SaveSessionsLockedAsync(new[] { token }, pruned, ct);
-                    audits.Add((email, "login", $"ip={ip}"));
-                }
+                    token = await StartSessionLockedAsync(u, ip, audits, ct);
             }
             foreach (var (w, a, d) in audits) await _audit.AppendAsync(w, a, d, ct);
             return (token, error);
+        }
+
+        // ── employees registered from HRMS (admin) ──────────────────
+
+        /// <summary>
+        /// The admin's "Fetch from HRMS": the employee's HRMS details (HRP_GET_EMP_DETAIL_CODE) and the login already
+        /// registered with that code, if any. Throws when HRMS has no such employee or did not answer.
+        /// </summary>
+        public async Task<(HrmsEmployee Employee, AppUser? Registered)> LookupEmployeeAsync(string empCode, CancellationToken ct = default)
+        {
+            await InitializeAsync(ct);
+            var code = NormEmpCode(empCode);
+            if (!EmpCodeRe.IsMatch(code)) throw new AppValidationException("Enter a valid Employee ID");
+            var r = await _hrms.GetEmployeeAsync(code, ct);
+            var emp = r.Status switch
+            {
+                HrmsStatus.Ok when SameCode(r.Employee?.EmpCode, code) => r.Employee!,
+                HrmsStatus.Unavailable => throw new AppException(503, "HRMS did not answer: " + (r.Message ?? "try again in a few minutes")),
+                _ => throw new AppValidationException($"Employee ID {code} was not found in HRMS")
+            };
+            await MaybeReloadAsync(ct);
+            using (await LockAsync(ct)) return (emp, FindByEmpCodeLocked(code)?.Clone());
+        }
+
+        /// <summary>
+        /// Registers an employee: their details are fetched from HRMS here (never taken from the caller), so only real,
+        /// working employees can be added. The login key is the HRMS email (<paramref name="email"/> only when HRMS has
+        /// none). A login that already exists for that email without an Employee ID (e.g. from the SCR file) is linked and
+        /// keeps its roles plus <paramref name="roles"/>.
+        /// </summary>
+        public async Task<AppUser> AddEmployeeAsync(string empCode, IEnumerable<string> roles, string by, string? email = null,
+                                                    string source = "manual", CancellationToken ct = default)
+        {
+            var rl = (roles ?? Enumerable.Empty<string>()).Where(r => Roles.All.Contains(r)).ToList();
+            if (rl.Count == 0) throw new AppValidationException("Pick at least one role");
+            var (emp, registered) = await LookupEmployeeAsync(empCode, ct);
+            var code = NormEmpCode(emp.EmpCode);
+            if (registered != null) throw new AppValidationException($"Employee ID {code} is already registered ({registered.Email})");
+            if (!emp.IsWorking) throw new AppValidationException($"Employee ID {code} is {(emp.IsResign ? "resigned" : "not active")} in HRMS");
+            var key = NormEmail(emp.EmpMailId);
+            if (!EmailFull.IsMatch(key)) key = NormEmail(email);
+            if (!EmailFull.IsMatch(key))
+                throw new AppValidationException($"HRMS has no email for {code}: enter the company email of the employee");
+            AppUser result;
+            bool linked;
+            using (await LockAsync(ct))
+            {
+                await ReloadUsersLockedAsync(ct);
+                if (FindByEmpCodeLocked(code) is { } other) throw new AppValidationException($"Employee ID {code} is already registered ({other.Email})");
+                if (_users.TryGetValue(key, out var u))
+                {
+                    if (u.IsEmployee) throw new AppValidationException($"{key} is already registered with Employee ID {u.EmpCode}");
+                    u.Roles = OrderRoles(u.Roles.Concat(rl));
+                    linked = true;
+                }
+                else
+                {
+                    u = _users[key] = NewUser(key, emp.EmpName, rl, by, source);
+                    linked = false;
+                }
+                ApplyEmployee(u, emp, by);
+                await SaveUsersLockedAsync(ct);
+                result = u.Clone();
+            }
+            await _audit.AppendAsync(by, linked ? "user-link-hrms" : "user-add",
+                                     $"{key} emp={code} roles={string.Join(",", result.Roles)}", ct);
+            return result;
+        }
+
+        /// <summary>
+        /// Links an existing login to an Employee ID, or re-reads the HRMS details of a linked one (<paramref name="empCode"/>
+        /// empty = its current code). From then on it signs in with the Employee ID and the HRMS password only.
+        /// </summary>
+        public async Task<AppUser> LinkEmployeeAsync(string email, string? empCode, string by, CancellationToken ct = default)
+        {
+            await InitializeAsync(ct);
+            email = NormEmail(email);
+            var current = await GetUserAsync(email, ct) ?? throw new NotFoundException("No such user");
+            var code = NormEmpCode(string.IsNullOrWhiteSpace(empCode) ? current.EmpCode : empCode);
+            var (emp, registered) = await LookupEmployeeAsync(code, ct);
+            if (registered != null && registered.Email != email)
+                throw new AppValidationException($"Employee ID {code} is already registered ({registered.Email})");
+            if (!emp.IsWorking && !current.IsEmployee)
+                throw new AppValidationException($"Employee ID {code} is {(emp.IsResign ? "resigned" : "not active")} in HRMS");
+            AppUser result;
+            using (await LockAsync(ct))
+            {
+                await ReloadUsersLockedAsync(ct);
+                if (!_users.TryGetValue(email, out var u)) throw new NotFoundException("No such user");
+                if (_users.Values.FirstOrDefault(x => x != u && SameCode(x.EmpCode, code)) is { } other)
+                    throw new AppValidationException($"Employee ID {code} is already registered ({other.Email})");
+                ApplyEmployee(u, emp, by);
+                await SaveUsersLockedAsync(ct);
+                result = u.Clone();
+            }
+            await _audit.AppendAsync(by, current.IsEmployee && SameCode(current.EmpCode, code) ? "user-hrms-refresh" : "user-link-hrms",
+                                     $"{email} emp={code}{(emp.IsWorking ? "" : " (not active in HRMS)")}", ct);
+            return result;
+        }
+
+        /// <summary>HRMS details onto a login; the local password is dropped (HRMS checks the password from now on).</summary>
+        private void ApplyEmployee(AppUser u, HrmsEmployee e, string by)
+        {
+            u.EmpCode = NormEmpCode(e.EmpCode);
+            if (!string.IsNullOrWhiteSpace(e.EmpName)) u.Name = PlatformCore.Trunc(e.EmpName.Trim(), 80);
+            u.Pw = "";
+            u.MustChange = false;
+            u.Failed = 0;
+            u.LockedUntil = 0;
+            u.Hr = new HrProfile
+            {
+                Email = NormEmail(e.EmpMailId), Location = e.EmpLocation?.Trim(), LocationCode = e.EmpLocCode?.Trim(),
+                Department = e.EmpDeptName?.Trim(), Designation = e.EmpDesig?.Trim(), Mobile = e.EmpContactNo?.Trim(),
+                Manager = e.EmpRptMng?.Trim(), Grade = e.EmpGrade, GradeDesc = e.EmpGradeDesc?.Trim(),
+                HrActive = e.EmpStatus, Resigned = e.IsResign, FetchedAt = _clock.NowIso, FetchedBy = by
+            };
         }
 
         /// <summary>Python secrets.token_urlsafe(32).</summary>
@@ -682,5 +934,22 @@ namespace Application.Services.V1.Platform
             _scopeCache = new ScopeCacheEntry(ver, idx);
             return idx;
         }
+    }
+
+    /// <summary>Values of <see cref="UserPublicDto.LoginType"/>.</summary>
+    public static class LoginTypes
+    {
+        public const string Hrms = "hrms";
+        public const string Local = "local";
+    }
+
+    /// <summary>No HRMS client registered (tests, tools): every call is "unavailable".</summary>
+    internal sealed class NoHrms : IHrmsClient
+    {
+        public static readonly NoHrms Instance = new();
+        public Task<HrmsResult> VerifyPasswordAsync(string empCode, string password, CancellationToken ct = default) =>
+            Task.FromResult(HrmsResult.Unavailable("No HRMS client configured"));
+        public Task<HrmsResult> GetEmployeeAsync(string empCode, CancellationToken ct = default) =>
+            Task.FromResult(HrmsResult.Unavailable("No HRMS client configured"));
     }
 }

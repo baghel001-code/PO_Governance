@@ -1,4 +1,5 @@
-@* users.js renderUsers / drawEdit / bulk: the sign-in accounts. *@
+@* users.js renderUsers / drawEdit / bulk: the sign-in accounts. HRMS sign-in: employees are added by Employee ID — POGovApi
+   fetches their details from HRMS (the portal never calls HRMS) and only registered employees can sign in. *@
 @using System.Text.RegularExpressions
 @inject UserSessionState Session
 @inject ISnackbar Snackbar
@@ -17,7 +18,7 @@ else
     var list = Filtered;
     var counts = _data.Users.Where(u => u.Active).SelectMany(u => u.Roles).GroupBy(r => r).ToDictionary(g => g.Key, g => g.Count());
     <div class="pf-row">
-        <MudTextField T="string" @bind-Value="_q" Immediate="true" Placeholder="Search name or email…" Variant="Variant.Outlined" Margin="Margin.Dense"
+        <MudTextField T="string" @bind-Value="_q" Immediate="true" Placeholder="Search name, email or Employee ID…" Variant="Variant.Outlined" Margin="Margin.Dense"
                       Style="min-width:240px" Class="flex-grow-0" UserAttributes='@(new Dictionary<string, object> { ["data-testid"] = "us-q" })' />
         <MudSelect T="string" @bind-Value="_role" Variant="Variant.Outlined" Margin="Margin.Dense" Dense="true" Style="min-width:190px" Class="flex-grow-0">
             <MudSelectItem Value="@("")">All roles</MudSelectItem>
@@ -26,6 +27,10 @@ else
                 <MudSelectItem Value="@r.Id">@r.Label (@counts.GetValueOrDefault(r.Id))</MudSelectItem>
             }
             <MudSelectItem Value="@("inactive")">Inactive</MudSelectItem>
+            @if (Hrms)
+            {
+                <MudSelectItem Value="@("noemp")">Employee ID needed (@_data.Users.Count(u => u.NeedsEmpCode))</MudSelectItem>
+            }
         </MudSelect>
         <span class="pf-count">@list.Count of @_data.Users.Count users</span>
         <button class="btn-sec" style="margin-left:auto" @onclick="OpenBulk">Bulk add…</button>
@@ -36,8 +41,16 @@ else
     {
         <div class="card" style="padding:16px 18px;margin-bottom:12px;border-left:4px solid var(--vmm-pink)">
             <div style="font-weight:700;margin-bottom:6px">Bulk add users</div>
-            <div style="font-size:11.5px;color:var(--ink2);margin-bottom:8px">One per line: <code>email, name, role</code> — role is one of admin, planner, cathead, buyer (use + for several, e.g. <code>planner+buyer</code>). You can paste straight from Excel (tab-separated works too).</div>
-            <textarea class="pf-in" rows="6" style="width:100%;font-family:var(--mono)" placeholder="ravi.kumar@vishalwholesale.co.in, Ravi Kumar, planner" @bind="_bulkText" @bind:event="oninput" data-testid="ub-text"></textarea>
+            @if (Hrms)
+            {
+                <div style="font-size:11.5px;color:var(--ink2);margin-bottom:8px">One per line: <code>Employee ID, role</code> — role is one of admin, planner, cathead, buyer (use + for several, e.g. <code>planner+buyer</code>). Each employee is fetched from HRMS; resigned / inactive employees and IDs HRMS does not know are skipped. You can paste straight from Excel.</div>
+                <textarea class="pf-in" rows="6" style="width:100%;font-family:var(--mono)" placeholder="102345, planner" @bind="_bulkText" @bind:event="oninput" data-testid="ub-text"></textarea>
+            }
+            else
+            {
+                <div style="font-size:11.5px;color:var(--ink2);margin-bottom:8px">One per line: <code>email, name, role</code> — role is one of admin, planner, cathead, buyer (use + for several, e.g. <code>planner+buyer</code>). You can paste straight from Excel (tab-separated works too).</div>
+                <textarea class="pf-in" rows="6" style="width:100%;font-family:var(--mono)" placeholder="ravi.kumar@vishalwholesale.co.in, Ravi Kumar, planner" @bind="_bulkText" @bind:event="oninput" data-testid="ub-text"></textarea>
+            }
             <div style="display:flex;gap:8px;margin-top:8px;justify-content:flex-end">
                 <button class="btn-sec" @onclick="CloseEdit">Cancel</button>
                 <button class="btn-pri" disabled="@_busy" @onclick="SaveBulkAsync">Add all</button>
@@ -48,16 +61,61 @@ else
     {
         var isNew = _edit.Length == 0;
         <div class="card" style="padding:16px 18px;margin-bottom:12px;border-left:4px solid var(--vmm-pink)" data-testid="us-edit">
-            <div style="font-weight:700;margin-bottom:10px">@(isNew ? "Add a user" : "Edit " + _form.Name)</div>
+            <div style="font-weight:700;margin-bottom:10px">@(isNew ? (Hrms ? "Add an employee" : "Add a user") : "Edit " + _form.Name)</div>
+            @if (Hrms && (isNew || !_form.IsEmployee))
+            {
+                @* Employee ID → HRMS (through POGovApi). New: register; existing local login: link. *@
+                <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:flex-end;margin-bottom:10px">
+                    <div>
+                        <div class="pf-lbl">Employee ID</div>
+                        <input class="pf-in" style="min-width:160px;font-family:var(--mono)" @bind="_empCode" @bind:event="oninput" @onkeyup="EmpKeyUp" data-testid="ue-emp" />
+                    </div>
+                    <button class="btn-sec" disabled="@(_busy || string.IsNullOrWhiteSpace(_empCode))" @onclick="FetchAsync" data-testid="ue-fetch">🔍 Fetch from HRMS</button>
+                    @if (!isNew && _hr != null && _hr.Problem == null)
+                    {
+                        <button class="btn-pri" disabled="@_busy" @onclick="LinkAsync" data-testid="ue-link">Link to this employee</button>
+                    }
+                </div>
+                @if (_hr != null)
+                {
+                    <HrCard Hr="_hr" />
+                    @if (_hr.LinksExisting && isNew)
+                    {
+                        <div class="pf-note">A login for <strong>@_hr.Email</strong> already exists without an Employee ID (e.g. from the SCR file). Adding links it to this employee and adds the roles below.</div>
+                    }
+                    @if (!isNew && _hr.Problem == null)
+                    {
+                        <div class="pf-note">After linking, @_form.Name signs in with Employee ID <strong>@_hr.EmpCode</strong> and the HRMS password only; the password kept here is removed.</div>
+                    }
+                }
+            }
+            else if (!isNew && _form.IsEmployee)
+            {
+                <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:10px">
+                    <span class="pf-lbl" style="margin:0">Employee ID</span> <strong class="pf-mono">@_form.EmpCode</strong>
+                    <span style="font-size:11px;color:var(--ink3)">signs in with the HRMS password@(string.IsNullOrEmpty(_form.HrFetchedAt) ? "" : " · HRMS details of " + Fmt.When(_form.HrFetchedAt))</span>
+                    <button class="btn-sec btn-sm" disabled="@_busy" @onclick="RefreshHrAsync" data-testid="ue-refresh">↻ Refresh from HRMS</button>
+                </div>
+            }
             <div style="display:flex;flex-wrap:wrap;gap:12px;align-items:flex-end">
-                <div>
-                    <div class="pf-lbl">Email</div>
-                    <input class="pf-in" style="min-width:280px" @bind="_form.Email" disabled="@(!isNew)" data-testid="ue-email" />
-                </div>
-                <div>
-                    <div class="pf-lbl">Name</div>
-                    <input class="pf-in" style="min-width:200px" @bind="_form.Name" data-testid="ue-name" />
-                </div>
+                @if (!Hrms || !isNew)
+                {
+                    <div>
+                        <div class="pf-lbl">Email</div>
+                        <input class="pf-in" style="min-width:280px" @bind="_form.Email" disabled="@(!isNew)" data-testid="ue-email" />
+                    </div>
+                    <div>
+                        <div class="pf-lbl">Name</div>
+                        <input class="pf-in" style="min-width:200px" @bind="_form.Name" data-testid="ue-name" />
+                    </div>
+                }
+                else if (_hr != null && string.IsNullOrEmpty(_hr.Email))
+                {
+                    <div>
+                        <div class="pf-lbl">Company email (HRMS has none)</div>
+                        <input class="pf-in" style="min-width:280px" @bind="_form.Email" data-testid="ue-email" />
+                    </div>
+                }
                 <div>
                     <div class="pf-lbl" style="margin-bottom:5px">Roles</div>
                     @foreach (var r in _data.Roles)
@@ -78,10 +136,14 @@ else
                         <button class="btn-sec btn-danger" @onclick="RemoveAsync">Delete user</button>
                     }
                     <button class="btn-sec" @onclick="CloseEdit">Cancel</button>
-                    <button class="btn-pri" disabled="@_busy" @onclick="SaveEditAsync">@(isNew ? "Add user" : "Save")</button>
+                    <button class="btn-pri" disabled="@(_busy || (isNew && Hrms && (_hr == null || _hr.Problem != null)))" @onclick="SaveEditAsync" data-testid="ue-save">@(isNew ? "Add user" : "Save")</button>
                 </div>
             </div>
-            @if (isNew)
+            @if (isNew && Hrms)
+            {
+                <div style="font-size:11px;color:var(--ink3);margin-top:8px">They sign in with their <strong>Employee ID</strong> and their <strong>HRMS password</strong> — no password is kept here. Only employees added here can sign in. <strong>Planner</strong> = upload data, parameters, Tool 2. <strong>Admin</strong> = also manage users.</div>
+            }
+            else if (isNew)
             {
                 <div style="font-size:11px;color:var(--ink3);margin-top:8px">They sign in with password <strong style="font-family:var(--mono)">@_data.DefaultPassword</strong> and must change it straight away. <strong>Planner</strong> = upload data, parameters, Tool 2. <strong>Admin</strong> = also manage users.</div>
             }
@@ -93,7 +155,13 @@ else
         {
             var email = u.Email;
             <tr style="@(u.Active ? "" : "opacity:.55")" data-testid="us-row">
-                <td><strong>@u.Name</strong><div style="font-size:11px;color:var(--ink3)">@u.Email</div></td>
+                <td>
+                    <strong>@u.Name</strong><div style="font-size:11px;color:var(--ink3)">@u.Email</div>
+                    @if (!string.IsNullOrEmpty(u.EmpCode))
+                    {
+                        <div style="font-size:11px;color:var(--ink2)"><span class="pf-mono" data-testid="us-emp">ID @u.EmpCode</span>@(string.IsNullOrEmpty(u.Designation) ? "" : " · " + u.Designation)@(string.IsNullOrEmpty(u.Department) ? "" : " · " + u.Department)</div>
+                    }
+                </td>
                 <td><RoleChips Roles="u.Roles" Labels="_labels" /></td>
                 <td>
                     @if (!u.Active)
@@ -104,7 +172,11 @@ else
                     {
                         <span style="color:#DC2626;font-weight:700">🔒 Locked</span>
                     }
-                    else if (u.MustChange)
+                    else if (u.NeedsEmpCode)
+                    {
+                        <span style="color:#B45309;font-weight:700" title="HRMS sign-in: link an Employee ID (Edit) before this person can sign in">⚠ Employee ID needed</span>
+                    }
+                    else if (u.MustChange && u.LoginType != "hrms")
                     {
                         <span style="color:#B45309">Not signed in yet</span>
                     }
@@ -118,7 +190,10 @@ else
                 <td style="font-size:11px;color:var(--ink3)">@SourceLabel(u.Source)</td>
                 <td class="pf-nowrap">
                     <button class="btn-sec btn-sm" @onclick="() => EditUser(email)">Edit</button>
-                    <button class="btn-sec btn-sm" @onclick="() => ResetAsync(email)">Reset password</button>
+                    @if (u.LoginType != "hrms" && (!Hrms || !u.NeedsEmpCode))
+                    {
+                        <button class="btn-sec btn-sm" @onclick="() => ResetAsync(email)">Reset password</button>
+                    }
                     @if (u.Locked)
                     {
                         <button class="btn-sec btn-sm" @onclick="() => UnlockAsync(email)">Unlock</button>
@@ -138,6 +213,9 @@ else
         public string Name { get; set; } = "";
         public HashSet<string> Roles { get; set; } = new();
         public bool Active { get; set; } = true;
+        public string? EmpCode { get; set; }
+        public string? HrFetchedAt { get; set; }
+        public bool IsEmployee => !string.IsNullOrEmpty(EmpCode);
     }
 
     private UsersListResponse? _data;
@@ -148,7 +226,11 @@ else
     private bool _bulk, _busy;
     private string _bulkText = "";
     private UserForm _form = new();
+    private string _empCode = "";
+    private HrmsLookupResponse? _hr;     // the last "Fetch from HRMS" answer
 
+    /// <summary>HRMS sign-in (PoGovSettings:LoginMode of POGovApi).</summary>
+    private bool Hrms => _data?.Login is { } l && !string.Equals(l.Mode, "Local", StringComparison.OrdinalIgnoreCase);
     private static string SourceLabel(string? s) => s switch
     {
         "scr" => "SCR file", "manual" => "Added by admin", "bulk" => "Bulk add", "system" => "Built-in", _ => s ?? ""
@@ -162,8 +244,9 @@ else
             return (_data?.Users ?? new()).Where(u =>
             {
                 if (_role == "inactive") return !u.Active;
+                if (_role == "noemp") return u.NeedsEmpCode;
                 if (_role.Length > 0 && !u.Roles.Contains(_role)) return false;
-                return q.Length == 0 || (u.Name + " " + u.Email).ToLowerInvariant().Contains(q);
+                return q.Length == 0 || (u.Name + " " + u.Email + " " + u.EmpCode).ToLowerInvariant().Contains(q);
             }).ToList();
         }
     }
@@ -190,7 +273,61 @@ else
         var u = email.Length > 0 ? _data!.Users.FirstOrDefault(x => x.Email == email) : null;
         _form = u == null
             ? new UserForm { Roles = new HashSet<string> { "buyer" } }
-            : new UserForm { Email = u.Email, Name = u.Name, Roles = u.Roles.ToHashSet(), Active = u.Active };
+            : new UserForm { Email = u.Email, Name = u.Name, Roles = u.Roles.ToHashSet(), Active = u.Active, EmpCode = u.EmpCode, HrFetchedAt = u.HrFetchedAt };
+        _empCode = "";
+        _hr = null;
+    }
+
+    private async Task EmpKeyUp(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter" && !string.IsNullOrWhiteSpace(_empCode)) await FetchAsync();
+        else if (_hr != null && !string.Equals(_hr.EmpCode, _empCode.Trim(), StringComparison.OrdinalIgnoreCase)) _hr = null;
+    }
+
+    /// <summary>POGovApi asks HRMS for the employee (the portal never calls HRMS itself).</summary>
+    private async Task FetchAsync()
+    {
+        _busy = true;
+        try
+        {
+            var res = await ApiMasterService.LookupEmployeeAsync(_empCode.Trim());
+            if (!res.IsSuccess || res.Data == null) { _hr = null; Snackbar.Warn(res.responseMessage); return; }
+            _hr = res.Data;
+            _form.Email = _hr.Email ?? "";
+            if (_edit == "") _form.Name = _hr.Name ?? "";
+        }
+        finally { _busy = false; }
+    }
+
+    private async Task LinkAsync()
+    {
+        if (_hr == null || string.IsNullOrEmpty(_edit)) return;
+        if (!await Dialogs.Confirm($"Link {_edit} to Employee ID {_hr.EmpCode} ({_hr.Name})?\n\nFrom now on this person signs in with the Employee ID and the HRMS password only.")) return;
+        _busy = true;
+        try
+        {
+            var res = await ApiMasterService.LinkEmployeeAsync(_edit, _hr.EmpCode);
+            if (!res.IsSuccess) { Snackbar.Warn(res.responseMessage); return; }
+            Snackbar.Toast("Linked to Employee ID " + _hr.EmpCode);
+            _edit = null;
+            await LoadAsync();
+        }
+        finally { _busy = false; }
+    }
+
+    private async Task RefreshHrAsync()
+    {
+        if (string.IsNullOrEmpty(_edit)) return;
+        _busy = true;
+        try
+        {
+            var res = await ApiMasterService.LinkEmployeeAsync(_edit, null);
+            if (!res.IsSuccess || res.Data?.User == null) { Snackbar.Warn(res.responseMessage); return; }
+            Snackbar.Toast("HRMS details refreshed");
+            await LoadAsync();
+            EditUser(_edit);
+        }
+        finally { _busy = false; }
     }
 
     private void CloseEdit()
@@ -218,7 +355,14 @@ else
         _busy = true;
         try
         {
-            if (string.IsNullOrEmpty(_edit))
+            if (string.IsNullOrEmpty(_edit) && Hrms)
+            {
+                if (_hr == null) return;
+                var res = await ApiMasterService.AddEmployeeAsync(_hr.EmpCode, OrderedRoles, string.IsNullOrEmpty(_hr.Email) ? _form.Email.Trim() : null);
+                if (!res.IsSuccess) { Snackbar.Warn(res.responseMessage); return; }
+                Snackbar.Toast($"{_hr.Name} added — signs in with Employee ID {_hr.EmpCode} and the HRMS password");
+            }
+            else if (string.IsNullOrEmpty(_edit))
             {
                 var res = await ApiMasterService.AddUserAsync(_form.Email.Trim(), _form.Name.Trim(), OrderedRoles);
                 if (!res.IsSuccess) { Snackbar.Warn(res.responseMessage); return; }
@@ -274,16 +418,17 @@ else
     /// <summary>users.js saveBulk line parsing: "email, name, role" (tab / comma / semicolon separated; roles joined with + | / or space).</summary>
     private async Task SaveBulkAsync()
     {
+        var hrms = Hrms;
         var users = _bulkText.Split('\n').Select(l => l.Trim()).Where(l => l.Length > 0).Select(l =>
         {
             var p = Regex.Split(l, "\t|,|;").Select(x => x.Trim()).ToList();
-            var role = p.Count > 2 && p[2].Length > 0 ? p[2] : "buyer";
-            return new AddUserRequest
-            {
-                Email = p[0],
-                Name = p.Count > 1 ? p[1] : "",
-                Roles = Regex.Split(Regex.Replace(role.ToLowerInvariant(), "category ?head", "cathead"), "[+|/ ]+").ToList()
-            };
+            // HRMS: "Employee ID, role"; local: "email, name, role"
+            var roleAt = hrms ? 1 : 2;
+            var role = p.Count > roleAt && p[roleAt].Length > 0 ? p[roleAt] : "buyer";
+            var roles = Regex.Split(Regex.Replace(role.ToLowerInvariant(), "category ?head", "cathead"), "[+|/ ]+").ToList();
+            return hrms
+                ? new AddUserRequest { EmpCode = p[0], Roles = roles }
+                : new AddUserRequest { Email = p[0], Name = p.Count > 1 ? p[1] : "", Roles = roles };
         }).ToList();
         _busy = true;
         try

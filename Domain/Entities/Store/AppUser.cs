@@ -22,14 +22,51 @@ namespace Domain.Entities.Store
         [JsonPropertyName("createdBy")] public string? CreatedBy { get; set; }
         [JsonPropertyName("source")] public string? Source { get; set; }
         [JsonPropertyName("lastLogin")] public string? LastLogin { get; set; }
+        /// <summary>
+        /// HRMS employee code: the person signs in with it and their HRMS password (checked by POGovApi with the HRMS
+        /// login API). Empty = a local account (email + the password stored in <see cref="Pw"/>).
+        /// </summary>
+        [JsonPropertyName("empCode"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] public string? EmpCode { get; set; }
+        /// <summary>The HRMS details the admin fetched when registering the employee (or refreshed later).</summary>
+        [JsonPropertyName("hr"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] public HrProfile? Hr { get; set; }
         [JsonExtensionData] public Dictionary<string, JsonElement>? Extra { get; set; }
+
+        /// <summary>Signs in with Employee ID + HRMS password.</summary>
+        [JsonIgnore] public bool IsEmployee => !string.IsNullOrWhiteSpace(EmpCode);
 
         public AppUser Clone() => new()
         {
             Email = Email, Name = Name, Roles = Roles.ToList(), Active = Active, Pw = Pw, MustChange = MustChange,
             Failed = Failed, LockedUntil = LockedUntil, CreatedAt = CreatedAt, CreatedBy = CreatedBy, Source = Source,
-            LastLogin = LastLogin, Extra = Extra == null ? null : new Dictionary<string, JsonElement>(Extra)
+            LastLogin = LastLogin, EmpCode = EmpCode, Hr = Hr?.Clone(),
+            Extra = Extra == null ? null : new Dictionary<string, JsonElement>(Extra)
         };
+    }
+
+    /// <summary>An employee's HRMS details as stored with the login (HRMS employee API field names in the comments).</summary>
+    public sealed class HrProfile
+    {
+        [JsonPropertyName("email")] public string? Email { get; set; }              // empMailID
+        [JsonPropertyName("location")] public string? Location { get; set; }        // empLocation
+        [JsonPropertyName("locationCode")] public string? LocationCode { get; set; } // empLocCode
+        [JsonPropertyName("department")] public string? Department { get; set; }    // empDeptName
+        [JsonPropertyName("designation")] public string? Designation { get; set; }  // empDesig
+        [JsonPropertyName("mobile")] public string? Mobile { get; set; }            // empContactNo
+        [JsonPropertyName("manager")] public string? Manager { get; set; }          // empRptMng
+        [JsonPropertyName("grade")] public int Grade { get; set; }                  // empGrade
+        [JsonPropertyName("gradeDesc")] public string? GradeDesc { get; set; }      // empGradeDesc
+        [JsonPropertyName("hrActive")] public bool HrActive { get; set; }           // empStatus
+        [JsonPropertyName("resigned")] public bool Resigned { get; set; }           // isResign
+        [JsonPropertyName("fetchedAt")] public string? FetchedAt { get; set; }
+        [JsonPropertyName("fetchedBy")] public string? FetchedBy { get; set; }
+        [JsonExtensionData] public Dictionary<string, JsonElement>? Extra { get; set; }
+
+        public HrProfile Clone()
+        {
+            var c = (HrProfile)MemberwiseClone();
+            c.Extra = Extra == null ? null : new Dictionary<string, JsonElement>(Extra);
+            return c;
+        }
     }
 
     /// <summary>A value of the "sessions" document (table app_sessions): created / seen are epoch seconds.</summary>

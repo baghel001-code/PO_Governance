@@ -22,6 +22,7 @@ namespace POGovernance.Tests.Sap
             public int Calls;
             public Task<ApiMasterRes> GetAllApi(CancellationToken ct = default) => throw new NotSupportedException();
             public Task<ApiMasterRes> GetSpecificApiData(string? taskName, string? param, CancellationToken ct = default) => throw new NotSupportedException();
+            public Task<ApiMasterRes> GetServerApiData(string taskName, CancellationToken ct = default) => throw new NotSupportedException();
             public Task<string?> GetBaseUrlAsync(string baseUrlKey, CancellationToken ct = default)
             {
                 Calls++;

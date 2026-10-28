@@ -72,6 +72,18 @@ namespace Admin.Services.Platform
         public static Task<ApiDataResponse<UserResponse>> AddUserAsync(this IAPICall api, string email, string name, List<string> roles) =>
             Call<UserResponse, AddUserRequest>(api, AllApiNames.PO_USER_ADD, new AddUserRequest { Email = email, Name = name, Roles = roles });
 
+        /// <summary>HRMS sign-in: registers the employee; POGovApi fetches their details from HRMS (email only when HRMS has none).</summary>
+        public static Task<ApiDataResponse<UserResponse>> AddEmployeeAsync(this IAPICall api, string empCode, List<string> roles, string? email) =>
+            Call<UserResponse, AddUserRequest>(api, AllApiNames.PO_USER_ADD, new AddUserRequest { EmpCode = empCode, Roles = roles, Email = email });
+
+        /// <summary>"Fetch from HRMS": the employee's details (POGovApi calls HRMS; the portal never does).</summary>
+        public static Task<ApiDataResponse<HrmsLookupResponse>> LookupEmployeeAsync(this IAPICall api, string empCode) =>
+            Call<HrmsLookupResponse, EmpCodeRequest>(api, AllApiNames.PO_USER_HRMS_LOOKUP, new EmpCodeRequest { EmpCode = empCode });
+
+        /// <summary>Links a login to an Employee ID, or re-reads its HRMS details (<paramref name="empCode"/> null).</summary>
+        public static Task<ApiDataResponse<UserResponse>> LinkEmployeeAsync(this IAPICall api, string email, string? empCode) =>
+            Call<UserResponse, LinkEmployeeRequest>(api, AllApiNames.PO_USER_LINK_EMPLOYEE, new LinkEmployeeRequest { Email = email, EmpCode = empCode });
+
         public static Task<ApiDataResponse<BulkUsersResponse>> BulkAddUsersAsync(this IAPICall api, List<AddUserRequest> users) =>
             Call<BulkUsersResponse, BulkUsersRequest>(api, AllApiNames.PO_USERS_BULK, new BulkUsersRequest { Users = users });
 

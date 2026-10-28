@@ -33,25 +33,29 @@ automatically when a PO is released.
 ![Sign-in page](img/01-sign-in.png)
 
 1. Open the portal address your administrator gave you (for example `http://<server>:8177`).
-2. Enter your **company email** and **password**, then click **Sign in**.
-3. **First sign-in:** your starting password is **1234** (or what the administrator told you). The portal asks you to
-   **set your own password** straight away — see 1.2.
+2. Enter your **Employee ID** and your **HRMS password** (the same password as MyVishal), then click **Sign in**.
 
 Good to know:
 
-- After **5 wrong passwords** your account is locked for **15 minutes** ("Too many wrong attempts — locked for 15
-  minutes."). The administrator can unlock you earlier.
+- **Only employees registered by the administrator can sign in.** A valid HRMS account alone does not give access: if
+  you are not registered, the answer is "Employee ID or password is incorrect" — ask the administrator to add you.
+- Your **email does not work** as the sign-in ID ("Sign in with your Employee ID and HRMS password.").
+- After **5 wrong passwords** your account is locked here for **15 minutes** ("Too many wrong attempts — locked for 15
+  minutes."). The administrator can unlock you earlier. HRMS has its own lock: "Your HRMS account is locked…" — unlock
+  it in MyVishal (My Page → Unlock User) or wait about 30 minutes.
 - You stay signed in for **12 hours** of inactivity; after that, sign in again.
-- **Forgot your password?** Ask the administrator to reset it; you then sign in with 1234 and set a new one.
+- **Forgot your password?** Use **Forgot or locked? Open MyVishal ↗** on the sign-in page — the portal keeps no
+  password for you, so the administrator cannot reset it here.
 
-### 1.2 Set or change your password
+### 1.2 Change your password
 
-The page **Set your own password** (first sign-in) or **Change your password** (user menu → **🔑 Change password**):
+Your password is your **HRMS password**: change it in MyVishal. User menu → **🔑 Change password** is not shown for
+employees (the page only points to MyVishal).
 
-1. **Current password** — 1234 the first time.
-2. **New password** — at least **8 characters**, with **at least one letter and one number**, not the default password
-   and not your email.
-3. **Confirm new password**, then **Save password & continue**.
+*Only for the built-in administrator account (email sign-in, see 6.1) and for servers in "Local" sign-in mode:* the
+page **Set your own password** / **Change your password** asks for the current password (1234 the first time) and a
+new one — at least **8 characters**, with **at least one letter and one number**, not the default password and not
+your email.
 
 ### 1.3 The screen
 
@@ -60,7 +64,7 @@ The page **Set your own password** (first sign-in) or **Change your password** (
 | **Top bar tabs** | The pages you may use (see section 2). The ✅ Approvals tab shows a red count of requests waiting for you. |
 | **View badge** | "Category View" or "Planner View" next to the logo. Planners and admins can switch (user menu → **⇄ Switch to Category view / Planner view**); everyone else always has the Category view. |
 | **Status pill** "● Shared · 2026-10-27" | Shows the server date and that you are connected. "Server unreachable" = the server is not answering; wait or tell IT. |
-| **User menu** "Name (role) ▾" | 💬 Feedback, 🔑 Change password, ⏻ Sign out — plus admin pages for administrators. |
+| **User menu** "Name (role) ▾" | 💬 Feedback, ⏻ Sign out — plus admin pages for administrators (🔑 Change password only for the built-in admin account). |
 | **"New data on the server." banner** | A planner uploaded new files or changed parameters. Click **Load now** to work with the new data. |
 | **VMM Assistant** (round button, bottom right) | Ask questions about the results you see, e.g. "why was X blocked?". It only answers from data in your session and never changes a decision. Only shown if AI is switched on for your server. |
 
@@ -396,16 +400,29 @@ Admins can do everything planners can (section 5). Admin pages are in the **👥
 
 Tab **👥 Users** → **👥 Users**:
 
-- **+ Add user** — email, name, roles (Buyer, Category Head, Planner, Admin). They sign in with **1234** and must change
-  it.
-- **Bulk add…** — one person per line: `email, name, role` (roles combined with `+`, e.g. `planner+buyer`); paste from
-  Excel works. "Added N · M skipped" lists the skipped lines.
-- **Edit** — name, roles, **Active (can sign in)**; **Delete user** (prefer unticking Active: the next SCR upload
-  would re-create a deleted login).
-- **Reset password** — back to 1234, signs the person out everywhere.
-- **Unlock** — for a locked account.
-- Status column: Active, Not signed in yet, 🔒 Locked, Inactive; **MCs (SCR)** = mapped MCs; **Source** = SCR file /
-  Added by admin / Bulk add / Built-in.
+People sign in with their **Employee ID** and **HRMS password**, and **only people you register here can sign in**.
+The portal never talks to HRMS itself: the server fetches the employee from HRMS when you register them, and at sign-in
+asks HRMS for the password only for registered, active employees.
+
+- **+ Add user** → **Employee ID** → **🔍 Fetch from HRMS**: the card shows name, email, department, designation,
+  location, mobile, reporting manager, grade and **HRMS status**. Tick the roles (Buyer, Category Head, Planner, Admin)
+  and click **Add user**. Refused with a red line: unknown ID, **Resigned** / **Inactive** in HRMS, or **Already
+  registered**. If HRMS has no email for the employee, type the company email. No password is set or shown.
+- **Bulk add…** — one employee per line: `Employee ID, role` (roles combined with `+`, e.g. `102345, planner+buyer`);
+  paste from Excel works. Every ID is fetched from HRMS; "Added N · M skipped" lists unknown, resigned and
+  already-registered IDs.
+- **Edit** — name, roles, **Active (can sign in)**; **↻ Refresh from HRMS** re-reads the details. A login without an
+  Employee ID (status **⚠ Employee ID needed**, e.g. created from the SCR file) gets **Employee ID → Fetch from HRMS →
+  Link to this employee**; registering the same employee with **+ Add user** links it too and keeps its roles.
+  **Delete user** (prefer unticking Active: the next SCR upload would re-create a deleted login).
+- **Unlock** — for an account locked after 5 wrong passwords (HRMS locks are unlocked in MyVishal).
+- **Reset password** — only for the built-in admin account (employees' passwords live in HRMS).
+- The user column shows **ID 102345 · designation · department**. Status: Active, ⚠ Employee ID needed, 🔒 Locked,
+  Inactive; filter **Employee ID needed** in the role list. **MCs (SCR)** = mapped MCs; **Source** = SCR file / Added by
+  admin / Bulk add / Built-in.
+- **Built-in admin** (`PoGovSettings:AdminEmail`): signs in with its email and a local password while
+  `AllowAdminLocalLogin` is on — for the first set-up and when HRMS is down. Set `AdminEmpCode` so it can sign in with
+  HRMS, then switch `AllowAdminLocalLogin` off.
 
 Safeguards: you cannot remove your own admin role or deactivate yourself, and at least one active admin must remain.
 
@@ -515,7 +532,11 @@ slow seller is sent as HOLD with reason BLOCK).
 
 | Message | What to do |
 |---|---|
-| "Email or password is incorrect" | Check the email; after 5 tries you are locked for 15 minutes |
+| "Employee ID or password is incorrect" | Check the Employee ID and HRMS password; if both are right, you are not registered — ask the administrator. After 5 tries you are locked for 15 minutes |
+| "Sign in with your Employee ID and HRMS password." | You typed an email: use your Employee ID |
+| "Your HRMS account is locked…" | Unlock it in MyVishal (My Page → Unlock User) or wait about 30 minutes |
+| "Your HRMS record is not active." | HRMS shows you as resigned / inactive — contact the administrator |
+| "Sign-in is temporarily unavailable (HRMS did not answer)…" | Try again in a few minutes; if it stays, tell IT |
 | "Too many wrong attempts…" | Wait 15 minutes or ask the admin to **Unlock** you |
 | "⚠ Upload required files first: …" | The planner must load the missing files in Data Setup |
 | "This Brand / MC / MRP is not mapped to you in the SCR products file." | Ask the admin to update the SCR mapping |
@@ -531,7 +552,8 @@ slow seller is sent as HOLD with reason BLOCK).
 
 | Topic | Contact |
 |---|---|
-| Sign-in, password, roles, MCs | Tool administrator |
+| Access (registration), roles, MCs | Tool administrator |
+| HRMS password, HRMS lock | MyVishal / HR |
 | Missing or wrong data, parameters | Planning team |
 | A decision looks wrong | 💬 Feedback (type "Data looks wrong", with GM and colour) |
 | SAP check / verdict link | SAP team / tool administrator |

@@ -31,9 +31,11 @@ namespace POGovApi.Controllers.V1
         public async Task<ActionResult<ApiDataResponse<LoginResponse>>> AuthLogin([FromBody] LoginRequest req, CancellationToken ct)
         {
             await Task.Delay(300, ct);   // slows password guessing
-            var (token, err) = await _acc.LoginAsync(req.Email ?? "", req.Password ?? "", ClientIp(HttpContext), ct);
+            // Employee ID (HRMS sign-in: HRMS is asked only for employees registered here) or email (local accounts)
+            var login = string.IsNullOrWhiteSpace(req.LoginId) ? req.Email ?? "" : req.LoginId;
+            var (token, err) = await _acc.LoginAsync(login, req.Password ?? "", ClientIp(HttpContext), ct);
             if (err != null) throw new AppException(401, err);
-            var u = (await _acc.GetUserAsync(req.Email ?? "", ct))!;
+            var u = await _acc.SessionUserAsync(token, ct) ?? throw new AppException(401, "Sign in failed");
             return Success(new LoginResponse
             {
                 Token = token!, MustChange = u.MustChange, Name = u.Name, User = _acc.Public(u),
@@ -61,7 +63,10 @@ namespace POGovApi.Controllers.V1
         /// <summary>The signed-in user (the portal's session revalidation) and the password rules.</summary>
         [HttpPost]
         public async Task<ActionResult<ApiDataResponse<MeResponse>>> AuthMe(CancellationToken ct) =>
-            Success(new MeResponse { User = await _status.MePublicAsync(Me, ct), PasswordMinLength = _cfg.PasswordMinLengthOrDefault });
+            Success(new MeResponse
+            {
+                User = await _status.MePublicAsync(Me, ct), PasswordMinLength = _cfg.PasswordMinLengthOrDefault, HrmsPasswordUrl = _cfg.HrmsPasswordUrl
+            });
     }
 
     /// <summary>Health check: no static token, no session (load balancers, monitoring).</summary>

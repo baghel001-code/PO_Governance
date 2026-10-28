@@ -69,14 +69,14 @@ namespace Admin.Auth
         {
             if (!await antiforgery.IsRequestValidAsync(http)) return Results.Redirect(LoginPath);
             var form = await http.Request.ReadFormAsync();
-            var email = form["Email"].ToString().Trim();
+            var login = (form.ContainsKey("LoginId") ? form["LoginId"] : form["Email"]).ToString().Trim();
             var password = form["Password"].ToString();
             var next = SafeNext(form["Next"]);
-            if (email.Length == 0 || password.Length == 0)
-                return Back(LoginPath, next, "Enter your email and password.", email);
+            if (login.Length == 0 || password.Length == 0)
+                return Back(LoginPath, next, "Enter your Employee ID and password.", login);
 
-            var res = await auth.SignInAsync(http, email, password);
-            if (!res.Ok) return Back(LoginPath, next, res.Error ?? "Sign in failed", email);
+            var res = await auth.SignInAsync(http, login, password);
+            if (!res.Ok) return Back(LoginPath, next, res.Error ?? "Sign in failed", login);
             return Results.Redirect(res.MustChange
                 ? ChangePasswordPath + "?forced=1&next=" + Uri.EscapeDataString(next)
                 : next);
@@ -102,8 +102,8 @@ namespace Admin.Auth
             return error == null ? Results.Redirect(next) : Results.Redirect(back + Query(next, error));
         }
 
-        private static IResult Back(string page, string next, string error, string? email = null) =>
-            Results.Redirect(page + "?" + Query(next, error) + (string.IsNullOrEmpty(email) ? "" : "&email=" + Uri.EscapeDataString(email)));
+        private static IResult Back(string page, string next, string error, string? login = null) =>
+            Results.Redirect(page + "?" + Query(next, error) + (string.IsNullOrEmpty(login) ? "" : "&login=" + Uri.EscapeDataString(login.Length > 100 ? login[..100] : login)));
 
         private static string Query(string next, string error) =>
             "next=" + Uri.EscapeDataString(next) + "&error=" + Uri.EscapeDataString(error.Length > 400 ? error[..400] : error);

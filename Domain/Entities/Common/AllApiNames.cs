@@ -83,6 +83,10 @@ namespace Domain.Entities.Common
         public static string PO_USER_ADD { get; set; } = nameof(PO_USER_ADD);
         /// <summary>Add several users (admin) — api/v1/UsersBulk (POST).</summary>
         public static string PO_USERS_BULK { get; set; } = nameof(PO_USERS_BULK);
+        /// <summary>Employee details from HRMS by Employee ID (admin, before adding) — api/v1/UserHrmsLookup (POST).</summary>
+        public static string PO_USER_HRMS_LOOKUP { get; set; } = nameof(PO_USER_HRMS_LOOKUP);
+        /// <summary>Link a login to an Employee ID / refresh its HRMS details (admin) — api/v1/UserLinkEmployee (POST).</summary>
+        public static string PO_USER_LINK_EMPLOYEE { get; set; } = nameof(PO_USER_LINK_EMPLOYEE);
         /// <summary>Create logins from the SCR file (admin) — api/v1/UsersScrSync (POST).</summary>
         public static string PO_USERS_SCR_SYNC { get; set; } = nameof(PO_USERS_SCR_SYNC);
         /// <summary>Save the SCR column mapping, then sync (admin) — api/v1/UsersScrMapping (POST).</summary>

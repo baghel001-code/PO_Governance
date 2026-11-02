@@ -104,8 +104,8 @@ cookie was refused.
 ```sql
 UPDATE dbo.API_BASE_URL SET Base_Url = N'https://<hrms host>/', Active_Status = 1, Updated_At = SYSDATETIME()
 WHERE Base_Url_Key = N'HRMS_API' AND Environment = N'Production';          -- and Staging / Development
-UPDATE dbo.API_MASTER SET Api_Url = N'<path of the login API>'          WHERE Task_Name = N'HRP_GET_EMP_LOGIN_API';
-UPDATE dbo.API_MASTER SET Api_Url = N'<path of the employee-by-code API>' WHERE Task_Name = N'HRP_GET_EMP_DETAIL_CODE';
+-- the paths are seeded with QPS's: HRP_GET_EMP_LOGIN_API = Api/Login/getLoginEmpDtl,
+--                                   HRP_GET_EMP_DETAIL_CODE = Api/Login/getLoginEmpDtlByCode
 -- HRMS token, if HRMS needs one (My_Encode of it), per environment:
 INSERT INTO dbo.API_AUTHORIZATION (Task_Name, Environment, Api_Authorization) VALUES (N'HRP_GET_EMP_LOGIN_API', N'Production', N'<My_Encode(token)>');
 ```

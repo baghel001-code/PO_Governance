@@ -163,9 +163,20 @@ namespace POGovernance.Tests.SqlServer
                 Assert.Contains("HRMS_API", inactive.responseMessage);
 
                 await Sql("UPDATE dbo.API_BASE_URL SET Base_Url = N'https://hrms.example/', Active_Status = 1 WHERE Base_Url_Key = N'HRMS_API' AND Environment = N'Staging'");
-                await Sql("UPDATE dbo.API_MASTER SET Api_Url = N'api/EmpLogin' WHERE Task_Name = N'HRP_GET_EMP_LOGIN_API'");
                 var row = Assert.Single((await Service("Staging").GetServerApiData("HRP_GET_EMP_LOGIN_API")).ApiData!);
-                Assert.Equal("https://hrms.example/api/EmpLogin", row.Api_Url);
+                Assert.Equal("https://hrms.example/Api/Login/getLoginEmpDtl", row.Api_Url);   // QPS paths, seeded
+                Assert.Equal("https://hrms.example/Api/Login/getLoginEmpDtlByCode",
+                             Assert.Single((await Service("Staging").GetServerApiData("HRP_GET_EMP_DETAIL_CODE")).ApiData!).Api_Url);
+
+                // a database seeded with the old placeholder paths gets the QPS paths on the next run; a hand-set path stays
+                await Sql("UPDATE dbo.API_MASTER SET Api_Url = N'change-me/employee-login' WHERE Task_Name = N'HRP_GET_EMP_LOGIN_API'");
+                await Sql("UPDATE dbo.API_MASTER SET Api_Url = N'Custom/Path' WHERE Task_Name = N'HRP_GET_EMP_DETAIL_CODE'");
+                await SqlServerSchema.ApplyAsync(_fx.ConnectionString, new[] { SqlServerSchema.ApiMasterScript });
+                Assert.Equal("https://hrms.example/Api/Login/getLoginEmpDtl",
+                             Assert.Single((await Service("Staging").GetServerApiData("HRP_GET_EMP_LOGIN_API")).ApiData!).Api_Url);
+                Assert.Equal("https://hrms.example/Custom/Path",
+                             Assert.Single((await Service("Staging").GetServerApiData("HRP_GET_EMP_DETAIL_CODE")).ApiData!).Api_Url);
+                await Sql("UPDATE dbo.API_MASTER SET Api_Url = N'Api/Login/getLoginEmpDtlByCode' WHERE Task_Name = N'HRP_GET_EMP_DETAIL_CODE'");
                 Assert.Null(row.Api_Authorization);   // the '*' token of the portal APIs is never sent to HRMS
                 Assert.Equal("MASTER", row.Auth_Source);
                 Assert.Equal(404, (await Service("Staging").GetServerApiData("PO_AUTH_LOGIN")).responseCode);   // portal rows are not server rows
@@ -180,7 +191,7 @@ namespace POGovernance.Tests.SqlServer
             {
                 await Sql("DELETE FROM dbo.API_AUTHORIZATION");
                 await Sql("UPDATE dbo.API_BASE_URL SET Base_Url = N'https://hrms.change-me.local/', Active_Status = 0 WHERE Base_Url_Key = N'HRMS_API'");
-                await Sql("UPDATE dbo.API_MASTER SET Api_Url = N'change-me/employee-login' WHERE Task_Name = N'HRP_GET_EMP_LOGIN_API'");
+                await Sql("UPDATE dbo.API_MASTER SET Api_Url = N'Api/Login/getLoginEmpDtl' WHERE Task_Name = N'HRP_GET_EMP_LOGIN_API'");
             }
         }
     }

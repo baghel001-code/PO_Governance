@@ -37,12 +37,13 @@
    (HRP_GET_EMP_LOGIN_API: checks an employee's HRMS password) and for registering users (HRP_GET_EMP_DETAIL_CODE:
    employee details by code). PRO_GET_ALL_API never gives them to the portal (not in ALL, not in BY_TASK / GetSpecificApi)
    and the '*' API_AUTHORIZATION token is never applied to them, so the portal never sees an HRMS URL or credential.
-   They use Base_Url_Key HRMS_API, added INACTIVE with a placeholder URL in every environment: set the real HRMS host
-   (the same one as the QPS API_MASTER rows of these task names) and the paths, then activate:
+   They use Base_Url_Key HRMS_API, added INACTIVE with a placeholder host in every environment; the paths are QPS's
+   (Api/Login/getLoginEmpDtl, Api/Login/getLoginEmpDtlByCode). Set the real HRMS host (the one in front of those paths in
+   the QPS API_MASTER rows of these task names), then activate:
      UPDATE dbo.API_BASE_URL SET Base_Url = N'https://<hrms host>/', Active_Status = 1, Updated_At = SYSDATETIME()
      WHERE Base_Url_Key = N'HRMS_API' AND Environment = N'Production';
-     UPDATE dbo.API_MASTER SET Api_Url = N'<path of the HRMS login API>', Updated_At = SYSDATETIME() WHERE Task_Name = N'HRP_GET_EMP_LOGIN_API';
-     UPDATE dbo.API_MASTER SET Api_Url = N'<path of the employee-by-code API>', Updated_At = SYSDATETIME() WHERE Task_Name = N'HRP_GET_EMP_DETAIL_CODE';
+     -- the paths are those of QPS (seeded): HRP_GET_EMP_LOGIN_API = Api/Login/getLoginEmpDtl,
+     --                                     HRP_GET_EMP_DETAIL_CODE = Api/Login/getLoginEmpDtlByCode
      -- or a full URL, the same in every environment (copied from QPS):
      UPDATE dbo.API_MASTER SET Base_Url_Key = NULL, Api_Url = N'https://<hrms host>/<path>' WHERE Task_Name = N'HRP_GET_EMP_LOGIN_API';
      -- HRMS token / proxy: Api_Authorization (My_Encode) or Api_Username + Api_Pwd (My_Encode) = Basic; Api_Proxy / Api_Port
@@ -370,8 +371,8 @@ FROM @seed s
 WHERE NOT EXISTS (SELECT 1 FROM dbo.API_MASTER m WHERE m.Task_Name = s.Task_Name);
 GO
 
-/* Server-only rows: the HRMS employee API (sign-in and user registration), called by POGovApi only. Added inactive-by-
-   base-URL: set the HRMS_API base URL of each environment and the two paths (see SERVER-ONLY ROWS in the header). */
+/* Server-only rows: the HRMS employee API (sign-in and user registration), called by POGovApi only, at the QPS paths.
+   The HRMS_API base URL is added inactive: set the real host of each environment (see SERVER-ONLY ROWS in the header). */
 INSERT INTO dbo.API_BASE_URL (Base_Url_Key, Environment, Base_Url, Active_Status, Description)
 SELECT d.k, d.env, d.url, 0, d.descr
 FROM (VALUES (N'HRMS_API', N'Development', N'https://hrms.change-me.local/', N'HRMS employee API - set the real URL, then Active_Status = 1'),
@@ -383,10 +384,17 @@ WHERE NOT EXISTS (SELECT 1 FROM dbo.API_BASE_URL b WHERE b.Base_Url_Key = d.k AN
 INSERT INTO dbo.API_MASTER (Api_Name, Task_Name, Base_Url_Key, Api_Url, Api_Http_Method, Api_Content_Type, Api_Authorization_Type,
                             Api_Authorization, Api_Timeout, Active_Status, Api_Scope, Description)
 SELECT h.api, h.task, N'HRMS_API', h.path, N'POST', N'application/json', N'Bearer', NULL, 30, 1, N'SERVER', h.descr
-FROM (VALUES (N'HrmsEmployeeLogin', N'HRP_GET_EMP_LOGIN_API', N'change-me/employee-login',
+FROM (VALUES (N'HrmsEmployeeLogin', N'HRP_GET_EMP_LOGIN_API', N'Api/Login/getLoginEmpDtl',
               N'HRMS: checks an employee''s password at sign-in (POGovApi only; only for registered employees)'),
-             (N'HrmsEmployeeByCode', N'HRP_GET_EMP_DETAIL_CODE', N'change-me/employee-by-code',
+             (N'HrmsEmployeeByCode', N'HRP_GET_EMP_DETAIL_CODE', N'Api/Login/getLoginEmpDtlByCode',
               N'HRMS: employee details by Employee ID when the admin registers a user (POGovApi only)')
      ) h (api, task, path, descr)
 WHERE NOT EXISTS (SELECT 1 FROM dbo.API_MASTER m WHERE m.Task_Name = h.task);
+GO
+
+-- databases seeded before the QPS paths were known: replace only the old placeholder paths (a path set by hand stays)
+UPDATE dbo.API_MASTER SET Api_Url = N'Api/Login/getLoginEmpDtl', Updated_At = SYSDATETIME()
+WHERE Task_Name = N'HRP_GET_EMP_LOGIN_API' AND Api_Url = N'change-me/employee-login';
+UPDATE dbo.API_MASTER SET Api_Url = N'Api/Login/getLoginEmpDtlByCode', Updated_At = SYSDATETIME()
+WHERE Task_Name = N'HRP_GET_EMP_DETAIL_CODE' AND Api_Url = N'change-me/employee-by-code';
 GO

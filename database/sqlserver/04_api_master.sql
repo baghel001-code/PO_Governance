@@ -46,7 +46,8 @@
      --                                     HRP_GET_EMP_DETAIL_CODE = Api/Login/getLoginEmpDtlByCode
      -- or a full URL, the same in every environment (copied from QPS):
      UPDATE dbo.API_MASTER SET Base_Url_Key = NULL, Api_Url = N'https://<hrms host>/<path>' WHERE Task_Name = N'HRP_GET_EMP_LOGIN_API';
-     -- HRMS token / proxy: Api_Authorization (My_Encode) or Api_Username + Api_Pwd (My_Encode) = Basic; Api_Proxy / Api_Port
+     -- HRMS token: Api_Authorization exactly as in the QPS row (sent as stored, like QPS CallingAPI). Proxy: Api_Proxy /
+     -- Api_Port with the proxy login Api_Username / Api_Pwd, only with POGovApi HrmsApiSettings:ProxyValue = 1 (as QPS)
    POGovApi re-reads these rows every 5 minutes.
 
    Then restart the portal (it reads the rows at start-up). CREATE OR ALTER / IF NOT EXISTS: safe to run again.

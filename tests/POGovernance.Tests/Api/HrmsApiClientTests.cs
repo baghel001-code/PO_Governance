@@ -51,7 +51,7 @@ namespace POGovernance.Tests.Api
             public HttpClient CreateClient(string name) => new(_h, false);
         }
 
-        private static (HrmsApiClient Client, FakeApi Api, Handler Http) Make(bool configured = true)
+        private static (HrmsApiClient Client, FakeApi Api, Handler Http) Make(bool configured = true, HrmsApiSettings? settings = null)
         {
             var api = new FakeApi();
             if (configured)
@@ -62,13 +62,14 @@ namespace POGovernance.Tests.Api
                                                                    Api_Content_Type = "application/json", Api_Timeout = 10 };
             }
             var http = new Handler();
-            return (new HrmsApiClient(api, new Factory(http), NullLogger<HrmsApiClient>.Instance), api, http);
+            return (new HrmsApiClient(api, new Factory(http), NullLogger<HrmsApiClient>.Instance, null,
+                                      Microsoft.Extensions.Options.Options.Create(settings ?? new HrmsApiSettings())), api, http);
         }
 
         private const string Ok = """{"responseCode":0,"responseMessage":"Success","employeeList":[{"empCode":"102345","empName":"Ravi Kumar","empMailID":"ravi.kumar@x.com","empDeptName":"Merchandising","isResign":false,"empGrade":"5","empStatus":true}]}""";
 
         [Fact]
-        public async Task Login_sends_the_QPS_body_with_the_decoded_token_and_reads_the_employee()
+        public async Task Login_sends_the_QPS_body_with_the_token_as_stored_and_reads_the_employee()
         {
             var (c, _, http) = Make();
             http.Answer = _ => (HttpStatusCode.OK, Ok);
@@ -82,7 +83,7 @@ namespace POGovernance.Tests.Api
             Assert.Equal("https://hrms.test/api/EmpLogin", req.RequestUri!.ToString());
             Assert.Equal(HttpMethod.Post, req.Method);
             Assert.Equal("Bearer", req.Headers.Authorization!.Scheme);
-            Assert.Equal("PoGov-Static-Dev-Token-2026-Change-Me", req.Headers.Authorization.Parameter);
+            Assert.Equal(EncodedToken, req.Headers.Authorization.Parameter);   // QPS CallingAPI: exactly as stored
             using var doc = JsonDocument.Parse(body);
             Assert.Equal("102345", doc.RootElement.GetProperty("loginID").GetString());
             Assert.Equal("Secret#1", doc.RootElement.GetProperty("loginPassword").GetString());
@@ -153,6 +154,31 @@ namespace POGovernance.Tests.Api
             Assert.Equal(HrmsTasks.EmployeeByCode, names.GetProperty("HRP_GET_EMP_DETAIL_CODE").GetString());
             var portal = File.ReadAllText(Path.Combine(dir.FullName, "Admin", "appsettings.json"));
             Assert.DoesNotContain("HRP_GET_EMP", portal);   // the portal never calls HRMS
+        }
+    
+        [Fact]
+        public async Task An_encoded_token_is_decoded_only_when_configured()
+        {
+            var (c, _, http) = Make(settings: new HrmsApiSettings { TokenEncoded = true });
+            http.Answer = _ => (HttpStatusCode.OK, Ok);
+            await c.VerifyPasswordAsync("102345", "x");
+            Assert.Equal("PoGov-Static-Dev-Token-2026-Change-Me", http.Seen.Single().Req.Headers.Authorization!.Parameter);
+        }
+
+        [Fact]
+        public async Task Proxy_login_is_never_sent_to_HRMS_and_a_refusal_is_reported()
+        {
+            var (c, api, http) = Make();
+            var row = api.Rows[HrmsTasks.EmployeeByCode];
+            row.Api_Username = "proxyuser";      // QPS: proxy credentials, used only with ProxyValue = 1
+            row.Api_Pwd = "proxypwd";
+            row.Api_Proxy = "http://proxy.local";
+            row.Api_Port = 8080;
+            http.Answer = _ => (HttpStatusCode.Forbidden, "<html>Access denied</html>");
+            var r = await c.GetEmployeeAsync("102345");
+            Assert.Null(http.Seen.Single().Req.Headers.Authorization);   // no Basic header built from the proxy login
+            Assert.Equal(HrmsStatus.Unavailable, r.Status);
+            Assert.Equal("HRMS answered HTTP 403 Forbidden", r.Message);
         }
     }
 }

@@ -71,6 +71,7 @@ namespace Infrastructure.ServicesConfiguration
             services.AddSingleton<IAiClient, AiClient>();
             // HRMS employee API (sign-in password check, employee lookup): API_MASTER rows with Api_Scope = SERVER
             services.Configure<HrmsApiNames>(configuration.GetSection(HrmsApiNames.SectionName));   // task names of the HRMS rows
+            services.Configure<HrmsApiSettings>(configuration.GetSection(HrmsApiSettings.SectionName));   // proxy / token rules (QPS)
             services.AddSingleton<IHrmsClient, HrmsApiClient>();
             services.AddHttpClient(HrmsApiClient.HttpClientName, c => c.Timeout = Timeout.InfiniteTimeSpan);
 

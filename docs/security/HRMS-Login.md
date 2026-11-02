@@ -106,8 +106,10 @@ UPDATE dbo.API_BASE_URL SET Base_Url = N'https://<hrms host>/', Active_Status = 
 WHERE Base_Url_Key = N'HRMS_API' AND Environment = N'Production';          -- and Staging / Development
 -- the paths are seeded with QPS's: HRP_GET_EMP_LOGIN_API = Api/Login/getLoginEmpDtl,
 --                                   HRP_GET_EMP_DETAIL_CODE = Api/Login/getLoginEmpDtlByCode
--- HRMS token, if HRMS needs one (My_Encode of it), per environment:
-INSERT INTO dbo.API_AUTHORIZATION (Task_Name, Environment, Api_Authorization) VALUES (N'HRP_GET_EMP_LOGIN_API', N'Production', N'<My_Encode(token)>');
+-- HRMS token, if HRMS needs one: exactly as in the QPS row (sent as stored, like QPS; HrmsApiSettings:TokenEncoded = true
+-- if you store it My_Encode-d instead), per environment:
+INSERT INTO dbo.API_AUTHORIZATION (Task_Name, Environment, Api_Authorization) VALUES (N'HRP_GET_EMP_LOGIN_API', N'Production', N'<token as in QPS>');
+-- Api_Username / Api_Pwd / Api_Proxy / Api_Port are PROXY settings (as in QPS), used only with HrmsApiSettings:ProxyValue = 1
 ```
 
 A full URL works too (`Base_Url_Key = NULL`, `Api_Url = https://…`). POGovApi re-reads the rows every 5 minutes. Until

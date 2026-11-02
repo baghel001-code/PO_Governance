@@ -81,4 +81,23 @@ namespace Application.Interfaces.V1
         public string LoginTask => string.IsNullOrWhiteSpace(HRP_GET_EMP_LOGIN_API) ? HrmsTasks.Login : HRP_GET_EMP_LOGIN_API.Trim();
         public string EmployeeByCodeTask => string.IsNullOrWhiteSpace(HRP_GET_EMP_DETAIL_CODE) ? HrmsTasks.EmployeeByCode : HRP_GET_EMP_DETAIL_CODE.Trim();
     }
+
+    /// <summary>
+    /// POGovApi appsettings "HrmsApiSettings": how the HRMS rows are used — the same rules as QPS APICallService.CallingAPI,
+    /// so the rows can be copied from QPS's API_MASTER unchanged.
+    /// </summary>
+    public sealed class HrmsApiSettings
+    {
+        public const string SectionName = "HrmsApiSettings";
+        /// <summary>
+        /// QPS AppConfigurationSettings:ProxyValue. 1 = call HRMS through the row's proxy (Api_Proxy:Api_Port, proxy login
+        /// Api_Username / Api_Pwd); 0 (default, as QPS) = direct. Api_Username / Api_Pwd are never sent to HRMS itself.
+        /// </summary>
+        public int ProxyValue { get; set; }
+        /// <summary>
+        /// false (default, as QPS): the row's Api_Authorization is sent exactly as stored. true: it is My_Encode-d in the
+        /// database and decoded before sending.
+        /// </summary>
+        public bool TokenEncoded { get; set; }
+    }
 }

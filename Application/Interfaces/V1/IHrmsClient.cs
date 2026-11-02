@@ -59,10 +59,26 @@ namespace Application.Interfaces.V1
         [JsonIgnore] public bool IsWorking => EmpStatus && !IsResign;
     }
 
-    /// <summary>API_MASTER task names of the HRMS calls (rows with Api_Scope = SERVER: never sent to the portal).</summary>
+    /// <summary>Default API_MASTER task names of the HRMS calls (rows with Api_Scope = SERVER: never sent to the portal).</summary>
     public static class HrmsTasks
     {
         public const string Login = "HRP_GET_EMP_LOGIN_API";
         public const string EmployeeByCode = "HRP_GET_EMP_DETAIL_CODE";
+    }
+
+    /// <summary>
+    /// POGovApi appsettings "HrmsApiNames" (QPS ApiNamesSettings style: name = API_MASTER Task_Name): the task names of the
+    /// HRMS calls. Only POGovApi has them — the portal never calls HRMS, so they are not in Admin/appsettings.json.
+    /// </summary>
+    public sealed class HrmsApiNames
+    {
+        public const string SectionName = "HrmsApiNames";
+        /// <summary>HRMS login (password check) — QPS Api/Login/getLoginEmpDtl.</summary>
+        public string HRP_GET_EMP_LOGIN_API { get; set; } = HrmsTasks.Login;
+        /// <summary>HRMS employee by code — QPS Api/Login/getLoginEmpDtlByCode.</summary>
+        public string HRP_GET_EMP_DETAIL_CODE { get; set; } = HrmsTasks.EmployeeByCode;
+
+        public string LoginTask => string.IsNullOrWhiteSpace(HRP_GET_EMP_LOGIN_API) ? HrmsTasks.Login : HRP_GET_EMP_LOGIN_API.Trim();
+        public string EmployeeByCodeTask => string.IsNullOrWhiteSpace(HRP_GET_EMP_DETAIL_CODE) ? HrmsTasks.EmployeeByCode : HRP_GET_EMP_DETAIL_CODE.Trim();
     }
 }

@@ -114,6 +114,11 @@ A full URL works too (`Base_Url_Key = NULL`, `Api_Url = https://…`). POGovApi 
 they are active, employees see "Sign-in is temporarily unavailable (HRMS did not answer)" and the admin's **Fetch from
 HRMS** says "HRMS did not answer".
 
+**Task names.** `POGovApi/appsettings.json` → `HrmsApiNames` (`HRP_GET_EMP_LOGIN_API`, `HRP_GET_EMP_DETAIL_CODE`), in the
+style of QPS's `ApiNamesSettings`. They are in POGovApi's settings only. The portal's `Admin/appsettings.json` lists only
+the POGovApi actions it calls, such as `PO_USER_HRMS_LOOKUP` and `PO_USER_LINK_EMPLOYEE`, because the portal never calls
+HRMS. A test makes sure the HRMS names never appear in the portal's settings.
+
 ### 3.2 Settings (`POGovApi/appsettings.json`, section `PoGovSettings`)
 
 | Setting | Default | Meaning |

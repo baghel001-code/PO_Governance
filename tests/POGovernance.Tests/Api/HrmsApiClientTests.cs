@@ -128,5 +128,31 @@ namespace POGovernance.Tests.Api
             Assert.Contains("not configured", r.Message);
             Assert.Empty(http.Seen);
         }
+    
+        [Fact]
+        public async Task The_task_names_come_from_HrmsApiNames()
+        {
+            var api = new FakeApi();
+            api.Rows["MY_HRMS_LOGIN"] = new ApiData { Task_Name = "MY_HRMS_LOGIN", Api_Url = "https://hrms.test/Api/Login/getLoginEmpDtl", Api_Http_Method = "POST", Api_Timeout = 10 };
+            var http = new Handler { Answer = _ => (HttpStatusCode.OK, Ok) };
+            var names = Microsoft.Extensions.Options.Options.Create(new HrmsApiNames { HRP_GET_EMP_LOGIN_API = "MY_HRMS_LOGIN" });
+            var c = new HrmsApiClient(api, new Factory(http), NullLogger<HrmsApiClient>.Instance, names);
+            Assert.Equal(HrmsStatus.Ok, (await c.VerifyPasswordAsync("102345", "x")).Status);
+            Assert.Equal(new[] { "MY_HRMS_LOGIN" }, api.Asked);
+            Assert.Equal("https://hrms.test/Api/Login/getLoginEmpDtl", http.Seen.Single().Req.RequestUri!.ToString());
+        }
+
+        [Fact]
+        public void HRMS_task_names_are_configured_for_POGovApi_only_never_for_the_portal()
+        {
+            var dir = new DirectoryInfo(AppContext.BaseDirectory);
+            while (dir != null && !File.Exists(Path.Combine(dir.FullName, "POGovernance.sln"))) dir = dir.Parent;
+            using var api = JsonDocument.Parse(File.ReadAllText(Path.Combine(dir!.FullName, "POGovApi", "appsettings.json")));
+            var names = api.RootElement.GetProperty(HrmsApiNames.SectionName);
+            Assert.Equal(HrmsTasks.Login, names.GetProperty("HRP_GET_EMP_LOGIN_API").GetString());
+            Assert.Equal(HrmsTasks.EmployeeByCode, names.GetProperty("HRP_GET_EMP_DETAIL_CODE").GetString());
+            var portal = File.ReadAllText(Path.Combine(dir.FullName, "Admin", "appsettings.json"));
+            Assert.DoesNotContain("HRP_GET_EMP", portal);   // the portal never calls HRMS
+        }
     }
 }

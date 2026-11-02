@@ -8,13 +8,15 @@ using Application.Interfaces.V1;
 using Domain.Entities.Common;
 using Infrastructure.Middleware;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 using MyNewEncDec;
 
 namespace Infrastructure.Services.V1
 {
     /// <summary>
     /// The HRMS employee API (QPS EmployeeApiVerifier / UserDirectoryService, moved behind POGovApi). URL, method, time-out,
-    /// proxy and authorization come from the API_MASTER rows <see cref="HrmsTasks.Login"/> and <see cref="HrmsTasks.EmployeeByCode"/>
+    /// proxy and authorization come from the API_MASTER rows named in appsettings "HrmsApiNames" (default
+    /// <see cref="HrmsTasks.Login"/> and <see cref="HrmsTasks.EmployeeByCode"/>)
     /// of this environment (Api_Scope = SERVER: the portal never receives them). The password is sent to HRMS only and is
     /// never logged.
     /// </summary>
@@ -29,14 +31,16 @@ namespace Infrastructure.Services.V1
         private readonly IAPI _api;
         private readonly IHttpClientFactory _http;
         private readonly ILogger<HrmsApiClient> _log;
+        private readonly HrmsApiNames _names;
         private readonly ConcurrentDictionary<string, (ApiData Row, DateTime Until)> _rows = new();
         private readonly ConcurrentDictionary<string, HttpClient> _proxied = new();
 
-        public HrmsApiClient(IAPI api, IHttpClientFactory http, ILogger<HrmsApiClient> log)
+        public HrmsApiClient(IAPI api, IHttpClientFactory http, ILogger<HrmsApiClient> log, IOptions<HrmsApiNames>? names = null)
         {
             _api = api;
             _http = http;
             _log = log;
+            _names = names?.Value ?? new HrmsApiNames();
         }
 
         // Same body as QPS HrpLoginReq (captchaText / currentTab are not used by HRMS for this call).
@@ -54,7 +58,7 @@ namespace Infrastructure.Services.V1
 
         public async Task<HrmsResult> VerifyPasswordAsync(string empCode, string password, CancellationToken ct = default)
         {
-            var (answer, error) = await CallAsync(HrmsTasks.Login, new LoginBody(empCode, password), ct);
+            var (answer, error) = await CallAsync(_names.LoginTask, new LoginBody(empCode, password), ct);
             if (answer == null) return HrmsResult.Unavailable(error!);
             if (answer.Success) return new HrmsResult(HrmsStatus.Ok, answer.First);
             if (answer.ResponseCode == HrmsLockedCode) return new HrmsResult(HrmsStatus.LockedInHrms, null, answer.ResponseMessage);
@@ -64,7 +68,7 @@ namespace Infrastructure.Services.V1
 
         public async Task<HrmsResult> GetEmployeeAsync(string empCode, CancellationToken ct = default)
         {
-            var (answer, error) = await CallAsync(HrmsTasks.EmployeeByCode, new CodeBody(empCode), ct);
+            var (answer, error) = await CallAsync(_names.EmployeeByCodeTask, new CodeBody(empCode), ct);
             if (answer == null) return HrmsResult.Unavailable(error!);
             return answer.Success ? new HrmsResult(HrmsStatus.Ok, answer.First) : new HrmsResult(HrmsStatus.NotFound, null, answer.ResponseMessage);
         }

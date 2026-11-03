@@ -173,6 +173,8 @@ project only); `tests/POGovernance.Tests/SqlServer/SapSqlServerTests` runs the P
 ## Documents
 
 - `docs/user-manual/PO-Governance-User-Manual.md` (+ `.pdf`) — user manual for buyers, category heads, planners and admins.
+- `docs/security/Login-Process-By-Role.md` (+ `.pdf`) — sign-in and first screens of each role (buyer, category head, planner, admin, built-in admin) with every stored procedure call, step by step.
+- `docs/data-setup/Data-Setup-Process.md` (+ `.pdf`) — the current data source and structure: datasets, tables, manifest, upload / clear / restore / parameter steps with their stored procedures, columns per dataset, and how to switch to a real-time source keeping the structure.
 - `docs/security/Login-Flow.md` (+ `.pdf`) — the sign-in flow step by step: registration, sign-in, checks while working, how a session ends, messages, troubleshooting.
 - `docs/security/HRMS-Login.md` (+ `.pdf`) — employee sign-in with Employee ID + HRMS password (only registered employees; QPS gaps found and how they are closed; HRMS set-up).
 - `docs/data-automation/Data-Setup-Automation-Design.md` (+ `.pdf`) — design for replacing the manual Data Setup uploads with direct pulls from the source systems (SQL Server linked server or API) and the live SAP position.

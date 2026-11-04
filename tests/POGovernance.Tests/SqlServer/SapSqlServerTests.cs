@@ -35,7 +35,7 @@ namespace POGovernance.Tests.SqlServer
         [SqlServerFact]
         public async Task Schema_v3_seed_and_rerun()
         {
-            Assert.Equal("4", await Scalar<string>("SELECT value FROM schema_info WHERE [key] = 'version'"));
+            Assert.Equal(SqlServerSchema.ExpectedVersion, await Scalar<string>("SELECT value FROM schema_info WHERE [key] = 'version'"));
             await SqlServerSchema.ApplyAsync(_fx.ConnectionString, new[] { SqlServerSchema.SapInterfaceScript });   // idempotent
             Assert.Equal(6, await Scalar<int>("SELECT COUNT(*) FROM SAP_REASON_CODES WHERE Code_Type = 'EXCEPTION'"));
             var verdictCodes = (await Repo().ListReasonCodesAsync("VERDICT")).Select(r => r.Code).OrderBy(x => x);

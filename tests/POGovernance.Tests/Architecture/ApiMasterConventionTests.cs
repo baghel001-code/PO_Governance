@@ -38,9 +38,10 @@ namespace POGovernance.Tests.Architecture
                     foreach (var h in m.GetCustomAttributes<HttpMethodAttribute>())
                         paths.Add(h.HttpMethods.Single() + " /" + prefix + "/" + h.Template);
             }
-            // the four v1.4 spec paths + POST /documents (final SAP document / MRN of a request_id, an addition to the spec)
+            // the four v1.4 spec paths + POST /documents (final SAP document / MRN of a request_id) and POST /mra-status (MRA status
+            // changes during the day) — additions to the spec
             Assert.Equal(new[] { "GET /api/sap/v1/ping", "GET /api/sap/v1/reason-codes", "POST /api/sap/v1/decisions", "POST /api/sap/v1/events",
-                                 "POST /api/sap/v1/documents" }.OrderBy(x => x),
+                                 "POST /api/sap/v1/documents", "POST /api/sap/v1/mra-status" }.OrderBy(x => x),
                          paths.OrderBy(x => x));
         }
 

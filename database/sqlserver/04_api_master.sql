@@ -224,7 +224,7 @@ BEGIN
 END
 GO
 
-/* Seed: one row per POGovApi portal action (93; the SAP-facing endpoints under /api/sap/v1 are called by SAP directly, not listed). Only missing task names are inserted. */
+/* Seed: one row per POGovApi portal action (97; the SAP-facing endpoints under /api/sap/v1 are called by SAP directly, not listed). Only missing task names are inserted. */
 DECLARE @ApiEnv   NVARCHAR(30)   = N'Development';                 -- environment of the server this script is run for
 DECLARE @ApiBase  NVARCHAR(400)  = N'http://localhost:5080/';      -- base URL of POGovApi in @ApiEnv (ends with /)
 DECLARE @ApiToken NVARCHAR(1000) = N'7VmtFgfO7g5YDVUW175UDqe7FIOUFq8cxpTI17P0fJiSHbePHN';   -- My_Encode(static API token) = JwtSettings:SecretKey
@@ -270,6 +270,10 @@ INSERT INTO @seed (Api_Name, Task_Name, Action_Name, Api_Http_Method, Api_Conten
         (N'UsersBulk', N'PO_USERS_BULK', N'UsersBulk', N'POST', N'application/json', 300, N'Add several users (admin; employees fetched from HRMS)'),
         (N'UserHrmsLookup', N'PO_USER_HRMS_LOOKUP', N'UserHrmsLookup', N'POST', N'application/json', 60, N'Employee details from HRMS by Employee ID (admin, before adding)'),
         (N'UserLinkEmployee', N'PO_USER_LINK_EMPLOYEE', N'UserLinkEmployee', N'POST', N'application/json', 60, N'Link a login to an Employee ID / refresh its HRMS details (admin)'),
+        (N'MraUpload', N'PO_MRA_UPLOAD', N'MraUpload', N'POST', N'multipart/form-data', 900, N'Data Setup: morning MRA status file (replaces all MRA lines)'),
+        (N'MraSummary', N'PO_MRA_SUMMARY', N'MraSummary', N'POST', N'application/json', 60, N'MRA status: lines / qty per status, last upload, SAP changes today'),
+        (N'MraList', N'PO_MRA_LIST', N'MraList', N'POST', N'application/json', 120, N'MRA status: current lines (filter, search, page)'),
+        (N'MraHistory', N'PO_MRA_HISTORY', N'MraHistory', N'POST', N'application/json', 60, N'MRA status: SAP changes of one MRA'),
         (N'UsersScrSync', N'PO_USERS_SCR_SYNC', N'UsersScrSync', N'POST', N'application/json', 120, N'Create logins from the SCR file (admin)'),
         (N'UsersScrMapping', N'PO_USERS_SCR_MAPPING', N'UsersScrMapping', N'POST', N'application/json', 120, N'Save the SCR column mapping, then sync (admin)'),
         (N'UserUpdate', N'PO_USER_UPDATE', N'UserUpdate', N'POST', N'application/json', 60, N'Change name / roles / active / unlock (admin)'),

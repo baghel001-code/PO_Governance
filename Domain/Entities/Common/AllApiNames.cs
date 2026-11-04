@@ -87,6 +87,14 @@ namespace Domain.Entities.Common
         public static string PO_USER_HRMS_LOOKUP { get; set; } = nameof(PO_USER_HRMS_LOOKUP);
         /// <summary>Link a login to an Employee ID / refresh its HRMS details (admin) — api/v1/UserLinkEmployee (POST).</summary>
         public static string PO_USER_LINK_EMPLOYEE { get; set; } = nameof(PO_USER_LINK_EMPLOYEE);
+        /// <summary>Data Setup: the morning MRA status file (multipart) — api/v1/MraUpload (POST).</summary>
+        public static string PO_MRA_UPLOAD { get; set; } = nameof(PO_MRA_UPLOAD);
+        /// <summary>MRA status: lines / qty per status, last upload, SAP changes today — api/v1/MraSummary (POST).</summary>
+        public static string PO_MRA_SUMMARY { get; set; } = nameof(PO_MRA_SUMMARY);
+        /// <summary>MRA status: the current lines (filter, search, page) — api/v1/MraList (POST).</summary>
+        public static string PO_MRA_LIST { get; set; } = nameof(PO_MRA_LIST);
+        /// <summary>MRA status: the SAP changes of one MRA — api/v1/MraHistory (POST).</summary>
+        public static string PO_MRA_HISTORY { get; set; } = nameof(PO_MRA_HISTORY);
         /// <summary>Create logins from the SCR file (admin) — api/v1/UsersScrSync (POST).</summary>
         public static string PO_USERS_SCR_SYNC { get; set; } = nameof(PO_USERS_SCR_SYNC);
         /// <summary>Save the SCR column mapping, then sync (admin) — api/v1/UsersScrMapping (POST).</summary>

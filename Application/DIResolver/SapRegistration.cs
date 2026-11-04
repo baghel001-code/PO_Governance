@@ -21,6 +21,8 @@ namespace Application.DIResolver
             services.AddSingleton<ISapAdminService, SapAdminService>();
             services.AddSingleton<ISapDocumentService, SapDocumentService>();
             services.AddSingleton<ISapVerdictViewService, SapVerdictViewService>();
+            services.AddSingleton<ISapMraService, SapMraService>();       // POST /api/sap/v1/mra-status
+            services.AddSingleton<IMraService, MraService>();             // Data Setup → MRA status
             return services;
         }
     }

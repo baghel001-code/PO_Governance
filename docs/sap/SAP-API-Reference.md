@@ -65,6 +65,7 @@ today. All examples below were captured from the running interface.
 | 3 | `POST /decisions` | Release workflow background step "PO Governance check" (after OTB + depth check passed) | **Governance verdict per PO item** (synchronous, SAP waits max 3 s) |
 | 4 | `POST /events` | bgRFC queue from BAdIs (after commit) | PO, goods receipt / return and governance-outcome events (asynchronous) |
 | 5 | `POST /documents` | After the PO is really created / received in SAP | **Final document number (MRN) against the `request_id`** of the decision — feeds the "PO generated" report |
+| 6 | `POST /mra-status` | Every time an MRA changes in SAP during the day (created, discarded, rejected, self-rejected …) | **MRA status per line**; the morning MRA file in the tool's Data Setup replaces all lines first |
 
 ---
 
@@ -687,11 +688,122 @@ tool can report which checked POs were actually generated — not only which one
 
 ---
 
-## 8. Status of the tool side
+## 8. `POST /mra-status` — MRA status changes during the day
+
+The tool keeps the current status of every MRA line; it will be used in the verdicts later on (open MRA quantity).
+
+- **Each morning** the planner uploads the MRA report in the tool (📂 Data Setup → MRA Status). This **empties** the tool's
+  MRA list and loads the file.
+- **During the whole day** SAP sends every change of an MRA to this endpoint, as soon as it happens: a new MRA, and an
+  MRA that is discarded, rejected or self-rejected (or any other status change, or a quantity change).
+
+### Rules
+
+- **Required per line: `mra_no`, `qty`, `status`.** All other fields are optional. A field that is not sent keeps the
+  value the tool already has (from the morning file or an earlier message).
+- 1–500 lines per call, **applied in the order sent**, in one transaction. If **any** line is wrong, the whole call is
+  refused (`400`) and nothing is stored, so correct it and send the call again.
+- **Line of an MRA:** `mra_no` + `generic_article` + `colour`. For an MRA with **one** line, `mra_no` alone is enough.
+  For an MRA with **several** lines (colours / articles), send `generic_article` and `colour`; otherwise that line is not
+  changed (`AMBIGUOUS`).
+- **`changed_at`** (recommended): when the change happened in SAP. A message with an **older** `changed_at` than the one
+  the tool has is ignored (`STALE`), so messages that arrive late or are retried never undo a newer change.
+- **Safe to resend**: the same message again gives `UNCHANGED`.
+- `status` values (spelling is not case-sensitive; spaces and hyphens are allowed):
+
+| `status` | Meaning | Also accepted |
+|---|---|---|
+| `ALLOW` | MRA created after an ALLOW verdict | `Allow`, `Allowed` |
+| `WATCHLIST` | MRA created after a WATCH verdict | `Watchlist`, `Watch List`, `Watch` |
+| `CANCELLED` | MRA cancelled | `Cancelled`, `Canceled`, `Cancel` |
+| `DISCARDED` | MRA discarded | `Discard`, `Discarded` |
+| `REJECTED` | MRA rejected by an approver | `Reject`, `Rejected` |
+| `SELF_REJECTED` | MRA rejected by the buyer | `Self Reject`, `Self-Rejected` |
+
+  More values can be added in the tool's settings (`SapInterface:MraStatuses`) without a change for SAP.
+
+### Request
+
+Minimal (status change of an MRA with one line):
+
+```json
+{ "mras": [ { "mra_no": "0000317231", "qty": 1200, "status": "SELF_REJECTED", "changed_at": "2026-11-04T10:15:00+05:30" } ] }
+```
+
+Full (a new MRA, every field):
+
+```json
+{ "mras": [
+  { "mra_no": "0000317250", "generic_article": "1101000150", "colour": "YLW", "qty": 75, "status": "ALLOW",
+    "changed_at": "2026-11-04T10:20:00+05:30", "request_id": "WI000004711-4500099001-V1",
+    "generic_art_desc": "MENS KURTA", "vendor_code": "0000201345", "vendor_name": "ABC TEXTILES", "brand_type": "NON-PL",
+    "mc_code": "121030002", "mc_name": "L_EW_MM_KURTA", "mrp": 799, "planning_flag": "NON-BOGO", "fit": "REGULAR",
+    "design": "SOLID", "style": "KURTA", "fabric": "COTTON", "product_material": "COTTON", "po_value": 59925.00,
+    "delivery_date": "2026-12-31", "approval_level": "Level 2", "remark": "" } ] }
+```
+
+| Field | Type | Req. | Meaning |
+|---|---|---|---|
+| `mras` | array, 1–500 | **yes** | The changes, in the order they happened |
+| `mras[].mra_no` | string, max 20 | **yes** | MRA number (keep the leading zeros) |
+| `mras[].qty` | number ≥ 0 | **yes** | MRA quantity (pieces) after the change |
+| `mras[].status` | string | **yes** | See the table above |
+| `mras[].generic_article` | string, max 40 | for MRAs with several lines | Generic article of the line |
+| `mras[].colour` | string, max 40 | for MRAs with several lines | Colour of the line |
+| `mras[].changed_at` | timestamp | recommended | When the change happened in SAP (ISO 8601 with offset) |
+| `mras[].request_id` | string, max 80 | no | The tool's `request_id` of the check that allowed the MRA |
+| `mras[].generic_art_desc` | string, max 200 | no | Article description |
+| `mras[].vendor_code`, `vendor_name` | string, max 20 / 200 | no | Vendor |
+| `mras[].brand_type` | string, max 40 | no | e.g. `NON-PL` |
+| `mras[].mc_code`, `mc_name` | string, max 20 / 100 | no | Merchandise category |
+| `mras[].mrp` | number | no | MRP |
+| `mras[].planning_flag` | string, max 20 | no | e.g. `BOGO` / `NON-BOGO` |
+| `mras[].fit`, `design`, `style`, `fabric`, `product_material` | string, max 100 | no | Attributes (Multi Concept) |
+| `mras[].po_value` | number | no | Value |
+| `mras[].delivery_date` | date | no | `YYYY-MM-DD` |
+| `mras[].approval_level` | string, max 30 | no | Where the MRA is waiting, e.g. `Level 2` |
+| `mras[].remark` | string, max 500 | no | Free text |
+
+### Response `200` (captured)
+
+```json
+{ "batch_id": "MRA-20261104-160840-5d1e", "received": 3, "created": 1, "updated": 2, "unchanged": 0, "stale": 0, "ambiguous": 0,
+  "results": [
+    { "index": 0, "mra_no": "0000317231", "generic_article": null, "colour": null, "result": "UPDATED",
+      "previous_status": "ALLOW", "status": "SELF_REJECTED", "qty": 1200 },
+    { "index": 1, "mra_no": "0000317232", "generic_article": null, "colour": null, "result": "UPDATED",
+      "previous_status": "WATCHLIST", "status": "DISCARDED", "qty": 300 },
+    { "index": 2, "mra_no": "0000317250", "generic_article": "1101000150", "colour": "YLW", "result": "CREATED",
+      "previous_status": null, "status": "ALLOW", "qty": 75 } ],
+  "received_at": "2026-11-04T16:08:40+05:30" }
+```
+
+| `result` | Meaning | SAP action |
+|---|---|---|
+| `CREATED` | New MRA line stored | – |
+| `UPDATED` | Status / quantity / fields changed | – |
+| `UNCHANGED` | Same as already stored (a resend) | – |
+| `STALE` | `changed_at` older than the stored change: ignored | – (a newer change is already there) |
+| `AMBIGUOUS` | The MRA has several lines and no `generic_article` / `colour` was sent: **not stored** | Send the line again with `generic_article` and `colour` |
+
+### Error answers (captured)
+
+| Case | HTTP | Body |
+|---|---|---|
+| A required field missing | 400 | `{"error_code":"VALIDATION_FAILED","message":"mras[0].qty is required","trace_id":"T-c1f11c"}` |
+| Unknown status | 400 | `{"error_code":"VALIDATION_FAILED","message":"mras[0].status 'APPROVED' is not one of ALLOW, WATCHLIST, CANCELLED, DISCARDED, REJECTED, SELF_REJECTED","trace_id":"…"}` |
+| More than 500 lines | 413 | `{"error_code":"BATCH_TOO_LARGE","message":"501 MRA lines in one batch - at most 500","trace_id":"…"}` |
+
+`401` for credentials, `503` for a temporary problem (retry; resending is safe).
+
+---
+
+## 9. Status of the tool side
 
 | Item | Status |
 |---|---|
-| `ping`, `reason-codes`, `decisions`, `events`, `documents` | **Available for testing** on staging |
+| `ping`, `reason-codes`, `decisions`, `events`, `documents`, `mra-status` | **Available for testing** on staging |
+| MRA status in the verdicts | MRA lines are stored now (morning file + `mra-status`); using them in the verdicts (open MRA quantity) is the next step |
 | Verdict link (`view_url`) | Available; the portal page `/verdict/<token>` opens without sign-in |
 | Decision logic | Same rules as the tool's New Request screen (Single Concept, Multi Concept, Watch List, Max Permissible) |
 | Data used for decisions | Uploaded BW / SAP extracts (stock, pending PO, sales, plan, BSR) + the day's approved requests |
@@ -708,6 +820,7 @@ tool can report which checked POs were actually generated — not only which one
 5. `POST /events` for a PO save, a goods receipt and a GOV_OUTCOME, then the same batch again to see `duplicates`.
 6. Open a `view_url` from a decision answer in a browser.
 7. `POST /documents` with the MRN of a PO that was created, then the same call again (`UNCHANGED`).
+8. `POST /mra-status`: a new MRA (`ALLOW`), then the same MRA `SELF_REJECTED`, then the first message again (`STALE`).
 
 The tool's administrator sees every call — request, response, timing and trace ID — on **🔌 SAP Interface** in the
 portal, so results can be checked together.

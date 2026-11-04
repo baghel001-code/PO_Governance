@@ -187,6 +187,22 @@ The stored versions stay in `dataset_versions`, so the file can be made current 
 | Every PO check / SAP decision / Tool 2 run | `DOC_GET GET_DOC manifest` | "Same dataVersion and paramsVersion as in memory?" Yes → no more SQL. |
 | After an upload / clear / restore / parameter save | `DOC_GET GET_DOC manifest` → `BLOB_GET GET` **only for the datasets whose version changed** → `DOC_GET GET_DOC params` | The new snapshot replaces the old one |
 
+### 4.9 MRA Status (morning file + SAP during the day)
+
+A card on 📂 Data Setup, separate from the eleven datasets: the MRA lines are stored as **table rows**
+(`SAP_MRA_STATUS`), not as a gzipped version, because SAP changes single lines all day. SQL Server only.
+
+| Step | Procedure (@Cmd) | What |
+|---|---|---|
+| Morning: ⬆ Upload MRA file (.xlsx / .csv) | – (read in the API) | Header row found by name (MRA No / MRN No, Qty / PO Qty, Status / Decision …). **MRA No, Qty and Status are required**; one wrong row → the whole file is refused with the row numbers, nothing changes |
+| | `PRO_SAP_MRA_STATUS UPLOAD` | One transaction: **empties** `SAP_MRA_STATUS`, stores the file's lines, logs the upload in `SAP_MRA_UPLOADS` |
+| During the day: SAP `POST /api/sap/v1/mra-status` | `PRO_SAP_MRA_STATUS APPLY` | Each change in order: CREATED / UPDATED / UNCHANGED / STALE / AMBIGUOUS; every change written to `SAP_MRA_STATUS_HISTORY` |
+| Opening the card, ↻ Refresh | `PRO_SAP_MRA_STATUS SUMMARY` → `LIST` | Lines / MRAs / quantity per status, last upload, SAP changes today; the list with search and paging |
+| Clicking an MRA | `PRO_SAP_MRA_STATUS HISTORY` | Every SAP change of that MRA |
+
+Statuses: ALLOW, WATCHLIST, CANCELLED, DISCARDED, REJECTED, SELF_REJECTED (setting `SapInterface:MraStatuses`).
+Full SAP contract: `docs/sap/SAP-API-Reference.md` §8.
+
 ---
 
 ## 5. Who can do what
@@ -213,6 +229,7 @@ The stored versions stay in `dataset_versions`, so the file can be made current 
 | `PRO_POGOV_AUDIT` | `APPEND` | audit lines |
 | `PRO_POGOV_DOC_MAP_PUT` | `USERS` / `SESSIONS` | SCR file only (4.4) |
 | `PRO_POGOV_STORE_INFO` | `STORAGE_BYTES` | History page total |
+| `PRO_SAP_MRA_STATUS` | `UPLOAD` / `APPLY` / `LIST` / `SUMMARY` / `HISTORY` | MRA Status card and SAP `mra-status` (4.9) |
 
 ---
 

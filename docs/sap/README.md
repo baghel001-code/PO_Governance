@@ -249,6 +249,11 @@ head maintains them on `/admin/sap` → *Reason codes* (code ≤ 4, text ≤ 60 
   (`SAP_DECISION_DOCUMENTS`, procedure `PRO_SAP_DOCUMENT_SAVE`): one current document per request_id, the same one again =
   `UNCHANGED`, another = 409 unless `replace = true` (the old row stays as history). Full contract:
   `SAP-API-Reference.md` §7.
+* `POST /api/sap/v1/mra-status` keeps the current status of every MRA line (`SAP_MRA_STATUS`, history in
+  `SAP_MRA_STATUS_HISTORY`, procedure `PRO_SAP_MRA_STATUS`, schema v5). Each morning the MRA file uploaded in
+  Data Setup → MRA Status empties the table and loads the file (`SAP_MRA_UPLOADS`); during the day SAP sends every change
+  (new, discarded, rejected, self-rejected …). Required per line: `mra_no`, `qty`, `status`. Results CREATED / UPDATED /
+  UNCHANGED / STALE / AMBIGUOUS. Full contract: `SAP-API-Reference.md` §8.
 
 Where a /decisions call is stored: **request** = `SAP_DECISION_LOG.Request_Json` (+ the columns request_id, PO, buyer …),
 **response** = `SAP_DECISION_LOG.Response_Json` (+ verdict columns), one row per item in `SAP_DECISION_ITEMS`; the final

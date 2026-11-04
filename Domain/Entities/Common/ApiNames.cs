@@ -40,6 +40,10 @@ namespace Domain.Entities.Common
         public string? PO_USERS_BULK { get; set; }
         public string? PO_USER_HRMS_LOOKUP { get; set; }
         public string? PO_USER_LINK_EMPLOYEE { get; set; }
+        public string? PO_MRA_UPLOAD { get; set; }
+        public string? PO_MRA_SUMMARY { get; set; }
+        public string? PO_MRA_LIST { get; set; }
+        public string? PO_MRA_HISTORY { get; set; }
         public string? PO_USERS_SCR_SYNC { get; set; }
         public string? PO_USERS_SCR_MAPPING { get; set; }
         public string? PO_USER_UPDATE { get; set; }

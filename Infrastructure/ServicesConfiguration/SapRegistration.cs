@@ -25,9 +25,15 @@ namespace Infrastructure.ServicesConfiguration
             services.Configure<SapInterfaceSettings>(configuration.GetSection(SapInterfaceSettings.SectionName));
             var storage = (configuration[PoGovSettings.SectionName + ":Storage"] ?? "").Trim().ToLowerInvariant();
             if (storage is "" or "sqlserver" or "mssql")
+            {
                 services.AddSingleton<ISapRepository>(sp => new SapSqlServerRepository(sp.GetRequiredService<DapperHelper>()));
+                services.AddSingleton<IMraRepository>(sp => new MraSqlServerRepository(sp.GetRequiredService<DapperHelper>()));
+            }
             else
+            {
                 services.AddSingleton<ISapRepository, SapUnavailableRepository>();
+                services.AddSingleton<IMraRepository, MraUnavailableRepository>();
+            }
             services.AddSapServices();
             services.AddSingleton<ISapReportExcelExporter, Services.V1.Excel.SapReportExcelExporter>();
             services.AddAuthentication()

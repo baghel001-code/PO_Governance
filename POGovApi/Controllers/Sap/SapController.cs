@@ -12,7 +12,8 @@ namespace POGovApi.Controllers.Sap
     /// <summary>
     /// The SAP R/3 integration API — paths, fields and status codes fixed by the SAP API specification v1.4
     /// (legacy/python-app/docs/po-governance-sap-api.yaml): <c>GET /api/sap/v1/ping</c>, <c>GET /api/sap/v1/reason-codes</c>,
-    /// <c>POST /api/sap/v1/events</c>, <c>POST /api/sap/v1/decisions</c>. snake_case JSON (not the portal's QPS
+    /// <c>POST /api/sap/v1/events</c>, <c>POST /api/sap/v1/decisions</c>; additions: <c>POST /api/sap/v1/documents</c>,
+    /// <c>POST /api/sap/v1/mra-status</c>. snake_case JSON (not the portal's QPS
     /// conventions), HTTP Basic authentication of a technical user (scheme <c>SapBasic</c>), IP allow-list and error bodies
     /// by <see cref="SapInterfaceMiddleware"/>. Not part of the API master (SAP calls it directly through SM59).
     /// </summary>
@@ -28,13 +29,16 @@ namespace POGovApi.Controllers.Sap
         private readonly ISapEventService _events;
         private readonly ISapDecisionService _decisions;
         private readonly ISapDocumentService _documents;
+        private readonly ISapMraService _mra;
 
-        public SapController(ISapUtilityService utility, ISapEventService events, ISapDecisionService decisions, ISapDocumentService documents)
+        public SapController(ISapUtilityService utility, ISapEventService events, ISapDecisionService decisions, ISapDocumentService documents,
+                             ISapMraService mra)
         {
             _utility = utility;
             _events = events;
             _decisions = decisions;
             _documents = documents;
+            _mra = mra;
         }
 
         private SapCallContext Caller => new(
@@ -72,5 +76,12 @@ namespace POGovApi.Controllers.Sap
         /// <summary>The final SAP document (MRN) of a decided request_id: one per request_id, safe to resend, replace = true corrects it.</summary>
         [HttpPost("documents")]
         public async Task<IActionResult> Documents(CancellationToken ct) => Answer(await _documents.ReceiveAsync(await BodyAsync(ct), Caller, ct));
+
+        /// <summary>
+        /// MRA status changes during the day (created, discarded, rejected, self-rejected …): 1–500 lines, applied in order;
+        /// required per line mra_no, qty, status. The morning file in Data Setup replaces all lines first.
+        /// </summary>
+        [HttpPost("mra-status")]
+        public async Task<IActionResult> MraStatus(CancellationToken ct) => Answer(await _mra.ReceiveAsync(await BodyAsync(ct), Caller, ct));
     }
 }

@@ -52,6 +52,21 @@ namespace POGovApi.Swagger
               "po_number": "4500099001", "document_date": "2026-10-26", "replace": false, "note": "" }
             """;
 
+        private const string MraMinimal = """
+            { "mras": [ { "mra_no": "0000317231", "qty": 1200, "status": "REJECTED" } ] }
+            """;
+
+        private const string MraFull = """
+            { "mras": [
+                { "mra_no": "0000317231", "generic_article": "000000001101000101", "colour": "WHT", "qty": 1200, "status": "ALLOW",
+                  "changed_at": "2026-11-04T10:15:00+05:30", "request_id": "WI000004711-4500099001-V1",
+                  "generic_art_desc": "MENS KURTA", "vendor_code": "0000201345", "vendor_name": "ABC TEXTILES", "brand_type": "NON-PL",
+                  "mc_code": "121030002", "mc_name": "L_EW_MM_KURTA", "mrp": 799, "planning_flag": "NON-BOGO", "fit": "REGULAR",
+                  "design": "SOLID", "style": "KURTA", "fabric": "COTTON", "product_material": "COTTON", "po_value": 418800.00,
+                  "delivery_date": "2026-11-30", "approval_level": "Level 2", "remark": "" },
+                { "mra_no": "0000317232", "qty": 0, "status": "SELF_REJECTED", "changed_at": "2026-11-04T10:16:00+05:30" } ] }
+            """;
+
         public void Apply(OpenApiOperation operation, OperationFilterContext context)
         {
             var path = context.ApiDescription.RelativePath ?? "";
@@ -70,6 +85,11 @@ namespace POGovApi.Swagger
                 operation.RequestBody = Body(context, typeof(SapDocumentRequest),
                     "Final SAP document (MRN) of a decided request_id. Mandatory: request_id, document_no; replace = true corrects a stored one.",
                     ("mrn", "MRN of a PO", DocumentExample));
+            else if (path.EndsWith("/mra-status", StringComparison.OrdinalIgnoreCase))
+                operation.RequestBody = Body(context, typeof(SapMraStatusRequest),
+                    "1-500 MRA status changes, applied in order. Mandatory per line: mra_no, qty, status (ALLOW, WATCHLIST, CANCELLED, " +
+                    "DISCARDED, REJECTED, SELF_REJECTED). generic_article + colour pick the line of an MRA with several lines.",
+                    ("minimal", "Only the three mandatory fields", MraMinimal), ("full", "Every field SAP may send", MraFull));
             else if (path.EndsWith("/events", StringComparison.OrdinalIgnoreCase))
                 operation.RequestBody = Body(context, typeof(SapEventBatch), "1-500 events in ascending seq order.",
                     ("goods_receipt", "One goods receipt (GR_POSTED)", EventsExample));

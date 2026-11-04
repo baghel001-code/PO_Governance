@@ -913,8 +913,8 @@ GO
 
 /* ───────────────────────────── MRA status ─────────────────────────────
    The status of every MRA (the SAP pre-PO document raised after the tool's check), for the verdicts later on.
-   Each morning the planner uploads the MRA report in Data Setup: SAP_MRA_STATUS is emptied and filled from the file
-   (@Cmd UPLOAD). During the day SAP sends every change (created, discarded, rejected, self-rejected …) to
+   Each morning the planner uploads the MRA report in Data Setup: the file is MERGED into SAP_MRA_STATUS (@Cmd UPLOAD):
+   lines of the file are added or updated, lines that are not in the file stay as they are. During the day SAP sends every change (created, discarded, rejected, self-rejected …) to
    POST /api/sap/v1/mra-status (@Cmd APPLY). SAP_MRA_STATUS_HISTORY keeps every change (never emptied),
    SAP_MRA_UPLOADS every morning upload.
    Line key: MRA No + Generic Article + Colour (both may be empty when the source does not give them). */
@@ -964,7 +964,7 @@ CREATE TABLE dbo.SAP_MRA_STATUS_HISTORY (
     Mra_No               NVARCHAR(20)  NOT NULL,
     Generic_Article      NVARCHAR(40)  NOT NULL,
     Colour               NVARCHAR(40)  NOT NULL,
-    Action               NVARCHAR(20)  NOT NULL,            -- CREATED / UPDATED
+    Action               NVARCHAR(20)  NOT NULL,            -- CREATED / UPDATED (SAP), FILE_CREATED / FILE_UPDATED (morning file)
     Old_Status           NVARCHAR(30)  NULL,
     New_Status           NVARCHAR(30)  NOT NULL,
     Old_Qty              DECIMAL(18,3) NULL,
@@ -986,16 +986,34 @@ CREATE TABLE dbo.SAP_MRA_UPLOADS (
     Id                   BIGINT IDENTITY(1,1) NOT NULL CONSTRAINT PK_SAP_MRA_UPLOADS PRIMARY KEY,
     Upload_Id            NVARCHAR(40)  NOT NULL,
     File_Name            NVARCHAR(260) NULL,
-    Row_Count            INT NOT NULL,
-    Replaced_Count       INT NOT NULL,
+    Row_Count            INT NOT NULL,                      -- lines in the file
+    Created_Count        INT NULL,                          -- new lines added
+    Updated_Count        INT NULL,                          -- existing lines changed
+    Unchanged_Count      INT NULL,                          -- existing lines already the same
+    Ambiguous_Count      INT NULL,                          -- file lines without article / colour for an MRA with several lines: skipped
     Uploaded_At          DATETIMEOFFSET(7) NOT NULL CONSTRAINT DF_SAP_MRA_UPLOADS_At DEFAULT SYSDATETIMEOFFSET(),
     Uploaded_By          NVARCHAR(200) NULL
 );
 GO
 
+-- first v5 builds had Replaced_Count (the table was emptied by every upload): now the merge counts
+IF COL_LENGTH(N'dbo.SAP_MRA_UPLOADS', N'Created_Count') IS NULL
+    ALTER TABLE dbo.SAP_MRA_UPLOADS ADD Created_Count INT NULL, Updated_Count INT NULL, Unchanged_Count INT NULL, Ambiguous_Count INT NULL;
+GO
+IF COL_LENGTH(N'dbo.SAP_MRA_UPLOADS', N'Replaced_Count') IS NOT NULL
+    ALTER TABLE dbo.SAP_MRA_UPLOADS DROP COLUMN Replaced_Count;
+GO
+
 /* MRA status.
-   @Cmd UPLOAD   morning file: SAP_MRA_STATUS emptied and filled from @Rows (JSON array of lines, in ONE transaction:
-                 a failing file leaves yesterday's data in place); one SAP_MRA_UPLOADS row. OUTPUT @Row_Count, @Replaced_Count.
+   @Cmd UPLOAD   morning file MERGED into SAP_MRA_STATUS from @Rows (JSON array of lines), in ONE transaction (a failing
+                 file changes nothing). Lines not in the file stay. Per file line, the same matching as APPLY:
+                   same MRA No + article + colour -> that line; article / colour given and the MRA has only one line
+                   without them -> that line is completed; no article / colour and the MRA has one line -> that line;
+                   no article / colour and several lines -> skipped (ambiguous); no line -> added.
+                 A matched line takes Qty and Status of the file and every field the file fills (an empty cell keeps
+                 the stored value). Added / changed lines get a history row (FILE_CREATED / FILE_UPDATED).
+                 One SAP_MRA_UPLOADS row. OUTPUT @Row_Count, @Created_Count, @Updated_Count, @Unchanged_Count,
+                 @Ambiguous_Count; result set: the skipped (ambiguous) lines (Idx, MraNo).
    @Cmd APPLY    a /mra-status batch from SAP, in order, in ONE transaction. Per line (JSON: MraNo, GenericArticle,
                  Colour, Qty, Status, ChangedAt, optional fields):
                    Generic Article / Colour given -> that line; else the MRA's only line; no line -> CREATED;
@@ -1022,7 +1040,10 @@ CREATE OR ALTER PROCEDURE dbo.PRO_SAP_MRA_STATUS
     @Page            INT = 1,
     @Page_Size       INT = 100,
     @Row_Count       INT = NULL OUTPUT,
-    @Replaced_Count  INT = NULL OUTPUT,
+    @Created_Count   INT = NULL OUTPUT,
+    @Updated_Count   INT = NULL OUTPUT,
+    @Unchanged_Count INT = NULL OUTPUT,
+    @Ambiguous_Count INT = NULL OUTPUT,
     @Error_Code      INT = NULL OUTPUT,
     @Error_Message   NVARCHAR(500) = NULL OUTPUT
 AS
@@ -1053,20 +1074,102 @@ BEGIN
 
         IF @Cmd = N'UPLOAD'
         BEGIN
+            DECLARE @map TABLE (Idx INT NOT NULL PRIMARY KEY, Id BIGINT NULL, Amb BIT NOT NULL, Changed BIT NOT NULL DEFAULT 0,
+                                OldStatus NVARCHAR(30) NULL, OldQty DECIMAL(18,3) NULL);
+            DECLARE @upAt DATETIMEOFFSET(7) = SYSDATETIMEOFFSET();
             BEGIN TRANSACTION;
-            SELECT @Replaced_Count = COUNT(*) FROM dbo.SAP_MRA_STATUS WITH (TABLOCKX, HOLDLOCK);
-            DELETE FROM dbo.SAP_MRA_STATUS;
+            -- SAP may not change lines while the file is merged
+            SELECT @Row_Count = COUNT(*) FROM dbo.SAP_MRA_STATUS WITH (TABLOCKX, HOLDLOCK);
+            SET @Row_Count = (SELECT COUNT(*) FROM @in);
+
+            -- which stored line each file line belongs to (exact key first; one file line per stored line)
+            ;WITH c AS (
+                SELECT n.Idx, n.Mra_No, ex.Id AS ExId,
+                       CASE WHEN ex.Id IS NOT NULL THEN ex.Id
+                            WHEN (n.Generic_Article <> N'' OR n.Colour <> N'') AND k.Cnt = 1 AND k.Blank = 1 THEN k.MinId
+                            WHEN n.Generic_Article = N'' AND n.Colour = N'' AND k.Cnt = 1 THEN k.MinId END AS Id,
+                       CASE WHEN ex.Id IS NULL AND n.Generic_Article = N'' AND n.Colour = N'' AND k.Cnt > 1 THEN 1 ELSE 0 END AS Amb
+                  FROM @in n
+                 OUTER APPLY (SELECT s.Id FROM dbo.SAP_MRA_STATUS s
+                               WHERE s.Mra_No = n.Mra_No AND s.Generic_Article = n.Generic_Article AND s.Colour = n.Colour) ex
+                 OUTER APPLY (SELECT COUNT(*) AS Cnt, MIN(s.Id) AS MinId,
+                                     SUM(CASE WHEN s.Generic_Article = N'' AND s.Colour = N'' THEN 1 ELSE 0 END) AS Blank
+                                FROM dbo.SAP_MRA_STATUS s WHERE s.Mra_No = n.Mra_No) k),
+                 r AS (SELECT c.*, ROW_NUMBER() OVER (PARTITION BY c.Id ORDER BY CASE WHEN c.ExId IS NOT NULL THEN 0 ELSE 1 END, c.Idx) AS Rn FROM c)
+            INSERT INTO @map (Idx, Id, Amb)
+            SELECT Idx, CASE WHEN Id IS NOT NULL AND Rn = 1 THEN Id END,
+                   -- a second file line on the same stored line (no key of its own) cannot be placed either
+                   CASE WHEN Amb = 1 OR (Id IS NOT NULL AND Rn > 1 AND ExId IS NULL AND EXISTS (
+                             SELECT 1 FROM @in n2 WHERE n2.Idx = r.Idx AND n2.Generic_Article = N'' AND n2.Colour = N'')) THEN 1 ELSE 0 END
+              FROM r;
+
+            UPDATE m SET OldStatus = s.Status, OldQty = s.Qty,
+                   Changed = CASE WHEN s.Status <> n.Status OR s.Qty <> n.Qty
+                                    OR (n.Generic_Article <> N'' AND n.Generic_Article <> s.Generic_Article) OR (n.Colour <> N'' AND n.Colour <> s.Colour)
+                                    OR (n.Generic_Art_Desc IS NOT NULL AND ISNULL(s.Generic_Art_Desc, N'') <> n.Generic_Art_Desc)
+                                    OR (n.Vendor_Code IS NOT NULL AND ISNULL(s.Vendor_Code, N'') <> n.Vendor_Code)
+                                    OR (n.Vendor_Name IS NOT NULL AND ISNULL(s.Vendor_Name, N'') <> n.Vendor_Name)
+                                    OR (n.Brand_Type IS NOT NULL AND ISNULL(s.Brand_Type, N'') <> n.Brand_Type)
+                                    OR (n.Mc_Code IS NOT NULL AND ISNULL(s.Mc_Code, N'') <> n.Mc_Code)
+                                    OR (n.Mc_Name IS NOT NULL AND ISNULL(s.Mc_Name, N'') <> n.Mc_Name)
+                                    OR (n.Mrp IS NOT NULL AND ISNULL(s.Mrp, -1) <> n.Mrp)
+                                    OR (n.Planning_Flag IS NOT NULL AND ISNULL(s.Planning_Flag, N'') <> n.Planning_Flag)
+                                    OR (n.Fit IS NOT NULL AND ISNULL(s.Fit, N'') <> n.Fit)
+                                    OR (n.Design IS NOT NULL AND ISNULL(s.Design, N'') <> n.Design)
+                                    OR (n.Style IS NOT NULL AND ISNULL(s.Style, N'') <> n.Style)
+                                    OR (n.Fabric IS NOT NULL AND ISNULL(s.Fabric, N'') <> n.Fabric)
+                                    OR (n.Product_Material IS NOT NULL AND ISNULL(s.Product_Material, N'') <> n.Product_Material)
+                                    OR (n.Po_Value IS NOT NULL AND ISNULL(s.Po_Value, -1) <> n.Po_Value)
+                                    OR (n.Delivery_Date IS NOT NULL AND ISNULL(s.Delivery_Date, '19000101') <> n.Delivery_Date)
+                                    OR (n.Approval_Level IS NOT NULL AND ISNULL(s.Approval_Level, N'') <> n.Approval_Level)
+                                    OR (n.Request_Id IS NOT NULL AND ISNULL(s.Request_Id, N'') <> n.Request_Id)
+                                    OR (n.Remark IS NOT NULL AND ISNULL(s.Remark, N'') <> n.Remark) THEN 1 ELSE 0 END
+              FROM @map m JOIN @in n ON n.Idx = m.Idx JOIN dbo.SAP_MRA_STATUS s ON s.Id = m.Id;
+
+            UPDATE s SET
+                   Generic_Article = CASE WHEN n.Generic_Article <> N'' THEN n.Generic_Article ELSE s.Generic_Article END,
+                   Colour = CASE WHEN n.Colour <> N'' THEN n.Colour ELSE s.Colour END,
+                   Generic_Art_Desc = ISNULL(n.Generic_Art_Desc, s.Generic_Art_Desc), Vendor_Code = ISNULL(n.Vendor_Code, s.Vendor_Code),
+                   Vendor_Name = ISNULL(n.Vendor_Name, s.Vendor_Name), Brand_Type = ISNULL(n.Brand_Type, s.Brand_Type),
+                   Mc_Code = ISNULL(n.Mc_Code, s.Mc_Code), Mc_Name = ISNULL(n.Mc_Name, s.Mc_Name), Mrp = ISNULL(n.Mrp, s.Mrp),
+                   Planning_Flag = ISNULL(n.Planning_Flag, s.Planning_Flag), Fit = ISNULL(n.Fit, s.Fit), Design = ISNULL(n.Design, s.Design),
+                   Style = ISNULL(n.Style, s.Style), Fabric = ISNULL(n.Fabric, s.Fabric),
+                   Product_Material = ISNULL(n.Product_Material, s.Product_Material), Qty = n.Qty, Po_Value = ISNULL(n.Po_Value, s.Po_Value),
+                   Delivery_Date = ISNULL(n.Delivery_Date, s.Delivery_Date), Status = n.Status,
+                   Approval_Level = ISNULL(n.Approval_Level, s.Approval_Level), Request_Id = ISNULL(n.Request_Id, s.Request_Id),
+                   Remark = ISNULL(n.Remark, s.Remark), Source = N'UPLOAD', Upload_Id = @Upload_Id, Updated_At = @upAt, Updated_By = @By
+              FROM dbo.SAP_MRA_STATUS s JOIN @map m ON m.Id = s.Id AND m.Changed = 1 JOIN @in n ON n.Idx = m.Idx;
+            SET @Updated_Count = @@ROWCOUNT;
+
             INSERT INTO dbo.SAP_MRA_STATUS (Mra_No, Generic_Article, Colour, Generic_Art_Desc, Vendor_Code, Vendor_Name, Brand_Type, Mc_Code, Mc_Name,
                         Mrp, Planning_Flag, Fit, Design, Style, Fabric, Product_Material, Qty, Po_Value, Delivery_Date, Status, Approval_Level,
-                        Request_Id, Remark, Source, Upload_Id, Updated_By)
-            SELECT Mra_No, Generic_Article, Colour, Generic_Art_Desc, Vendor_Code, Vendor_Name, Brand_Type, Mc_Code, Mc_Name, Mrp, Planning_Flag,
-                   Fit, Design, Style, Fabric, Product_Material, Qty, Po_Value, Delivery_Date, Status, Approval_Level, Request_Id, Remark,
-                   N'UPLOAD', @Upload_Id, @By
-              FROM @in ORDER BY Idx;
-            SET @Row_Count = @@ROWCOUNT;
-            INSERT INTO dbo.SAP_MRA_UPLOADS (Upload_Id, File_Name, Row_Count, Replaced_Count, Uploaded_By)
-            VALUES (@Upload_Id, @File_Name, @Row_Count, @Replaced_Count, @By);
+                        Request_Id, Remark, Source, Upload_Id, Created_At, Updated_At, Updated_By)
+            SELECT n.Mra_No, n.Generic_Article, n.Colour, n.Generic_Art_Desc, n.Vendor_Code, n.Vendor_Name, n.Brand_Type, n.Mc_Code, n.Mc_Name,
+                   n.Mrp, n.Planning_Flag, n.Fit, n.Design, n.Style, n.Fabric, n.Product_Material, n.Qty, n.Po_Value, n.Delivery_Date, n.Status,
+                   n.Approval_Level, n.Request_Id, n.Remark, N'UPLOAD', @Upload_Id, @upAt, @upAt, @By
+              FROM @in n JOIN @map m ON m.Idx = n.Idx
+             WHERE m.Id IS NULL AND m.Amb = 0
+             ORDER BY n.Idx;
+            SET @Created_Count = @@ROWCOUNT;
+
+            SELECT @Unchanged_Count = COUNT(*) FROM @map WHERE Id IS NOT NULL AND Changed = 0;
+            SELECT @Ambiguous_Count = COUNT(*) FROM @map WHERE Amb = 1;
+
+            -- history: what the file added or changed (found again by the new key)
+            INSERT INTO dbo.SAP_MRA_STATUS_HISTORY (Mra_No, Generic_Article, Colour, Action, Old_Status, New_Status, Old_Qty, New_Qty,
+                        Changed_At, Received_At, Tech_User, Source_System, Batch_Id)
+            SELECT s.Mra_No, s.Generic_Article, s.Colour, CASE WHEN m.Id IS NULL THEN N'FILE_CREATED' ELSE N'FILE_UPDATED' END,
+                   m.OldStatus, s.Status, m.OldQty, s.Qty, NULL, @upAt, @By, N'FILE', @Upload_Id
+              FROM @map m JOIN @in n ON n.Idx = m.Idx
+              JOIN dbo.SAP_MRA_STATUS s ON (m.Id IS NOT NULL AND s.Id = m.Id)
+                                        OR (m.Id IS NULL AND s.Mra_No = n.Mra_No AND s.Generic_Article = n.Generic_Article AND s.Colour = n.Colour)
+             WHERE m.Amb = 0 AND (m.Id IS NULL OR m.Changed = 1)
+             ORDER BY m.Idx;
+
+            INSERT INTO dbo.SAP_MRA_UPLOADS (Upload_Id, File_Name, Row_Count, Created_Count, Updated_Count, Unchanged_Count, Ambiguous_Count, Uploaded_By)
+            VALUES (@Upload_Id, @File_Name, @Row_Count, @Created_Count, @Updated_Count, @Unchanged_Count, @Ambiguous_Count, @By);
             COMMIT TRANSACTION;
+            SELECT m.Idx, n.Mra_No AS MraNo FROM @map m JOIN @in n ON n.Idx = m.Idx WHERE m.Amb = 1 ORDER BY m.Idx;
             RETURN;
         END
 
@@ -1208,8 +1311,10 @@ BEGIN
                    (SELECT ISNULL(SUM(Qty), 0) FROM dbo.SAP_MRA_STATUS) AS Qty,
                    u.Upload_Id AS LastUploadId, u.File_Name AS LastUploadFile, u.Row_Count AS LastUploadRows, u.Uploaded_At AS LastUploadAt,
                    u.Uploaded_By AS LastUploadBy,
-                   (SELECT MAX(Received_At) FROM dbo.SAP_MRA_STATUS_HISTORY) AS LastSapChangeAt,
-                   (SELECT COUNT(*) FROM dbo.SAP_MRA_STATUS_HISTORY WHERE @Since IS NULL OR Received_At >= @Since) AS SapChangesToday
+                   u.Created_Count AS LastUploadCreated, u.Updated_Count AS LastUploadUpdated,
+                   (SELECT MAX(Received_At) FROM dbo.SAP_MRA_STATUS_HISTORY WHERE Action IN (N'CREATED', N'UPDATED')) AS LastSapChangeAt,
+                   (SELECT COUNT(*) FROM dbo.SAP_MRA_STATUS_HISTORY
+                     WHERE Action IN (N'CREATED', N'UPDATED') AND (@Since IS NULL OR Received_At >= @Since)) AS SapChangesToday
               FROM (SELECT 1 AS One) x
               LEFT JOIN (SELECT TOP 1 * FROM dbo.SAP_MRA_UPLOADS ORDER BY Id DESC) u ON 1 = 1;
             RETURN;

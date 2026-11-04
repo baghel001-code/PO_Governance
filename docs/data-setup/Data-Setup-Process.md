@@ -195,7 +195,7 @@ A card on 📂 Data Setup, separate from the eleven datasets: the MRA lines are 
 | Step | Procedure (@Cmd) | What |
 |---|---|---|
 | Morning: ⬆ Upload MRA file (.xlsx / .csv) | – (read in the API) | Header row found by name (MRA No / MRN No, Qty / PO Qty, Status / Decision …). **MRA No, Qty and Status are required**; one wrong row → the whole file is refused with the row numbers, nothing changes |
-| | `PRO_SAP_MRA_STATUS UPLOAD` | One transaction: **empties** `SAP_MRA_STATUS`, stores the file's lines, logs the upload in `SAP_MRA_UPLOADS` |
+| | `PRO_SAP_MRA_STATUS UPLOAD` | One transaction: **merges** the file into `SAP_MRA_STATUS` — a line already there (MRA No + article + colour) takes the file's Qty, Status and every filled cell (an empty cell keeps the stored value); a new line is added; lines not in the file stay. An MRA line without article / colour for an MRA with several lines is skipped and listed. Added / changed lines get a history row (`FILE_CREATED` / `FILE_UPDATED`); counts in `SAP_MRA_UPLOADS` |
 | During the day: SAP `POST /api/sap/v1/mra-status` | `PRO_SAP_MRA_STATUS APPLY` | Each change in order: CREATED / UPDATED / UNCHANGED / STALE / AMBIGUOUS; every change written to `SAP_MRA_STATUS_HISTORY` |
 | Opening the card, ↻ Refresh | `PRO_SAP_MRA_STATUS SUMMARY` → `LIST` | Lines / MRAs / quantity per status, last upload, SAP changes today; the list with search and paging |
 | Clicking an MRA | `PRO_SAP_MRA_STATUS HISTORY` | Every SAP change of that MRA |

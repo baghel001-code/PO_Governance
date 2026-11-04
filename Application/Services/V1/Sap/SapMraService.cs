@@ -16,7 +16,7 @@ namespace Application.Services.V1.Sap
     /// several lines; every other field is kept when not sent. The whole batch is checked first (any wrong line → 400,
     /// nothing stored), then applied in order in one transaction (PRO_SAP_MRA_STATUS APPLY): CREATED / UPDATED /
     /// UNCHANGED / STALE (older changed_at than stored) / AMBIGUOUS (several lines, no article / colour). Safe to resend.
-    /// The morning file in Data Setup replaces all lines (IMraService.UploadAsync).
+    /// The morning file in Data Setup is merged into the lines (IMraService.UploadAsync).
     /// </summary>
     public sealed class SapMraService : ISapMraService
     {
@@ -185,14 +185,23 @@ namespace Application.Services.V1.Sap
                 return resp;
             }
             var uploadId = "MRAUPL-" + _clock.Now.ToString("yyyyMMdd-HHmmss");
-            var (rows, replaced) = await _repo.UploadAsync(parsed.Lines, uploadId, file.FileName, user.AuditName, ct);
+            var c = await _repo.UploadAsync(parsed.Lines, uploadId, file.FileName, user.AuditName, ct);
             resp.Ok = true;
             resp.UploadId = uploadId;
-            resp.Rows = rows;
-            resp.Replaced = replaced;
+            resp.Rows = c.Rows;
+            resp.Created = c.Created;
+            resp.Updated = c.Updated;
+            resp.Unchanged = c.Unchanged;
+            resp.Ambiguous = c.Ambiguous;
+            foreach (var (idx, mra) in c.AmbiguousLines.Take(50))
+            {
+                var row = idx >= 0 && idx < parsed.RowNumbers.Count ? parsed.RowNumbers[idx] : 0;
+                resp.Warnings.Add($"{(row > 0 ? "Row " + row + ": " : "")}MRA {mra} has several lines in the tool - give Generic Art Cd and Colour; this line was skipped");
+            }
+            if (c.Ambiguous > resp.Warnings.Count) resp.Warnings.Add($"… and {c.Ambiguous - resp.Warnings.Count} more");
             resp.ByStatus = parsed.Lines.GroupBy(l => l.Status).OrderBy(g => g.Key)
                 .Select(g => new MraStatusCount { Status = g.Key, Lines = g.Count(), Qty = g.Sum(l => l.Qty) }).ToList();
-            await _audit.AppendAsync(user.AuditName, "mra-upload", $"{uploadId} {file.FileName} rows={rows} replaced={replaced}", ct);
+            await _audit.AppendAsync(user.AuditName, "mra-upload", $"{uploadId} {file.FileName} rows={c.Rows} created={c.Created} updated={c.Updated} unchanged={c.Unchanged} skipped={c.Ambiguous}", ct);
             return resp;
         }
 

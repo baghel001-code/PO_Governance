@@ -152,6 +152,18 @@ namespace Domain.Entities.Sap
         public decimal? Qty { get; set; }
     }
 
+    /// <summary>Result of a merged morning file (PRO_SAP_MRA_STATUS UPLOAD).</summary>
+    public sealed class MraUploadCounts
+    {
+        public int Rows { get; set; }
+        public int Created { get; set; }
+        public int Updated { get; set; }
+        public int Unchanged { get; set; }
+        public int Ambiguous { get; set; }
+        /// <summary>Indexes (0-based, in the lines passed) and MRA numbers of the skipped lines.</summary>
+        public List<(int Idx, string MraNo)> AmbiguousLines { get; set; } = new();
+    }
+
     public sealed class MraHistoryRow
     {
         public long Id { get; set; }
@@ -188,6 +200,8 @@ namespace Domain.Entities.Sap
         public int? LastUploadRows { get; set; }
         public DateTimeOffset? LastUploadAt { get; set; }
         public string? LastUploadBy { get; set; }
+        public int? LastUploadCreated { get; set; }
+        public int? LastUploadUpdated { get; set; }
         public DateTimeOffset? LastSapChangeAt { get; set; }
         /// <summary>SAP changes received since the start of today (business time).</summary>
         public int SapChangesToday { get; set; }
@@ -241,10 +255,18 @@ namespace Domain.Entities.Sap
         public string? UploadId { get; set; }
         public string FileName { get; set; } = "";
         public string? Sheet { get; set; }
-        /// <summary>Lines stored (the table was emptied first).</summary>
+        /// <summary>Lines in the file (merged into the stored lines; lines not in the file stay).</summary>
         public int Rows { get; set; }
-        /// <summary>Lines of the previous data that were replaced.</summary>
-        public int Replaced { get; set; }
+        /// <summary>New lines added.</summary>
+        public int Created { get; set; }
+        /// <summary>Stored lines changed by the file.</summary>
+        public int Updated { get; set; }
+        /// <summary>Stored lines that were already the same.</summary>
+        public int Unchanged { get; set; }
+        /// <summary>File lines without article / colour for an MRA that has several lines: skipped.</summary>
+        public int Ambiguous { get; set; }
+        /// <summary>"Row 7: MRA 0000317232 …" for the skipped lines (at most 50).</summary>
+        public List<string> Warnings { get; set; } = new();
         /// <summary>Empty rows of the file that were skipped.</summary>
         public int SkippedEmpty { get; set; }
         /// <summary>Why the file was refused (nothing changed): "Row 7: Qty is missing" …</summary>

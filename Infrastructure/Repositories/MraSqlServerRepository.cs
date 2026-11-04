@@ -46,18 +46,25 @@ namespace Infrastructure.Repositories
             ChangedAt = l.ChangedAt?.ToString("yyyy-MM-dd'T'HH:mm:ss.fffzzz")
         }));
 
-        public async Task<(int Rows, int Replaced)> UploadAsync(IReadOnlyList<MraLine> lines, string uploadId, string? fileName, string by, CancellationToken ct = default)
+        private sealed class AmbRow { public int Idx { get; set; } public string MraNo { get; set; } = ""; }
+
+        public async Task<MraUploadCounts> UploadAsync(IReadOnlyList<MraLine> lines, string uploadId, string? fileName, string by, CancellationToken ct = default)
         {
             var p = P("UPLOAD");
             p.Add("@Rows", RowsJson(lines), DbType.String, size: -1);
             p.Add("@Upload_Id", uploadId, DbType.String, size: 40);
             p.Add("@File_Name", fileName is { Length: > 260 } f ? f[..260] : fileName, DbType.String, size: 260);
             p.Add("@By", by, DbType.String, size: 200);
-            p.Add("@Row_Count", dbType: DbType.Int32, direction: ParameterDirection.Output);
-            p.Add("@Replaced_Count", dbType: DbType.Int32, direction: ParameterDirection.Output);
-            await _db.ExecuteStoredProcedureAsync(Sp, p, commandTimeout: 600, ct: ct);
+            foreach (var o in new[] { "@Row_Count", "@Created_Count", "@Updated_Count", "@Unchanged_Count", "@Ambiguous_Count" })
+                p.Add(o, dbType: DbType.Int32, direction: ParameterDirection.Output);
+            var amb = (await _db.ExecuteStoredProcedureListAsync<AmbRow>(Sp, p, commandTimeout: 600, ct: ct)).AsList();
             Check(p);
-            return (p.Get<int?>("@Row_Count") ?? 0, p.Get<int?>("@Replaced_Count") ?? 0);
+            return new MraUploadCounts
+            {
+                Rows = p.Get<int?>("@Row_Count") ?? 0, Created = p.Get<int?>("@Created_Count") ?? 0, Updated = p.Get<int?>("@Updated_Count") ?? 0,
+                Unchanged = p.Get<int?>("@Unchanged_Count") ?? 0, Ambiguous = p.Get<int?>("@Ambiguous_Count") ?? 0,
+                AmbiguousLines = amb.Select(a => (a.Idx, a.MraNo)).ToList()
+            };
         }
 
         public async Task<List<MraApplyRow>> ApplyAsync(IReadOnlyList<MraLine> lines, string by, string? sourceSystem, string batchId, string? traceId, CancellationToken ct = default)
@@ -112,7 +119,7 @@ namespace Infrastructure.Repositories
         public bool Available => false;
         public string? UnavailableReason => SapUnavailableRepository.Reason;
         private static Exception Fail() => new SapApiException(503, SapErrorCodes.StorageNotSupported, SapUnavailableRepository.Reason);
-        public Task<(int Rows, int Replaced)> UploadAsync(IReadOnlyList<MraLine> lines, string uploadId, string? fileName, string by, CancellationToken ct = default) => throw Fail();
+        public Task<MraUploadCounts> UploadAsync(IReadOnlyList<MraLine> lines, string uploadId, string? fileName, string by, CancellationToken ct = default) => throw Fail();
         public Task<List<MraApplyRow>> ApplyAsync(IReadOnlyList<MraLine> lines, string by, string? sourceSystem, string batchId, string? traceId, CancellationToken ct = default) => throw Fail();
         public Task<MraListResponse> ListAsync(MraListReq req, CancellationToken ct = default) => throw Fail();
         public Task<MraSummary> SummaryAsync(DateTimeOffset since, CancellationToken ct = default) => throw Fail();

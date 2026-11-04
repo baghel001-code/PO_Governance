@@ -21,7 +21,7 @@ namespace POGovernance.Tests.Sap
     {
         private static readonly List<string> Statuses = new SapInterfaceSettings().MraStatuses;
 
-        /// <summary>In-memory stand-in: upload replaces, apply matches by MRA No + article + colour (the SQL rules are tested on SQL Server).</summary>
+        /// <summary>In-memory stand-in: upload merges by exact key, apply matches by MRA No + article + colour (the SQL rules are tested on SQL Server).</summary>
         private sealed class FakeRepo : IMraRepository
         {
             public readonly List<MraLine> Lines = new();
@@ -29,13 +29,21 @@ namespace POGovernance.Tests.Sap
             public bool Available => true;
             public string? UnavailableReason => null;
 
-            public Task<(int Rows, int Replaced)> UploadAsync(IReadOnlyList<MraLine> lines, string uploadId, string? fileName, string by, CancellationToken ct = default)
+            public Task<MraUploadCounts> UploadAsync(IReadOnlyList<MraLine> lines, string uploadId, string? fileName, string by, CancellationToken ct = default)
             {
                 Uploads++;
-                var replaced = Lines.Count;
-                Lines.Clear();
-                Lines.AddRange(lines);
-                return Task.FromResult((lines.Count, replaced));
+                var c = new MraUploadCounts { Rows = lines.Count };
+                for (var i = 0; i < lines.Count; i++)
+                {
+                    var l = lines[i];
+                    var same = Lines.Where(x => x.MraNo == l.MraNo).ToList();
+                    if (l.GenericArticle == "" && l.Colour == "" && same.Count > 1) { c.Ambiguous++; c.AmbiguousLines.Add((i, l.MraNo)); continue; }
+                    var hit = same.FirstOrDefault(x => x.GenericArticle == l.GenericArticle && x.Colour == l.Colour);
+                    if (hit == null) { Lines.Add(l); c.Created++; }
+                    else if (hit.Status == l.Status && hit.Qty == l.Qty) c.Unchanged++;
+                    else { hit.Status = l.Status; hit.Qty = l.Qty; c.Updated++; }
+                }
+                return Task.FromResult(c);
             }
 
             public Task<List<MraApplyRow>> ApplyAsync(IReadOnlyList<MraLine> lines, string by, string? sourceSystem, string batchId, string? traceId, CancellationToken ct = default)
@@ -279,26 +287,33 @@ namespace POGovernance.Tests.Sap
         }
 
         [Fact]
-        public async Task Upload_replaces_everything_only_when_the_file_is_valid()
+        public async Task Upload_merges_only_when_the_file_is_valid()
         {
             var (svc, repo, audit) = Portal();
             repo.Lines.Add(new MraLine { MraNo = "OLD", Qty = 1, Status = "ALLOW" });
+            repo.Lines.Add(new MraLine { MraNo = "M1", GenericArticle = "G1", Colour = "WHT", Qty = 10, Status = "WATCHLIST" });
+            repo.Lines.Add(new MraLine { MraNo = "M3", GenericArticle = "G3", Colour = "A", Qty = 1, Status = "ALLOW" });
+            repo.Lines.Add(new MraLine { MraNo = "M3", GenericArticle = "G3", Colour = "B", Qty = 1, Status = "ALLOW" });
 
             var bad = await svc.UploadAsync(new IngestUpload("bad.xlsx", Workbook(ws => Row(ws, 3, "M1", "G", "C", null, "Allow"))), Planner);
             Assert.False(bad.Ok);
             Assert.Equal(0, repo.Uploads);                       // nothing changed
-            Assert.Equal("OLD", repo.Lines.Single().MraNo);
+            Assert.Equal(4, repo.Lines.Count);
 
             var ok = await svc.UploadAsync(new IngestUpload("MRA 04-11.xlsx", Workbook(ws =>
             {
                 Row(ws, 3, "M1", "G1", "WHT", 10, "Allow");
                 Row(ws, 4, "M2", "G2", "BLK", 20, "Rejected");
+                Row(ws, 5, "M3", "", "", 5, "Allow");                        // two lines in the tool, none named
             })), Planner);
             Assert.True(ok.Ok);
-            Assert.Equal((2, 1), (ok.Rows, ok.Replaced));
-            Assert.Equal(new[] { "M1", "M2" }, repo.Lines.Select(l => l.MraNo));
+            Assert.Equal((3, 1, 1, 0, 1), (ok.Rows, ok.Created, ok.Updated, ok.Unchanged, ok.Ambiguous));
+            Assert.Equal(new[] { "OLD", "M1", "M3", "M3", "M2" }, repo.Lines.Select(l => l.MraNo));   // OLD is kept
+            Assert.Equal("ALLOW", repo.Lines[1].Status);
+            Assert.StartsWith("Row 5: MRA M3 has several lines", ok.Warnings.Single());
             Assert.Equal(new[] { "ALLOW", "REJECTED" }, ok.ByStatus.Select(s => s.Status));
             Assert.StartsWith("mra-upload MRAUPL-", audit.Lines.Single());
+            Assert.Contains("created=1 updated=1 unchanged=0 skipped=1", audit.Lines.Single());
 
             var notExcel = await svc.UploadAsync(new IngestUpload("x.xlsx", new byte[] { 0x50, 0x4B, 3, 4, 1, 2 }), Planner);
             Assert.False(notExcel.Ok);

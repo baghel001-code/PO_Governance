@@ -1,8 +1,7 @@
-@* Data Setup → MRA status. The morning MRA file replaces every MRA line (PO_MRA_UPLOAD); during the day SAP updates the
+@* Data Setup → MRA status. The morning MRA file is merged into the MRA lines (PO_MRA_UPLOAD: added / updated, lines not in the file stay); during the day SAP updates the
    lines through POST /api/sap/v1/mra-status. Summary per status, search / filter / page, and the SAP changes of one MRA. *@
 @using Domain.Entities.Sap
 @using Admin.Services.Platform
-@inject IDialogService Dialogs
 @inject ISnackbar Snackbar
 
 <PlatformStyles />
@@ -40,7 +39,7 @@
                 · morning file:
                 @if (s.LastUploadAt is { } at)
                 {
-                    <span><strong>@s.LastUploadFile</strong> (@s.LastUploadRows?.ToString("N0") rows) by @s.LastUploadBy, @Fmt.When(at.ToString("o"))</span>
+                    <span><strong>@s.LastUploadFile</strong> (@s.LastUploadRows?.ToString("N0") rows: @(s.LastUploadCreated ?? 0) new, @(s.LastUploadUpdated ?? 0) changed) by @s.LastUploadBy, @Fmt.When(at.ToString("o"))</span>
                 }
                 else
                 {
@@ -65,8 +64,13 @@
             <div class="pf-note" style="border-left:3px solid @(_upload.Ok ? "#00873E" : "#DC2626");padding-left:10px" data-testid="mra-upload-result">
                 @if (_upload.Ok)
                 {
-                    <div><strong>✔ @_upload.FileName</strong>: @_upload.Rows.ToString("N0") line(s) stored (@_upload.Replaced.ToString("N0") replaced) · @_upload.UploadId
+                    <div><strong>✔ @_upload.FileName</strong>: @_upload.Rows.ToString("N0") line(s) merged — @_upload.Created.ToString("N0") new,
+                        @_upload.Updated.ToString("N0") changed, @_upload.Unchanged.ToString("N0") unchanged@(_upload.Ambiguous > 0 ? ", " + _upload.Ambiguous.ToString("N0") + " skipped" : "") · @_upload.UploadId
                         @(_upload.SkippedEmpty > 0 ? " · " + _upload.SkippedEmpty + " empty row(s) skipped" : "")</div>
+                    @foreach (var w in _upload.Warnings)
+                    {
+                        <div style="font-size:12px;color:#B45309">⚠ @w</div>
+                    }
                 }
                 else
                 {
@@ -137,12 +141,12 @@
         {
             <div class="card" style="padding:10px 14px;margin-top:10px;border-left:4px solid var(--vmm-pink)" data-testid="mra-history">
                 <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
-                    <strong>MRA @_history.MraNo — changes from SAP</strong>
+                    <strong>MRA @_history.MraNo — changes (SAP and morning files)</strong>
                     <button class="btn-sec btn-sm" style="margin-left:auto" @onclick="() => _history = null">Close</button>
                 </div>
                 @if (_history.Items.Count == 0)
                 {
-                    <div class="pf-empty">No change from SAP yet (as in the morning file).</div>
+                    <div class="pf-empty">No change recorded yet.</div>
                 }
                 else
                 {
@@ -158,7 +162,7 @@
                                     <td>@h.Action</td>
                                     <td>@(h.OldStatus == null ? "" : h.OldStatus + " → ")<strong>@h.NewStatus</strong></td>
                                     <td style="text-align:right">@(h.OldQty is { } oq && oq != h.NewQty ? oq.ToString("N0") + " → " : "")@h.NewQty.ToString("N0")</td>
-                                    <td>@h.TechUser</td>
+                                    <td>@h.TechUser@(h.SourceSystem == "FILE" ? " (file)" : "")</td>
                                 </tr>
                             }
                         </tbody>
@@ -171,7 +175,8 @@
             Morning file: Excel or CSV, one row per MRA line. <strong>Required: MRA No (or MRN No), Qty (or PO Qty), Status (or Decision)</strong>;
             optional: Generic Art Cd, Generic Art Desc, Colour, Vendor Cd / Name, Brand Type, MC CODE / NAME, MRP, Planning flag, Fit, Design,
             Style, Fabric, Product material, PO Val, Delivery date, Level (Waiting for approval). Statuses: @string.Join(", ", _summary?.Statuses ?? new()).
-            Uploading <strong>replaces all MRA lines</strong>; a file with any wrong row is refused as a whole.
+            Uploading <strong>merges</strong> the file: its lines are added or updated (Qty, Status and every filled cell); lines that are not in the file stay as they are.
+            A file with any wrong row is refused as a whole.
         </div>
     </div>
 </div>
@@ -223,9 +228,6 @@
     private async Task OnFile(InputFileChangeEventArgs e)
     {
         var f = e.File;
-        var lines = _summary?.Summary.Lines ?? 0;
-        if (lines > 0 && !await Dialogs.Confirm($"Load {f.Name}?\n\nThis replaces all {lines:N0} MRA line(s) now stored, including the changes SAP sent today."))
-            return;
         _busy = true;
         _upload = null;
         try
@@ -234,7 +236,7 @@
             var res = await ApiMasterService.MraUploadAsync(new ApiUploadFile(f.Name, stream, string.IsNullOrEmpty(f.ContentType) ? "application/octet-stream" : f.ContentType));
             if (!res.IsSuccess || res.Data == null) { Snackbar.Warn(res.responseMessage); return; }
             _upload = res.Data;
-            if (_upload.Ok) Snackbar.Toast($"MRA file loaded — {_upload.Rows:N0} line(s)");
+            if (_upload.Ok) Snackbar.Toast($"MRA file merged — {_upload.Created:N0} new, {_upload.Updated:N0} changed");
             else Snackbar.Warn("MRA file refused — see the list below");
             _status = null;
             await RefreshAsync();

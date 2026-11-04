@@ -61,6 +61,8 @@ namespace Application.Services.V1.Sap
         public sealed class Result
         {
             public List<MraLine> Lines { get; } = new();
+            /// <summary>Excel row number of each line in <see cref="Lines"/>.</summary>
+            public List<int> RowNumbers { get; } = new();
             public List<string> Errors { get; } = new();
             public int ErrorCount { get; set; }
             public int SkippedEmpty { get; set; }
@@ -170,6 +172,7 @@ namespace Application.Services.V1.Sap
                 }
                 seen[key] = n;
                 res.Lines.Add(line);
+                res.RowNumbers.Add(n);
             }
             if (res.Lines.Count == 0 && res.ErrorCount == 0) Error(res, "The file has no MRA rows below the headers");
         }

@@ -65,7 +65,7 @@ today. All examples below were captured from the running interface.
 | 3 | `POST /decisions` | Release workflow background step "PO Governance check" (after OTB + depth check passed) | **Governance verdict per PO item** (synchronous, SAP waits max 3 s) |
 | 4 | `POST /events` | bgRFC queue from BAdIs (after commit) | PO, goods receipt / return and governance-outcome events (asynchronous) |
 | 5 | `POST /documents` | After the PO is really created / received in SAP | **Final document number (MRN) against the `request_id`** of the decision — feeds the "PO generated" report |
-| 6 | `POST /mra-status` | Every time an MRA changes in SAP during the day (created, discarded, rejected, self-rejected …) | **MRA status per line**; the morning MRA file in the tool's Data Setup replaces all lines first |
+| 6 | `POST /mra-status` | Every time an MRA changes in SAP during the day (created, discarded, rejected, self-rejected …) | **MRA status per line**; the morning MRA file in the tool's Data Setup is merged into the same lines |
 
 ---
 
@@ -692,8 +692,9 @@ tool can report which checked POs were actually generated — not only which one
 
 The tool keeps the current status of every MRA line; it will be used in the verdicts later on (open MRA quantity).
 
-- **Each morning** the planner uploads the MRA report in the tool (📂 Data Setup → MRA Status). This **empties** the tool's
-  MRA list and loads the file.
+- **Each morning** the planner uploads the MRA report in the tool (📂 Data Setup → MRA Status). The file is
+  **merged** into the tool's MRA list: its lines are added or updated (qty, status and every filled column); lines that
+  are not in the file stay as they are, with the changes SAP sent.
 - **During the whole day** SAP sends every change of an MRA to this endpoint, as soon as it happens: a new MRA, and an
   MRA that is discarded, rejected or self-rejected (or any other status change, or a quantity change).
 

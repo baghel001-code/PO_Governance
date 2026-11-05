@@ -21,8 +21,9 @@ namespace Application.DIResolver
             services.AddSingleton<ISapAdminService, SapAdminService>();
             services.AddSingleton<ISapDocumentService, SapDocumentService>();
             services.AddSingleton<ISapVerdictViewService, SapVerdictViewService>();
-            services.AddSingleton<ISapMraService, SapMraService>();       // POST /api/sap/v1/mra-status
-            services.AddSingleton<IMraService, MraService>();             // Data Setup → MRA status
+            services.AddSingleton<IMraCapacitySource, MraCapacitySource>(); // replayed MRA position for the engines (cached per stamp)
+            services.AddSingleton<ISapMraFeedService, SapMraFeedService>(); // POST /api/sap/v1/mra-events, /po-events
+            services.AddSingleton<IMraService, MraService>();             // Data Setup → MRA file, MRA Queues, SAP Feed
             return services;
         }
     }

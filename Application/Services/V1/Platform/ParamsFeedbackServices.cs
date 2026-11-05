@@ -36,6 +36,13 @@ namespace Application.Services.V1.Platform
             Manifest m;
             using (await _store.LockAsync(ct))
             {
+                // v1.1.7: the admin switches (SAP Feed page) are kept as stored — only MraSwitches changes them
+                var stored = await _store.GetDocAsync(DocNames.Params, ct) as JsonObject;
+                foreach (var k in new[] { DecisionEngine.Results.Mra.MraSwitches.ToolReqKey, DecisionEngine.Results.Mra.MraSwitches.LivePoKey })
+                {
+                    if (stored?[k] is { } v) p[k] = v.DeepClone();
+                    else p.Remove(k);
+                }
                 await _store.PutDocAsync(DocNames.Params, p.DeepClone(), ct);
                 m = await _store.GetManifestAsync(ct);
                 m.ParamsVersion += 1;

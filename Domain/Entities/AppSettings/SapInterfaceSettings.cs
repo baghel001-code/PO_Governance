@@ -69,13 +69,8 @@ namespace Domain.Entities.AppSettings
 
         /// <summary>Events per batch (spec: 1–500) and maximum body size (5 MB) — above: 413.</summary>
         public int MaxEventsPerBatch { get; set; } = 500;
-        /// <summary>MRA lines per POST /mra-status batch (1–500) — above: 413.</summary>
-        public int MaxMraLinesPerBatch { get; set; } = 500;
-        /// <summary>
-        /// MRA statuses the tool accepts (morning file and POST /mra-status), as stored. Spellings such as "Self Reject",
-        /// "self-rejected" or "Watch List" are matched to these (see MraStatuses.Normalize). Add a value here to accept a new one.
-        /// </summary>
-        public List<string> MraStatuses { get; set; } = new() { "ALLOW", "WATCHLIST", "CANCELLED", "DISCARDED", "REJECTED", "SELF_REJECTED" };
+        /// <summary>Messages per POST /mra-events or /po-events call (one message or {"messages": [...]}) — above: 413.</summary>
+        public int MaxMraMessagesPerBatch { get; set; } = 5000;
         public int MaxBodyBytes { get; set; } = 5 * 1024 * 1024;
 
         /// <summary>The view_url sent with every answered decision (portal page /verdict/&lt;token&gt;).</summary>

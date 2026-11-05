@@ -1,16 +1,16 @@
 using Application.DTOs.Ingest;
 using Application.Interfaces.V1.Sap;
+using DecisionEngine.Results.Mra;
 using Domain.Entities.Response;
-using Domain.Entities.Sap;
 using Domain.Exceptions;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.AspNetCore.Mvc.ModelBinding;
 
 namespace POGovApi.Controllers.V1
 {
     /// <summary>
-    /// Data Setup → MRA status (planners / admins): the morning MRA file replaces all MRA lines; during the day SAP updates
-    /// them through POST /api/sap/v1/mra-status. Summary, list and the history of one MRA.
+    /// SAP MRAs (v1.1.7): the morning MRA workbook (Data Setup, planners / admins), the state for the MRA Queues and SAP Feed
+    /// pages (every signed-in user; buyers / category heads see their own MCs), the admin switches and the admin test sender.
+    /// Live changes from SAP come in through POST /api/sap/v1/mra-events and /po-events.
     /// </summary>
     [Route("api/v1/[Action]")]
     [IngestUploadLimit]
@@ -20,7 +20,7 @@ namespace POGovApi.Controllers.V1
 
         public MraController(IMraService mra) => _mra = mra;
 
-        /// <summary>The morning MRA file (multipart, one .xlsx / .xls / .csv). Refused files change nothing.</summary>
+        /// <summary>The morning MRA workbook (multipart, one .xlsx / .xlsb / .xls): item lines + header report. Replaces the MRA list.</summary>
         [HttpPost]
         public async Task<ActionResult<ApiDataResponse<MraUploadResponse>>> MraUpload(CancellationToken ct)
         {
@@ -33,28 +33,25 @@ namespace POGovApi.Controllers.V1
             return Success(await _mra.UploadAsync(new IngestUpload(Path.GetFileName(f.FileName), ms.ToArray()), Me, ct));
         }
 
-        /// <summary>Lines and quantity per status, last upload, SAP changes today.</summary>
+        /// <summary>Every MRA with its queue and whether it counts, the PO queue, the last 1,500 live messages, the switches.</summary>
         [HttpPost]
-        public async Task<ActionResult<ApiDataResponse<MraSummaryResponse>>> MraSummary(CancellationToken ct)
+        public async Task<ActionResult<ApiDataResponse<MraStateResponse>>> MraState(CancellationToken ct) =>
+            Success(await _mra.StateAsync(Me, ct));
+
+        /// <summary>{ToolReqCapacity?, LivePo?} (admin).</summary>
+        [HttpPost]
+        public async Task<ActionResult<ApiDataResponse<MraSwitchesResponse>>> MraSwitches([FromBody] MraSwitchesReq req, CancellationToken ct)
         {
-            RequireStaff();
-            return Success(await _mra.SummaryAsync(ct));
+            RequireAdmin();
+            return Success(await _mra.SetSwitchesAsync(req, Me, ct));
         }
 
-        /// <summary>{Status?, Search?, Page, PageSize}: the current MRA lines, newest change first.</summary>
+        /// <summary>{Kind: "mra" | "po", Json}: the SAP Feed test sender (admin); stored and applied like a message from SAP.</summary>
         [HttpPost]
-        public async Task<ActionResult<ApiDataResponse<MraListResponse>>> MraList([FromBody(EmptyBodyBehavior = EmptyBodyBehavior.Allow)] MraListReq? req, CancellationToken ct)
+        public async Task<ActionResult<ApiDataResponse<MraFeedResponse>>> MraTestSend([FromBody] MraTestSendReq req, CancellationToken ct)
         {
-            RequireStaff();
-            return Success(await _mra.ListAsync(req ?? new MraListReq(), ct));
-        }
-
-        /// <summary>{MraNo}: every change SAP sent for the MRA.</summary>
-        [HttpPost]
-        public async Task<ActionResult<ApiDataResponse<MraHistoryResponse>>> MraHistory([FromBody] MraNoReq req, CancellationToken ct)
-        {
-            RequireStaff();
-            return Success(await _mra.HistoryAsync(req.MraNo, ct));
+            RequireAdmin();
+            return Success(await _mra.TestSendAsync(req, Me, ct));
         }
     }
 }

@@ -13,7 +13,7 @@ namespace POGovApi.Controllers.Sap
     /// The SAP R/3 integration API — paths, fields and status codes fixed by the SAP API specification v1.4
     /// (legacy/python-app/docs/po-governance-sap-api.yaml): <c>GET /api/sap/v1/ping</c>, <c>GET /api/sap/v1/reason-codes</c>,
     /// <c>POST /api/sap/v1/events</c>, <c>POST /api/sap/v1/decisions</c>; additions: <c>POST /api/sap/v1/documents</c>,
-    /// <c>POST /api/sap/v1/mra-status</c>. snake_case JSON (not the portal's QPS
+    /// <c>POST /api/sap/v1/mra-events</c>, <c>POST /api/sap/v1/po-events</c>. snake_case JSON (not the portal's QPS
     /// conventions), HTTP Basic authentication of a technical user (scheme <c>SapBasic</c>), IP allow-list and error bodies
     /// by <see cref="SapInterfaceMiddleware"/>. Not part of the API master (SAP calls it directly through SM59).
     /// </summary>
@@ -29,10 +29,10 @@ namespace POGovApi.Controllers.Sap
         private readonly ISapEventService _events;
         private readonly ISapDecisionService _decisions;
         private readonly ISapDocumentService _documents;
-        private readonly ISapMraService _mra;
+        private readonly ISapMraFeedService _mra;
 
         public SapController(ISapUtilityService utility, ISapEventService events, ISapDecisionService decisions, ISapDocumentService documents,
-                             ISapMraService mra)
+                             ISapMraFeedService mra)
         {
             _utility = utility;
             _events = events;
@@ -78,10 +78,15 @@ namespace POGovApi.Controllers.Sap
         public async Task<IActionResult> Documents(CancellationToken ct) => Answer(await _documents.ReceiveAsync(await BodyAsync(ct), Caller, ct));
 
         /// <summary>
-        /// MRA status changes during the day (created, discarded, rejected, self-rejected …): 1–500 lines, applied in order;
-        /// required per line mra_no, qty, status. The morning file in Data Setup replaces all lines first.
+        /// Live MRA changes (v1.1.7): one message or {"messages": [...]} (max 5,000). Required per message mra_no and level; a new MRA
+        /// also needs generic_article, colour, qty, delivery_date. Every message is stored; one result per message
+        /// (applied / no change / duplicate / older / parked).
         /// </summary>
-        [HttpPost("mra-status")]
-        public async Task<IActionResult> MraStatus(CancellationToken ct) => Answer(await _mra.ReceiveAsync(await BodyAsync(ct), Caller, ct));
+        [HttpPost("mra-events")]
+        public async Task<IActionResult> MraEvents(CancellationToken ct) => Answer(await _mra.ReceiveAsync("mra", await BodyAsync(ct), Caller, ct));
+
+        /// <summary>Live PO changes (release / unrelease): stored always; they move capacity only with the admin switch "Live PO changes".</summary>
+        [HttpPost("po-events")]
+        public async Task<IActionResult> PoEvents(CancellationToken ct) => Answer(await _mra.ReceiveAsync("po", await BodyAsync(ct), Caller, ct));
     }
 }

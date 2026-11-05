@@ -270,10 +270,10 @@ INSERT INTO @seed (Api_Name, Task_Name, Action_Name, Api_Http_Method, Api_Conten
         (N'UsersBulk', N'PO_USERS_BULK', N'UsersBulk', N'POST', N'application/json', 300, N'Add several users (admin; employees fetched from HRMS)'),
         (N'UserHrmsLookup', N'PO_USER_HRMS_LOOKUP', N'UserHrmsLookup', N'POST', N'application/json', 60, N'Employee details from HRMS by Employee ID (admin, before adding)'),
         (N'UserLinkEmployee', N'PO_USER_LINK_EMPLOYEE', N'UserLinkEmployee', N'POST', N'application/json', 60, N'Link a login to an Employee ID / refresh its HRMS details (admin)'),
-        (N'MraUpload', N'PO_MRA_UPLOAD', N'MraUpload', N'POST', N'multipart/form-data', 900, N'Data Setup: morning MRA status file (replaces all MRA lines)'),
-        (N'MraSummary', N'PO_MRA_SUMMARY', N'MraSummary', N'POST', N'application/json', 60, N'MRA status: lines / qty per status, last upload, SAP changes today'),
-        (N'MraList', N'PO_MRA_LIST', N'MraList', N'POST', N'application/json', 120, N'MRA status: current lines (filter, search, page)'),
-        (N'MraHistory', N'PO_MRA_HISTORY', N'MraHistory', N'POST', N'application/json', 60, N'MRA status: SAP changes of one MRA'),
+        (N'MraUpload', N'PO_MRA_UPLOAD', N'MraUpload', N'POST', N'multipart/form-data', 900, N'Data Setup: morning MRA workbook (replaces the MRA list)'),
+        (N'MraState', N'PO_MRA_STATE', N'MraState', N'POST', N'application/json', 120, N'MRA Queues / SAP Feed: MRAs, PO queue, live messages, switches'),
+        (N'MraSwitches', N'PO_MRA_SWITCHES', N'MraSwitches', N'POST', N'application/json', 60, N'SAP Feed: admin switches (tool requests use capacity, live PO changes)'),
+        (N'MraTestSend', N'PO_MRA_TEST_SEND', N'MraTestSend', N'POST', N'application/json', 120, N'SAP Feed: test sender (admin)'),
         (N'UsersScrSync', N'PO_USERS_SCR_SYNC', N'UsersScrSync', N'POST', N'application/json', 120, N'Create logins from the SCR file (admin)'),
         (N'UsersScrMapping', N'PO_USERS_SCR_MAPPING', N'UsersScrMapping', N'POST', N'application/json', 120, N'Save the SCR column mapping, then sync (admin)'),
         (N'UserUpdate', N'PO_USER_UPDATE', N'UserUpdate', N'POST', N'application/json', 60, N'Change name / roles / active / unlock (admin)'),
@@ -374,6 +374,8 @@ SELECT s.Api_Name, s.Task_Name, N'POGOV_API', N'api/v1/' + s.Action_Name, s.Api_
        @ApiToken, s.Api_Timeout, 1, s.Description
 FROM @seed s
 WHERE NOT EXISTS (SELECT 1 FROM dbo.API_MASTER m WHERE m.Task_Name = s.Task_Name);
+-- task names of removed portal actions (MRA status v5, replaced by the v1.1.7 SAP MRAs)
+DELETE FROM dbo.API_MASTER WHERE Task_Name IN (N'PO_MRA_SUMMARY', N'PO_MRA_LIST', N'PO_MRA_HISTORY');
 GO
 
 /* Server-only rows: the HRMS employee API (sign-in and user registration), called by POGovApi only, at the QPS paths.

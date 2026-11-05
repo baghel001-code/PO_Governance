@@ -1,235 +1,415 @@
 using System.Text.Json;
+using System.Text.Json.Nodes;
+using System.Text.Json.Serialization;
 using Application.Interfaces.V1;
+using Application.Interfaces.V1.Ingest;
 using Application.Interfaces.V1.Sap;
-using DecisionEngine.Sap;
+using Application.Services.V1.Platform;
+using DecisionEngine.Model;
+using DecisionEngine.Mra;
+using DecisionEngine.Results.Mra;
 using Domain.Entities.AppSettings;
 using Domain.Entities.Sap;
+using Domain.Entities.Store;
 using Domain.Exceptions;
+using Domain.Records;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
 namespace Application.Services.V1.Sap
 {
-    /// <summary>
-    /// POST /api/sap/v1/mra-status: SAP sends every change of an MRA during the day (created, discarded, rejected,
-    /// self-rejected …). Required per line: mra_no, qty, status; generic_article + colour pick the line of an MRA with
-    /// several lines; every other field is kept when not sent. The whole batch is checked first (any wrong line → 400,
-    /// nothing stored), then applied in order in one transaction (PRO_SAP_MRA_STATUS APPLY): CREATED / UPDATED /
-    /// UNCHANGED / STALE (older changed_at than stored) / AMBIGUOUS (several lines, no article / colour). Safe to resend.
-    /// The morning file in Data Setup is merged into the lines (IMraService.UploadAsync).
-    /// </summary>
-    public sealed class SapMraService : ISapMraService
+    /// <summary>JSON of the stored messages and file records (PascalCase, nulls left out).</summary>
+    public static class MraStoreJson
     {
-        private readonly IMraRepository _repo;
-        private readonly IAppClock _clock;
-        private readonly SapInterfaceSettings _cfg;
-        private readonly ILogger<SapMraService> _log;
+        public static readonly JsonSerializerOptions Options = new() { DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull };
+        public static string Serialize<T>(T v) => JsonSerializer.Serialize(v, Options);
+        public static T? Deserialize<T>(string? s) => string.IsNullOrEmpty(s) ? default : JsonSerializer.Deserialize<T>(s, Options);
+    }
 
-        public SapMraService(IMraRepository repo, IAppClock clock, IOptions<SapInterfaceSettings> cfg, ILogger<SapMraService> log)
+    /// <summary>Receiving live messages (SAP or the admin test sender): store every message, then replay.</summary>
+    internal static class MraFeedIntake
+    {
+        /// <summary>One message {…} or a batch {"messages": […]}.</summary>
+        public static List<JsonNode?> Messages(JsonNode? body) =>
+            body is JsonObject o && o["messages"] is JsonArray arr ? arr.ToList() : new List<JsonNode?> { body };
+
+        public static MraFeedRow Row(string kind, JsonNode? raw)
         {
-            _repo = repo;
-            _clock = clock;
-            _cfg = cfg.Value;
-            _log = log;
+            var rawJson = raw?.ToJsonString() ?? "null";
+            if (kind == "mra")
+            {
+                var (m, err) = MraMessage.Parse(raw);
+                return new MraFeedRow(kind, rawJson, m == null ? null : MraStoreJson.Serialize(m), err);
+            }
+            var (p, perr) = PoMessage.Parse(raw);
+            return new MraFeedRow(kind, rawJson, p == null ? null : MraStoreJson.Serialize(p), perr);
         }
 
-        private static string? Check(string? s, int max, string name, int i) =>
-            s != null && s.Trim().Length > max ? $"mras[{i}].{name} must be at most {max} characters" : null;
-
-        /// <summary>The lines to store, or the first problem.</summary>
-        public static (List<MraLine>? Lines, string? Problem) Validate(SapMraStatusRequest? r, IReadOnlyCollection<string> allowed)
+        public static async Task<List<MraFeedAnswer>> StoreAndReplayAsync(IMraRepository repo, IMraCapacitySource source, IAppClock clock, string kind,
+            List<JsonNode?> msgs, string by, string? sourceSystem, string? traceId, CancellationToken ct)
         {
-            if (r == null) return (null, "The body must be a JSON object");
-            if (r.Mras == null || r.Mras.Count == 0) return (null, "mras must be a non-empty array");
-            var lines = new List<MraLine>();
-            for (var i = 0; i < r.Mras.Count; i++)
+            var rows = msgs.Select(m => Row(kind, m)).ToList();
+            // stored as received, never cancelled half-way
+            var seqs = await repo.AddFeedAsync(rows, by, sourceSystem, traceId, clock.Now, CancellationToken.None);
+            source.Invalidate();
+            var stored = await repo.StateAsync(clock.Today, ct);
+            var st = MraReplay.Run(stored.File, stored.Feed);
+            var bySeq = st.Results.ToDictionary(r => r.Seq);
+            var answers = new List<MraFeedAnswer>();
+            for (var i = 0; i < rows.Count; i++)
             {
-                var m = r.Mras[i];
-                if (m == null) return (null, $"mras[{i}] must be an object");
-                if (string.IsNullOrWhiteSpace(m.MraNo)) return (null, $"mras[{i}].mra_no is required");
-                if (m.Qty == null) return (null, $"mras[{i}].qty is required");
-                if (m.Qty < 0) return (null, $"mras[{i}].qty must not be negative");
-                if (m.Qty > 1_000_000_000m) return (null, $"mras[{i}].qty is too large");
-                if (string.IsNullOrWhiteSpace(m.Status)) return (null, $"mras[{i}].status is required");
-                var status = MraStatuses.Normalize(m.Status, allowed);
-                if (status == null) return (null, $"mras[{i}].status '{m.Status}' is not one of {string.Join(", ", allowed)}");
-                var p = Check(m.MraNo, 20, "mra_no", i) ?? Check(m.GenericArticle, 40, "generic_article", i) ?? Check(m.Colour, 40, "colour", i)
-                        ?? Check(m.RequestId, 80, "request_id", i) ?? Check(m.GenericArtDesc, 200, "generic_art_desc", i)
-                        ?? Check(m.VendorCode, 20, "vendor_code", i) ?? Check(m.VendorName, 200, "vendor_name", i)
-                        ?? Check(m.BrandType, 40, "brand_type", i) ?? Check(m.McCode, 20, "mc_code", i) ?? Check(m.McName, 100, "mc_name", i)
-                        ?? Check(m.PlanningFlag, 20, "planning_flag", i) ?? Check(m.Fit, 100, "fit", i) ?? Check(m.Design, 100, "design", i)
-                        ?? Check(m.Style, 100, "style", i) ?? Check(m.Fabric, 100, "fabric", i) ?? Check(m.ProductMaterial, 100, "product_material", i)
-                        ?? Check(m.ApprovalLevel, 30, "approval_level", i) ?? Check(m.Remark, 500, "remark", i);
-                if (p != null) return (null, p);
-                DateTimeOffset? changed = null;
-                if (!string.IsNullOrWhiteSpace(m.ChangedAt))
+                bySeq.TryGetValue(seqs[i], out var r);
+                answers.Add(new MraFeedAnswer
                 {
-                    if (!SapJson.TryParseTimestamp(m.ChangedAt, out var t)) return (null, $"mras[{i}].changed_at must be an ISO 8601 timestamp with offset");
-                    changed = t;
-                }
-                DateTime? delivery = null;
-                if (!string.IsNullOrWhiteSpace(m.DeliveryDate))
-                {
-                    if (!SapInputNormalizer.TryParseDate(m.DeliveryDate, out var d)) return (null, $"mras[{i}].delivery_date must be a date YYYY-MM-DD");
-                    delivery = d.ToDateTime(TimeOnly.MinValue);
-                }
-                static string? T(string? s) => string.IsNullOrWhiteSpace(s) ? null : s.Trim();
-                lines.Add(new MraLine
-                {
-                    MraNo = m.MraNo!.Trim(), Qty = m.Qty.Value, Status = status, GenericArticle = T(m.GenericArticle) ?? "", Colour = T(m.Colour) ?? "",
-                    ChangedAt = changed, RequestId = T(m.RequestId), GenericArtDesc = T(m.GenericArtDesc), VendorCode = T(m.VendorCode),
-                    VendorName = T(m.VendorName), BrandType = T(m.BrandType), McCode = T(m.McCode), McName = T(m.McName), Mrp = m.Mrp,
-                    PlanningFlag = T(m.PlanningFlag), Fit = T(m.Fit), Design = T(m.Design), Style = T(m.Style), Fabric = T(m.Fabric),
-                    ProductMaterial = T(m.ProductMaterial), PoValue = m.PoValue, DeliveryDate = delivery, ApprovalLevel = T(m.ApprovalLevel),
-                    Remark = T(m.Remark), Source = "SAP"
+                    Seq = seqs[i], Outcome = rows[i].Error != null ? MraFeedOutcomes.Parked : r?.Outcome, Reason = rows[i].Error ?? r?.Reason,
+                    Mra = kind == "mra" ? MraStoreJson.Deserialize<MraMessage>(rows[i].MsgJson)?.Mra : r?.Mra,
+                    Po = kind == "po" ? MraStoreJson.Deserialize<PoMessage>(rows[i].MsgJson)?.Po : null
                 });
             }
-            return (lines, null);
+            return answers;
+        }
+    }
+
+    /// <summary>SAP answer of /mra-events and /po-events (snake_case).</summary>
+    public sealed class SapMraFeedResponse
+    {
+        public string BatchId { get; set; } = "";
+        public int Received { get; set; }
+        public int Applied { get; set; }
+        public int NoChange { get; set; }
+        public int Duplicate { get; set; }
+        public int Older { get; set; }
+        public int Parked { get; set; }
+        public int Stored { get; set; }
+        public List<SapMraFeedResult> Results { get; set; } = new();
+        public string ReceivedAt { get; set; } = "";
+    }
+
+    public sealed class SapMraFeedResult
+    {
+        public int Index { get; set; }
+        public long Seq { get; set; }
+        public string? Outcome { get; set; }
+        public string? Reason { get; set; }
+        public string? MraNo { get; set; }
+        public string? PoNo { get; set; }
+    }
+
+    /// <summary>
+    /// POST /api/sap/v1/mra-events and /po-events (v1.1.7 SAP-MRA-INTERFACE.txt §2): one message or {"messages": [...]}
+    /// (max <see cref="SapInterfaceSettings.MaxMraMessagesPerBatch"/>). Every message is stored as received, also a bad one
+    /// ("parked"); the answer gives one result per message in the same order: applied | no change | duplicate | older |
+    /// parked | stored (PO message).
+    /// </summary>
+    public sealed class SapMraFeedService : ISapMraFeedService
+    {
+        private readonly IMraRepository _repo;
+        private readonly IMraCapacitySource _source;
+        private readonly IAppClock _clock;
+        private readonly SapInterfaceSettings _cfg;
+        private readonly ILogger<SapMraFeedService> _log;
+
+        public SapMraFeedService(IMraRepository repo, IMraCapacitySource source, IAppClock clock, IOptions<SapInterfaceSettings> cfg, ILogger<SapMraFeedService> log)
+        {
+            _repo = repo; _source = source; _clock = clock; _cfg = cfg.Value; _log = log;
         }
 
-        public async Task<SapCallResult> ReceiveAsync(string body, SapCallContext caller, CancellationToken ct = default)
+        public async Task<SapCallResult> ReceiveAsync(string kind, string body, SapCallContext caller, CancellationToken ct = default)
         {
             if (!_repo.Available)
                 throw new SapApiException(503, SapErrorCodes.StorageNotSupported, _repo.UnavailableReason ?? "SAP interface requires SQL Server storage");
-            SapMraStatusRequest? req;
+            JsonNode? node;
             try
             {
-                req = SapJson.Deserialize<SapMraStatusRequest>(body);
+                node = JsonNode.Parse(body);
             }
             catch (JsonException ex)
             {
                 throw new SapApiException(400, SapErrorCodes.InvalidJson, "Invalid JSON: " + ex.Message);
             }
-            var max = Math.Max(1, _cfg.MaxMraLinesPerBatch);
-            if (req?.Mras is { Count: var n } && n > max)
-                throw new SapApiException(413, SapErrorCodes.BatchTooLarge, $"{n} MRA lines in one batch - at most {max}");
-            var (lines, problem) = Validate(req, _cfg.MraStatuses);
-            if (problem != null) throw new SapApiException(400, SapErrorCodes.ValidationFailed, problem);
-
-            var batchId = "MRA-" + _clock.Now.ToString("yyyyMMdd-HHmmss") + "-" + Convert.ToHexString(System.Security.Cryptography.RandomNumberGenerator.GetBytes(2)).ToLowerInvariant();
-            // one transaction, never cancelled half-way (see SapDecisionService)
-            var rows = await _repo.ApplyAsync(lines!, caller.TechUser, caller.SourceSystem, batchId, caller.TraceId, CancellationToken.None);
-            var answer = new SapMraStatusResponse
+            var msgs = MraFeedIntake.Messages(node);
+            if (msgs.Count == 0) throw new SapApiException(400, SapErrorCodes.ValidationFailed, "messages must not be empty");
+            var max = Math.Max(1, _cfg.MaxMraMessagesPerBatch);
+            if (msgs.Count > max) throw new SapApiException(413, SapErrorCodes.BatchTooLarge, $"{msgs.Count} messages in one call - at most {max}");
+            var answers = await MraFeedIntake.StoreAndReplayAsync(_repo, _source, _clock, kind, msgs, caller.TechUser, caller.SourceSystem, caller.TraceId, ct);
+            var resp = new SapMraFeedResponse
             {
-                BatchId = batchId, Received = lines!.Count, ReceivedAt = SapJson.Timestamp(_clock.Now),
-                Results = rows.Select(r => new SapMraLineResult
-                {
-                    Index = r.Idx, MraNo = r.MraNo, GenericArticle = r.GenericArticle.Length == 0 ? null : r.GenericArticle,
-                    Colour = r.Colour.Length == 0 ? null : r.Colour, Result = r.Result, PreviousStatus = r.OldStatus, Status = r.Status, Qty = r.Qty
-                }).ToList()
+                BatchId = (kind == "mra" ? "MRAEV-" : "POEV-") + _clock.Now.ToString("yyyyMMdd-HHmmss") + "-" +
+                          Convert.ToHexString(System.Security.Cryptography.RandomNumberGenerator.GetBytes(2)).ToLowerInvariant(),
+                Received = answers.Count, ReceivedAt = SapJson.Timestamp(_clock.Now),
+                Results = answers.Select((a, i) => new SapMraFeedResult { Index = i, Seq = a.Seq, Outcome = a.Outcome, Reason = a.Reason, MraNo = a.Mra, PoNo = a.Po }).ToList()
             };
-            answer.Created = rows.Count(r => r.Result == MraApplyResults.Created);
-            answer.Updated = rows.Count(r => r.Result == MraApplyResults.Updated);
-            answer.Unchanged = rows.Count(r => r.Result == MraApplyResults.Unchanged);
-            answer.Stale = rows.Count(r => r.Result == MraApplyResults.Stale);
-            answer.Ambiguous = rows.Count(r => r.Result == MraApplyResults.Ambiguous);
-            _log.LogInformation("SAP MRA status batch {BatchId}: {Received} line(s) - created {Created}, updated {Updated}, unchanged {Unchanged}, " +
-                                "stale {Stale}, ambiguous {Ambiguous} (by {TechUser})",
-                batchId, answer.Received, answer.Created, answer.Updated, answer.Unchanged, answer.Stale, answer.Ambiguous, caller.TechUser);
-            if (answer.Ambiguous > 0)
-                _log.LogWarning("SAP MRA status batch {BatchId}: {Count} line(s) not applied - the MRA has several lines; send generic_article and colour",
-                    batchId, answer.Ambiguous);
-            return new SapCallResult { Status = 200, Json = SapJson.Serialize(answer) };
+            resp.Applied = answers.Count(a => a.Outcome == MraFeedOutcomes.Applied);
+            resp.NoChange = answers.Count(a => a.Outcome == MraFeedOutcomes.NoChange);
+            resp.Duplicate = answers.Count(a => a.Outcome == MraFeedOutcomes.Duplicate);
+            resp.Older = answers.Count(a => a.Outcome == MraFeedOutcomes.Older);
+            resp.Parked = answers.Count(a => a.Outcome == MraFeedOutcomes.Parked);
+            resp.Stored = answers.Count(a => a.Outcome == MraFeedOutcomes.Stored);
+            _log.LogInformation("SAP {Kind} events {BatchId}: {Received} message(s) - applied {Applied}, no change {NoChange}, duplicate {Duplicate}, " +
+                                "older {Older}, parked {Parked}, stored {Stored} (by {TechUser})",
+                kind.ToUpperInvariant(), resp.BatchId, resp.Received, resp.Applied, resp.NoChange, resp.Duplicate, resp.Older, resp.Parked, resp.Stored, caller.TechUser);
+            if (resp.Parked > 0) _log.LogWarning("SAP {Kind} events {BatchId}: {Count} message(s) set aside (parked) - see the SAP Feed page", kind, resp.BatchId, resp.Parked);
+            return new SapCallResult { Status = 200, Json = SapJson.Serialize(resp) };
         }
     }
 
-    /// <summary>Data Setup → MRA status (portal): the morning file and the views.</summary>
-    public sealed class MraService : IMraService
+    /// <summary>
+    /// Replayed MRA position, cached per (data version, params version, stamp, day). The stamp is read on every call
+    /// (one small query), so a message from SAP counts in the very next New PO request.
+    /// </summary>
+    public sealed class MraCapacitySource : IMraCapacitySource
     {
         private readonly IMraRepository _repo;
-        private readonly Interfaces.V1.Ingest.IWorkbookReader _reader;
+        private readonly IAppClock _clock;
+        private readonly IAccountsService _acc;
+        private readonly SemaphoreSlim _gate = new(1, 1);
+        private (string Key, MraStoredState Stored, MraCapacity Cap)? _cached;
+
+        public MraCapacitySource(IMraRepository repo, IAppClock clock, IAccountsService acc)
+        {
+            _repo = repo; _clock = clock; _acc = acc;
+        }
+
+        public void Invalidate() => _cached = null;
+
+        public async Task<MraCapacity?> GetAsync(EngineData data, CancellationToken ct = default) =>
+            (await GetFullAsync(data, ct))?.Capacity;
+
+        public async Task<(MraStoredState Stored, MraCapacity Capacity)?> GetFullAsync(EngineData data, CancellationToken ct = default)
+        {
+            if (!_repo.Available) return null;
+            var stamp = await _repo.StampAsync(ct);
+            var today = _clock.Today;
+            var sw = MraSwitches.From(data.Params);
+            var key = $"{data.DataVersion}/{data.ParamsVersion}/{stamp}/{today}/{sw.LivePo}";
+            var c = _cached;
+            if (c != null && c.Value.Key == key) return (c.Value.Stored, c.Value.Cap);
+            await _gate.WaitAsync(ct);
+            try
+            {
+                c = _cached;
+                if (c != null && c.Value.Key == key) return (c.Value.Stored, c.Value.Cap);
+                var stored = await _repo.StateAsync(today, ct);
+                var owners = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+                foreach (var u in await _acc.GetUsersAsync(ct))
+                    if (!string.IsNullOrEmpty(u.Email)) owners[u.Email] = string.IsNullOrEmpty(u.Name) ? u.Email : u.Name;
+                var cap = MraCapacity.Build(data, MraReplay.Run(stored.File, stored.Feed), today, sw.LivePo, owners);
+                _cached = (key, stored, cap);
+                return (stored, cap);
+            }
+            finally
+            {
+                _gate.Release();
+            }
+        }
+    }
+
+    /// <summary>Data Setup → MRA file, MRA Queues and SAP Feed pages (server.py /api/mra/*).</summary>
+    public sealed class MraService : IMraService
+    {
+        private const int LogRows = 1500;
+        private readonly IMraRepository _repo;
+        private readonly IMraCapacitySource _source;
+        private readonly IWorkbookReader _reader;
+        private readonly IDatasetCache _cache;
+        private readonly IStore _store;
+        private readonly IAccountsService _acc;
         private readonly IAppClock _clock;
         private readonly IAuditService _audit;
-        private readonly SapInterfaceSettings _cfg;
+        private readonly SapInterfaceSettings _sap;
+        private readonly PoGovSettings _cfg;
         private readonly ILogger<MraService> _log;
 
-        public MraService(IMraRepository repo, Interfaces.V1.Ingest.IWorkbookReader reader, IAppClock clock, IAuditService audit,
-                          IOptions<SapInterfaceSettings> cfg, ILogger<MraService> log)
+        public MraService(IMraRepository repo, IMraCapacitySource source, IWorkbookReader reader, IDatasetCache cache, IStore store, IAccountsService acc,
+                          IAppClock clock, IAuditService audit, IOptions<SapInterfaceSettings> sap, IOptions<PoGovSettings> cfg, ILogger<MraService> log)
         {
-            _repo = repo;
-            _reader = reader;
-            _clock = clock;
-            _audit = audit;
-            _cfg = cfg.Value;
-            _log = log;
+            _repo = repo; _source = source; _reader = reader; _cache = cache; _store = store; _acc = acc; _clock = clock; _audit = audit;
+            _sap = sap.Value; _cfg = cfg.Value; _log = log;
         }
 
         private void RequireAvailable()
         {
-            if (!_repo.Available) throw new ServiceUnavailableException(_repo.UnavailableReason ?? "MRA status requires SQL Server storage");
+            if (!_repo.Available) throw new ServiceUnavailableException(_repo.UnavailableReason ?? "SAP MRAs require SQL Server storage");
         }
 
-        public async Task<MraUploadResponse> UploadAsync(DTOs.Ingest.IngestUpload file, Domain.Records.AppUserContext user, CancellationToken ct = default)
+        public async Task<MraUploadResponse> UploadAsync(DTOs.Ingest.IngestUpload file, AppUserContext user, CancellationToken ct = default)
         {
+            if (!PlatformCore.IsStaff(user)) throw new ForbiddenException("Only planners and admins can upload the MRA file");
             RequireAvailable();
             var resp = new MraUploadResponse { FileName = file.FileName };
-            DTOs.Ingest.WorkbookData wb;
+            MraWorkbookParser.Result p;
             try
             {
-                wb = _reader.Read(file.Content, file.FileName);
+                p = MraWorkbookParser.Parse(_reader.Read(file.Content, file.FileName));
             }
             catch (Exception e) when (e is not OperationCanceledException)
             {
-                resp.Errors.Add("The file could not be read as Excel or CSV: " + e.Message);
+                resp.Error = "The file could not be read as Excel: " + e.Message + " Nothing was changed.";
                 return resp;
             }
-            var parsed = MraWorkbookParser.Parse(wb, _cfg.MraStatuses);
-            resp.Sheet = parsed.Sheet;
-            resp.SkippedEmpty = parsed.SkippedEmpty;
-            foreach (var (h, f) in parsed.Columns) resp.Columns[h] = f;
-            resp.Errors.AddRange(parsed.Errors);
-            if (parsed.ErrorCount > parsed.Errors.Count) resp.Errors.Add($"… and {parsed.ErrorCount - parsed.Errors.Count} more");
-            if (!parsed.Ok)
-            {
-                _log.LogWarning("MRA file {File} refused ({Count} problem(s)) - the stored MRA data is unchanged", file.FileName, parsed.ErrorCount);
-                return resp;
-            }
-            var uploadId = "MRAUPL-" + _clock.Now.ToString("yyyyMMdd-HHmmss");
-            var c = await _repo.UploadAsync(parsed.Lines, uploadId, file.FileName, user.AuditName, ct);
+            if (p.Error != null) { resp.Error = p.Error; return resp; }
+            if (p.Mras.Count == 0) { resp.Error = "No MRA could be read from the item-lines sheet. Nothing was changed."; return resp; }
+
+            // decisions SAP sent earlier (live) are kept when the new file does not carry them
+            var before = await _repo.StateAsync(_clock.Today, ct);
+            var prev = MraReplay.Run(before.File, before.Feed).Mras;
+            foreach (var (k, rec) in p.Mras)
+                if (prev.TryGetValue(k, out var old) && rec.DecisionInfo?.Decision == null && old.Decision.Decision != null)
+                {
+                    rec.DecisionInfo = old.Decision.Clone();
+                    resp.DecisionsKept++;
+                }
+
+            resp.ItemSheet = p.ItemSheet; resp.HeaderSheet = p.HeaderSheet; resp.Mras = p.Mras.Count;
+            foreach (var r in p.Mras.Values) resp.ByLevel[r.Level] = (resp.ByLevel.TryGetValue(r.Level, out var n) ? n : 0) + 1;
+            resp.RowsItem = p.RowsItem; resp.RowsHeader = p.RowsHeader; resp.Skipped = p.Skipped; resp.Mixed = p.Mixed;
+            resp.HeaderOnly = p.HeaderOnly; resp.ItemOnly = p.ItemOnly; resp.LevelDiff = p.LevelDiff; resp.Invalid = p.Invalid;
+            resp.Decisions = p.Mras.Values.Count(x => x.DecisionInfo?.Decision != null);
+            resp.UploadId = "MRAUPL-" + _clock.Now.ToString("yyyyMMdd-HHmmss");
+            await _repo.UploadAsync(p.Mras, resp.UploadId, _clock.Today, file.FileName, user.AuditName, MraStoreJson.Serialize(resp), ct);
+            _source.Invalidate();
             resp.Ok = true;
-            resp.UploadId = uploadId;
-            resp.Rows = c.Rows;
-            resp.Created = c.Created;
-            resp.Updated = c.Updated;
-            resp.Unchanged = c.Unchanged;
-            resp.Ambiguous = c.Ambiguous;
-            foreach (var (idx, mra) in c.AmbiguousLines.Take(50))
+
+            if (p.Skipped > 0) resp.Warnings.Add($"{p.Skipped} item row(s) skipped (MRA No, article, colour, date, level or qty missing)");
+            if (p.Mixed > 0) resp.Warnings.Add($"{p.Mixed} item row(s) with a different article / colour / date / level than the first line of the same MRA (first line used)");
+            if (p.HeaderOnly > 0) resp.Warnings.Add($"{p.HeaderOnly} MRA(s) only in the header sheet (no item lines – not counted)");
+            if (p.ItemOnly > 0) resp.Warnings.Add($"{p.ItemOnly} MRA(s) only in the item sheet (no PO details)");
+            if (p.LevelDiff > 0) resp.Warnings.Add($"{p.LevelDiff} MRA(s) with a different level in the two sheets (item sheet used)");
+            if (p.Invalid > 0) resp.Warnings.Add($"{p.Invalid} MRA(s) left out: level, article, colour, delivery date or qty not readable");
+
+            var full = await _source.GetFullAsync(await _cache.GetCurrentAsync(ct), ct);
+            if (full is { } f)
             {
-                var row = idx >= 0 && idx < parsed.RowNumbers.Count ? parsed.RowNumbers[idx] : 0;
-                resp.Warnings.Add($"{(row > 0 ? "Row " + row + ": " : "")}MRA {mra} has several lines in the tool - give Generic Art Cd and Colour; this line was skipped");
+                var counted = f.Capacity.Rows.Where(x => x.C.Counted).ToList();
+                resp.CountedMras = counted.Count;
+                resp.CountedQty = counted.Sum(x => x.M.Qty);
             }
-            if (c.Ambiguous > resp.Warnings.Count) resp.Warnings.Add($"… and {c.Ambiguous - resp.Warnings.Count} more");
-            resp.ByStatus = parsed.Lines.GroupBy(l => l.Status).OrderBy(g => g.Key)
-                .Select(g => new MraStatusCount { Status = g.Key, Lines = g.Count(), Qty = g.Sum(l => l.Qty) }).ToList();
-            await _audit.AppendAsync(user.AuditName, "mra-upload", $"{uploadId} {file.FileName} rows={c.Rows} created={c.Created} updated={c.Updated} unchanged={c.Unchanged} skipped={c.Ambiguous}", ct);
+            await _audit.AppendAsync(user.AuditName, "mra-upload",
+                $"{file.FileName} mras={resp.Mras} levels={string.Join(",", resp.ByLevel.Select(kv => kv.Key + ":" + kv.Value))}", ct);
+            _log.LogInformation("MRA file {File} loaded by {User}: {Mras} MRAs, {Counted} counted ({Qty} pcs)", file.FileName, user.AuditName, resp.Mras, resp.CountedMras, resp.CountedQty);
             return resp;
         }
 
-        public async Task<MraSummaryResponse> SummaryAsync(CancellationToken ct = default)
+        public async Task<MraStateResponse> StateAsync(AppUserContext user, CancellationToken ct = default)
         {
-            var resp = new MraSummaryResponse { Statuses = _cfg.MraStatuses.ToList(), Available = _repo.Available, UnavailableReason = _repo.UnavailableReason };
-            if (!_repo.Available) return resp;
-            var now = _clock.Now;
-            resp.Summary = await _repo.SummaryAsync(new DateTimeOffset(now.Date, now.Offset), ct);
+            var data = await _cache.GetCurrentAsync(ct);
+            var sw = MraSwitches.From(data.Params);
+            var resp = new MraStateResponse { Today = _clock.Today, Switches = sw, ApiEnabled = _sap.Enabled && _repo.Available };
+            var full = await _source.GetFullAsync(data, ct);
+            if (full is not { } f)
+            {
+                resp.Available = false;
+                resp.UnavailableReason = _repo.UnavailableReason ?? "SAP MRAs require SQL Server storage";
+                return resp;
+            }
+            var (stored, cap) = f;
+            resp.Snapshot = stored.Snapshot;
+            resp.Stamp = await _repo.StampAsync(ct);
+            resp.Restricted = !PlatformCore.IsStaff(user) && _cfg.RestrictToOwnMcs;
+            HashSet<string>? mine = null;
+            var scope = resp.Restricted ? await _acc.ScopeIndexAsync(ct) : null;
+            if (resp.Restricted) mine = new HashSet<string>(scope!.KeysOf(user.Email), StringComparer.Ordinal);
+            bool OkInfo(MraArticleInfo? i) => mine == null || (i != null && mine.Contains(string.Join("|", PlatformCore.NKey(i.Brand), PlatformCore.NKey(i.McCd), PlatformCore.NKey(i.Mrp))));
+
+            foreach (var (no, m, c) in cap.Rows)
+                if (OkInfo(c.Info)) resp.Rows.Add(new MraRowDto { No = no, M = m, C = c, DecGroup = MraCapacity.DecisionGroup(m.Decision.Decision) });
+            var visibleMras = new HashSet<string>(resp.Rows.Select(r => r.No), StringComparer.Ordinal);
+            var effects = cap.PoEffects.ToDictionary(e => e.Po, StringComparer.Ordinal);
+            foreach (var (po, ps) in cap.State.Pos)
+            {
+                var ok = mine == null || OkInfo(ps.Ga != null ? cap.Article(ps.Ga) : null) || (ps.Mra != null && visibleMras.Contains(ps.Mra));
+                if (ok) resp.Pos.Add(new MraPoRowDto { Po = po, State = ps, Effect = effects.TryGetValue(po, out var e) ? e : null });
+            }
+
+            var results = cap.State.Results.ToDictionary(r => r.Seq);
+            var log = stored.Feed.Select(ev => (ev, results.TryGetValue(ev.Seq, out var r) ? r : null)).ToList();
+            var eff = cap.Effects(log);
+            for (var i = Math.Max(0, log.Count - LogRows); i < log.Count; i++)
+            {
+                var (ev, r) = log[i];
+                if (mine != null)
+                {
+                    if (ev.Error != null) continue;
+                    var keep = (ev.Mra != null && visibleMras.Contains(ev.Mra.Mra)) || (ev.Po != null && resp.Pos.Any(p => p.Po == ev.Po.Po));
+                    if (!keep) continue;
+                }
+                resp.Log.Add(new MraLogRowDto
+                {
+                    Seq = ev.Seq, At = ev.At, By = ev.By, Kind = ev.Kind, Mra = ev.Mra, Po = ev.Po, Raw = mine == null ? ev.Raw : null, Error = ev.Error,
+                    Outcome = ev.Error != null ? MraFeedOutcomes.Parked : r?.Outcome, Reason = ev.Error ?? r?.Reason,
+                    EffectText = eff[i].Text, EffectCls = eff[i].Cls
+                });
+            }
+            foreach (var (email, name) in await OwnersAsync(scope, mine, ct)) resp.Owners[email] = name;
             return resp;
         }
 
-        public Task<MraListResponse> ListAsync(MraListReq req, CancellationToken ct = default)
+        private async Task<Dictionary<string, string>> OwnersAsync(Application.DTOs.Platform.ScopeIndex? scope, HashSet<string>? mine, CancellationToken ct)
         {
-            RequireAvailable();
-            req.Status = string.IsNullOrWhiteSpace(req.Status) ? null : MraStatuses.Normalize(req.Status, _cfg.MraStatuses) ?? req.Status.Trim().ToUpperInvariant();
-            req.Search = string.IsNullOrWhiteSpace(req.Search) ? null : req.Search.Trim();
-            req.Page = Math.Max(1, req.Page);
-            req.PageSize = Math.Clamp(req.PageSize <= 0 ? 100 : req.PageSize, 1, 1000);
-            return _repo.ListAsync(req, ct);
+            var users = (await _acc.GetUsersAsync(ct)).ToDictionary(u => u.Email, StringComparer.OrdinalIgnoreCase);
+            var o = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            if (mine != null && scope != null)
+            {
+                foreach (var (e, d) in scope.People)
+                    if (d.Keys.Overlaps(mine)) o[e] = users.TryGetValue(e, out var u) && !string.IsNullOrEmpty(u.Name) ? u.Name : e;
+            }
+            else foreach (var u in users.Values) o[u.Email] = string.IsNullOrEmpty(u.Name) ? u.Email : u.Name;
+            return o;
         }
 
-        public async Task<MraHistoryResponse> HistoryAsync(string? mraNo, CancellationToken ct = default)
+        public async Task<MraSwitchesResponse> SetSwitchesAsync(MraSwitchesReq req, AppUserContext user, CancellationToken ct = default)
         {
+            if (!user.IsAdmin) throw new ForbiddenException("Only the administrator can change these switches");
+            if (req.ToolReqCapacity == null && req.LivePo == null) throw new AppValidationException("Send ToolReqCapacity and / or LivePo");
+            MraSwitches before, after;
+            Manifest m;
+            using (await _store.LockAsync(ct))
+            {
+                var p = await _store.GetDocAsync(DocNames.Params, ct) as JsonObject ?? new JsonObject();
+                before = Read(p);
+                if (req.ToolReqCapacity != null) p[MraSwitches.ToolReqKey] = req.ToolReqCapacity.Value;
+                if (req.LivePo != null) p[MraSwitches.LivePoKey] = req.LivePo.Value;
+                after = Read(p);
+                await _store.PutDocAsync(DocNames.Params, p, ct);
+                m = await _store.GetManifestAsync(ct);
+                m.ParamsVersion += 1;
+                await _store.SaveManifestAsync(m, ct);
+            }
+            _cache.Invalidate();
+            _source.Invalidate();
+            static string On(bool b) => b ? "ON" : "OFF";
+            await _audit.AppendAsync(user.AuditName, "switches",
+                $"Tool requests use capacity {On(before.ToolReqCapacity)} -> {On(after.ToolReqCapacity)}; Live PO changes {On(before.LivePo)} -> {On(after.LivePo)}", ct);
+            return new MraSwitchesResponse { Switches = after, ParamsVersion = m.ParamsVersion };
+        }
+
+        /// <summary>Switches as stored in the params document.</summary>
+        public static MraSwitches Read(JsonObject? p) => new()
+        {
+            ToolReqCapacity = p?[MraSwitches.ToolReqKey] is not JsonValue t || !(t.GetValueKind() == JsonValueKind.False),
+            LivePo = p?[MraSwitches.LivePoKey] is JsonValue l && l.GetValueKind() == JsonValueKind.True
+        };
+
+        public async Task<MraFeedResponse> TestSendAsync(MraTestSendReq req, AppUserContext user, CancellationToken ct = default)
+        {
+            if (!user.IsAdmin) throw new ForbiddenException("Only the SAP feed or the administrator can send changes");
             RequireAvailable();
-            if (string.IsNullOrWhiteSpace(mraNo)) throw new AppValidationException("MRA No is required");
-            var no = mraNo.Trim();
-            return new MraHistoryResponse { MraNo = no, Items = await _repo.HistoryAsync(no, ct) };
+            var kind = req.Kind is "po" ? "po" : "mra";
+            JsonNode? node;
+            try
+            {
+                node = JsonNode.Parse(req.Json ?? "");
+            }
+            catch (JsonException ex)
+            {
+                throw new AppValidationException("Not valid JSON: " + ex.Message);
+            }
+            var msgs = MraFeedIntake.Messages(node);
+            if (msgs.Count == 0 || msgs.Count > Math.Max(1, _sap.MaxMraMessagesPerBatch))
+                throw new AppValidationException($"Send 1 to {_sap.MaxMraMessagesPerBatch} messages");
+            var answers = await MraFeedIntake.StoreAndReplayAsync(_repo, _source, _clock, kind, msgs, user.AuditName, "TEST", null, ct);
+            _log.LogInformation("SAP feed test: {Count} {Kind} message(s) from {User}", msgs.Count, kind, user.AuditName);
+            return new MraFeedResponse { Results = answers };
         }
     }
 }

@@ -239,7 +239,7 @@ GO
 MERGE dbo.SAP_REASON_CODES AS t
 USING (VALUES
     (N'COVER_WITHIN_NORM', N'Cover within the norm (STR <= T + buffer)', N'ALLOW', N'COVER-00', 110),
-    (N'NO_PLAN_DATA', N'No plan for the MC-MRP-Flag: cover not computed, allowed', N'ALLOW', N'PLAN-00', 120),
+    (N'NO_PLAN_DATA', N'No Plan Available: no F4 plan for the MC-MRP-Flag in the requirement window, ask the planning team to add it', N'HOLD', N'PLAN-00', 120),
     (N'COVER_ABOVE_NORM', N'Cover above the norm: reduce to Max Permissible', N'REDUCE', N'COVER-01', 130),
     (N'COVER_NO_HEADROOM', N'Existing stock + pending already above the norm: Max Permissible 0', N'HOLD', N'COVER-02', 140),
     (N'MIX_BELOW_MIN', N'Colour mix below the minimum share of its MC-MRP', N'WATCH', N'MIX-01', 150),

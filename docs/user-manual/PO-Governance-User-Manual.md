@@ -402,6 +402,28 @@ Tab **🗂 History**, pick a date range:
   Max Permissible ledger and cancels Watch List requests still waiting. The requests stay in History, marked as
   cleared. Use it only when the day has to start again (e.g. after wrong data).
 
+### 5.9 MRA file and MRA Queues (SAP Merchandise Requests)
+
+An **MRA** is the request raised in SAP before the PO. Open MRAs take capacity from their colour and delivery month in
+the **single concept** Max Permissible, like a released PO (multi concept MRAs are shown, not counted).
+
+| Counted | Not counted |
+|---|---|
+| Level 1 (with Division Head), Level 2 (with Category Head), Level 4 (with Commercial) | Level 3, 6 Discarded, 7 Self Reject, 8 Forced Approved (exception), 9 Draft, X Reject |
+| Level 5 (final) **only** when it became final by a live change today and its PO is not unreleased — until the next morning's files | Delivery date passed (expired), not in the Article Master, multi concept |
+
+1. **Every morning: 📂 Data Setup → MRA – SAP Merchandise Requests → ⬆ Upload MRA file.** One workbook, two sheets (any
+   names): the item lines (DOC.NO, ARTICLE CODE, Color, Generic Article, TOTAL PO QTY, DEL. DATE, LEVEL) and the header
+   report (Document Number, Purchase order, Status). Upload the **full** file (all levels): it replaces yesterday's list.
+   The card says how many MRAs were read per level, how many count now, and what was skipped.
+2. **During the day** SAP sends every change (new MRA, approval, self reject, reject, final) — it counts at once.
+3. **📦 MRA Queues** (everyone; buyers and category heads see their own MCs): tiles per queue (open, exception, today,
+   closed), the decision SAP sent, filters, **Waiting with me**, group by, **⬇ Excel**. Click an MRA for where it is,
+   why it counts or not, and its level history. **By colour** shows what the MRAs take per colour and month; **Today's
+   changes** shows each live change and its effect on Max Permissible.
+4. On the **New PO request** card, the box **"Open MRAs from SAP counted in this colour"** lists the MRAs added to the
+   released POs; the single concept Recommendation column is **Open MRA + approved today**.
+
 ---
 
 ## 6. Administrator guide
@@ -475,6 +497,17 @@ User menu → **🔌 SAP Interface** — the automatic PO check SAP calls when a
 | **🔑 Technical users** | The SAP system logins (one per SAP system, e.g. `sap_ecq`, `sap_ecp`): **+ Add technical user** (password ≥ 24 characters, or leave empty to generate one — **shown once**), Reset password, Disable / Enable, Unlock |
 | **🏷 Reason codes** | Exception reasons SAP shows to approvers (code ≤ 4, text ≤ 60 characters): add, activate, deactivate; read-only list of verdict reason codes |
 | **🧪 Test decision** | **Load sample**, edit, **Run test decision** — runs through the real rules, logged as a test (`TEST-` request ID) |
+
+### SAP Feed (🔌 SAP Feed tab)
+
+Live MRA and PO changes from SAP (`/api/sap/v1/mra-events`, `/po-events`): connection status, every message received
+(applied, duplicate, older, set aside — with the reason), and a **test sender**. Two switches:
+
+- **Tool requests use capacity** (starts ON). Turn **OFF** when buyers raise MRAs in SAP and the MRA feed is live: the
+  New PO request becomes a **check only** ("Raise the request in SAP" — no pop-up, nothing saved), today's tool approvals
+  stop counting and the Approvals tab is hidden. Otherwise the same quantity would be counted twice.
+- **Live PO changes** (starts OFF). ON: PO releases / unreleases from SAP move capacity and the **PO queue** tab appears
+  on MRA Queues.
 
 If the Overview says **"no links: no active API_BASE_URL row POGOV_PORTAL for environment …"**, SAP answers carry no
 verdict link: the server's environment setting or the portal address row needs fixing (IT).

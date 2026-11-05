@@ -50,10 +50,22 @@ namespace Application.Services.V1.Sap
 
         public SapDecisionService(ISapRepository repo, IDatasetCache cache, IStore store, IAppClock clock,
                                   ISapDecisionEngine engine, ISapEventService events, IOptions<SapInterfaceSettings> cfg, ILogger<SapDecisionService> log,
-                                  IAPI? api = null)
+                                  IAPI? api = null, IMraCapacitySource? mra = null)
         {
             _repo = repo; _cache = cache; _store = store; _clock = clock; _engine = engine; _events = events;
-            _cfg = cfg.Value; _log = log; _api = api;
+            _cfg = cfg.Value; _log = log; _api = api; _mra = mra;
+        }
+
+        private readonly IMraCapacitySource? _mra;
+
+        /// <summary>v1.1.7: open MRAs from SAP count in the single concept verdict (none when MRAs are not available).</summary>
+        private async Task<DecisionEngine.Mra.MraCapacity?> MraAsync(DecisionEngine.Model.EngineData data, CancellationToken ct)
+        {
+            DecisionEngine.Mra.MraCapacity? cap = null;
+            if (_mra != null)
+                try { cap = await _mra.GetAsync(data, ct); }
+                catch (Exception ex) when (ex is not OperationCanceledException) { _log.LogWarning(ex, "SAP decision: MRA position not available - decided without open MRAs"); }
+            return cap;   // the caller sets MraScope (an AsyncLocal set in an awaited method does not reach the caller)
         }
 
         /// <summary>
@@ -200,6 +212,7 @@ namespace Application.Services.V1.Sap
                 Uom = i.Uom, DeliveryDate = i.DeliveryDate, NetValue = i.NetValue
             }).ToList();
             var options = Options();
+            using var mraScope = DecisionEngine.Mra.MraScope.Use(await MraAsync(data, ct));
             var result = await Task.Run(() => _engine.Decide(data, ledger, today, items, options), ct);
             ct.ThrowIfCancellationRequested();
             Mark("decide");

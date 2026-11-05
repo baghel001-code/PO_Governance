@@ -67,6 +67,7 @@ namespace DecisionEngine.Tool1
             if (r.FinalApprovedQty != null) card.Chips.Add(new() { Key = "Raised Qty", Value = Js.Fmt(r.FinalApprovedQty.Value), Colour = "#E8006E" });
 
             if (r.Engine == "B" && r.B != null) card.B = BuildB(r, r.B, p, today);
+            if (r.Engine == "B" && r.B?.MraIn is { Items.Count: > 0 } mi) card.MraIn = mi;   // v1.1.7
             if (r.Engine == "A" && r.A != null) card.A = BuildA(r.A, p, dc, r.Decision);
 
             card.ReasonTitle = r.Decision + " — Reason";

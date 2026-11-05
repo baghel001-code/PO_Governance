@@ -70,6 +70,12 @@ namespace DecisionEngine.Results.Tool1
     /// <summary>Port of the object index.html <c>runEngineB</c> (line 3847) returns — Single Concept.</summary>
     public sealed class Tool1EngineBResult
     {
+        /// <summary>v1.1.7: open MRAs from SAP (+ live PO changes) counted in this colour, per delivery month; null when none.</summary>
+        [JsonPropertyName("mraIn"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] public DecisionEngine.Mra.MraIncoming? MraIn { get; set; }
+        /// <summary>v1.1.7 working: released POs (F2) per month, before today's approvals and MRAs.</summary>
+        [JsonPropertyName("f2ByMon"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] public Dictionary<string, double>? F2ByMon { get; set; }
+        /// <summary>v1.1.7 working: today's tool approvals per month (0 while switch 1 is OFF).</summary>
+        [JsonPropertyName("ledgerByMon"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] public Dictionary<string, double>? LedgerByMon { get; set; }
         [JsonPropertyName("decision")] public string Decision { get; set; } = "";
         [JsonPropertyName("decisionReason")] public string DecisionReason { get; set; } = "";
         /// <summary>v1.1.6 D1: true on the "No Plan Available" Hold (no F4 plan in the requirement window).</summary>

@@ -96,7 +96,9 @@ namespace DecisionEngine.Recommendation
 
             if (eng == "B")
             {
-                view.B = engine.RunB(ctx, mc, mrp, brand, flag, view.Months);
+                ctx.Mra = DecisionEngine.Mra.MraScope.Current;   // v1.1.7: open MRAs only in the single concept Recommendation
+                try { view.B = engine.RunB(ctx, mc, mrp, brand, flag, view.Months); }
+                finally { ctx.Mra = null; }
                 view.Paint = engine.Paint(ctx.P, view.B, null);
             }
             else

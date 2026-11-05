@@ -38,11 +38,33 @@ namespace Application.Services.V1.Tool1
         private readonly IAppClock _clock;
         private readonly ITool1DecisionEngine _engine;
         private readonly Tool1Settings _settings;
+        private readonly Interfaces.V1.Sap.IMraCapacitySource? _mra;
 
-        public Tool1Service(IDatasetCache cache, IRequestLedger ledger, IAppClock clock, ITool1DecisionEngine engine, Tool1Settings? settings = null)
+        public Tool1Service(IDatasetCache cache, IRequestLedger ledger, IAppClock clock, ITool1DecisionEngine engine, Tool1Settings? settings = null,
+                            Interfaces.V1.Sap.IMraCapacitySource? mra = null)
         {
             _cache = cache; _ledger = ledger; _clock = clock; _engine = engine;
             _settings = settings ?? new Tool1Settings();
+            _mra = mra;
+        }
+
+        /// <summary>
+        /// v1.1.7: the open MRAs from SAP counted in this call (none when MRAs are not available). The caller sets the scope
+        /// (<c>MraScope.Use(await MraAsync(…))</c>): an AsyncLocal set inside an awaited method does not reach its caller.
+        /// </summary>
+        private async Task<DecisionEngine.Mra.MraCapacity?> MraAsync(EngineData data, CancellationToken ct) =>
+            _mra == null ? null : await _mra.GetAsync(data, ct);
+
+        /// <summary>v1.1.7 switch 1 OFF: the New PO request is a check only — no pop-up, no reason box, nothing saved.</summary>
+        private Tool1ResultDto CheckOnly(Tool1Outcome o, EngineData data, string today, int seq)
+        {
+            o.NeedsConfirmation = false;
+            var res = ToResult(o, data.Params, today, seq, "checkOnly", null);
+            res.NeedsConfirmation = false;
+            res.NeedsColourReason = false;
+            res.CheckOnly = true;
+            if (res.Card != null) res.Card.CheckOnly = true;
+            return res;
         }
 
         public async Task<Tool1FormOptionsDto> GetFormOptionsAsync(string? gm, CancellationToken ct = default)
@@ -57,7 +79,9 @@ namespace Application.Services.V1.Tool1
             var (gm, colour, month, qty) = EngineErrors.Run(() => _engine.CheckInput(data, input));
             var today = _clock.Today;
             var (reqs, seq) = await _ledger.GetDayAsync(today, ct);
+            using var mra = DecisionEngine.Mra.MraScope.Use(await MraAsync(data, ct));
             var o = Decide(data, reqs, today, Tool1Requests.NextId(reqs), gm, colour, month, qty, null);
+            if (!DecisionEngine.Mra.MraScope.ToolRequestsCount(data)) return CheckOnly(o, data, today, seq);
             return ToResult(o, data.Params, today, seq, o.NeedsConfirmation ? "needsConfirmation" : "decided", null);
         }
 
@@ -81,6 +105,9 @@ namespace Application.Services.V1.Tool1
             var (gm, colour, month, qty) = EngineErrors.Run(() => _engine.CheckInput(data, input));
             var today = _clock.Today;
             var (reqs, seq) = await _ledger.GetDayAsync(today, ct);
+            using var mra = DecisionEngine.Mra.MraScope.Use(await MraAsync(data, ct));
+            if (!DecisionEngine.Mra.MraScope.ToolRequestsCount(data))
+                return CheckOnly(Decide(data, reqs, today, Tool1Requests.NextId(reqs), gm, colour, month, qty, null), data, today, seq);
 
             Tool1Outcome o;
             var seenSeq = input.SeenSeq;

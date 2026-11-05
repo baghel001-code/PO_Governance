@@ -10,7 +10,24 @@ the Article Master stop (item 5) and the BOBs sibling list (item 12, display onl
 
 ## v1.1.6 — single concept calculation and screens
 
-__V116_TABLE__
+| # | Python v1.1.6 (patch) | .NET before | .NET now |
+|---|---|---|---|
+| 1 | **Late PO** (PO Assessment): from the 1st to the cut-off day a pending PO of last month is stock at the window start, with the note "[Includes X units of previous month's … pending PO …]" (`10_latepo.py`) | Counted as a PO landing in its own window | `Tool2Engine` + `PrevMonthCarry.LateNote` |
+| 2 | **No Plan (D1)**: no F4 plan in the requirement window → New PO request **Hold** "No Plan Available", checked first; PO Assessment **"No Plan – Review"**, no qty, own tile / filter / colour / export (`20`, `21`, `29`) | Auto Allow / Retain | `Common/NoPlan.cs`, `Tool1EngineB`, `Tool2Engine`, `Tool2Workspace*`, portal (filter button, tile, colours, card note). SAP `/decisions`: HOLD, reason `NO_PLAN_DATA` / `PLAN-00` (was ALLOW) |
+| 3 | **Days left count today (D2)**: on 4 Nov 27 days, not 26 — New PO request, PO Assessment, single concept Recommendation (`22`) | Today not counted | `MonthMath.DaysLeft` in `Tool1EngineB`, Step 3 table, `Tool2Engine`, `CoreColourStrFast(countToday)` (multi concept unchanged except the colour-only bucket, as in the JS) |
+| 4 | **No sale (D3)**: MC without F3 sale → **Watch List** (was Auto Allow "No forecast data") (`20`) | Auto Allow | `Tool1EngineB`; SAP maps it to `MIX_BELOW_MIN` |
+| 5 | **Article Master required**: article not in it (or the file not uploaded) → New PO request stops, nothing saved, single and multi concept (`23`) | Allowed | Checked on the server (`Tool1Flow.CheckInput`), message box in the portal. Not applied to SAP `/decisions` (unknown items keep the existing rule) |
+| 6 | Article **description and vendor** under the code on the card and in Today's Requests (`23`) | – | Card + Today's Requests |
+| 7 | **Later-PO caution** (Allow, ≥ 1,000 pcs) + Step 6; Step 4 heading "D-Day Window from Day 1 of the Month after Delivery" (`24`) | – | `Tool1/Tool1LaterPoCaution.cs`, card + Step 6 |
+| 8 | Parameters: **"Late PO counts until day"** (1–28) (`25`) | Field existed without the 1–28 check | Label and whole-day 1–28 check |
+| 9 | **"Why introduce this colour?"**: single concept Watch List needs the buyer's reason; "Don't send" saves nothing; shown on the card and in Approvals (`28`) | – | `ColourReasonModal`, submit status `needsColourReason`, saved as `colourReason` |
+| 10 | **"How was this number worked out?"** side panel with steps and Excel with formulas, on the New PO request card and every single concept Recommendation cell (`27`, `explain.js`) | – | `Explain/SingleExplainBuilder`, `ExplainPanel`, Excel written in the portal (formulas recalculated in a test) |
+| 11 | **BOBs sibling colours** on the BOBs card (`27` B1) | – | `Tool1Flow.BobsSiblingList`, `BobsSiblings.razor` |
+| 12 | Attribute Analysis and AI Insights **removed from the Planner tabs** (`30`) | Shown | Removed from the navigation (pages kept) |
+| 13 | Browser selector error (`26`), side-by-side install scripts | – | Not applicable to .NET |
+
+The v1.1.6 page rebuilt from the patches is kept in `legacy/v1.1.6/` and is the reference of the parity tests (Tool 1,
+Tool 2, Recommendation); their expected values changed only where v1.1.6 changes them.
 
 ## v1.1.7 — SAP MRAs (single concept)
 

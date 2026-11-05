@@ -201,8 +201,10 @@ namespace DecisionEngine.Tool1
                     if (dm.Length > 0 && qty != 0 && !double.IsNaN(qty)) AddPo(dm, qty);
                 }
 
+            var f2Only = existingPO.ToDictionary();   // v1.1.7: released POs only (for the working)
             // ── Same-day ledger: quantities approved today for this exact Brand × MC × MRP × Flag × Colour ──
-            if (ledger.Count > 0)
+            // v1.1.7 switch 1 "Tool requests use capacity" OFF: today's tool approvals stop counting
+            if (ledger.Count > 0 && Mra.MraScope.ToolRequestsCount(data))
             {
                 foreach (var req in ledger)
                 {
@@ -216,6 +218,12 @@ namespace DecisionEngine.Tool1
                     if (approved is > 0 && Js.Truthy(month)) AddPo(Js.ToJsString(month), approved.Value);
                 }
             }
+
+            // v1.1.7: open MRAs from SAP (and live PO changes when switch 2 is ON) count like released POs
+            var ledgerByMon = new Dictionary<string, double>();
+            foreach (var (k, v) in existingPO) { var d = v - (f2Only.TryGetValue(k, out var f) ? f : 0); if (d != 0) ledgerByMon[k] = d; }
+            var mraIn = Mra.MraScope.Current?.IncomingFor(info.Brand, info.McCd, info.Mrp, info.Flag, colour);
+            if (mraIn != null) foreach (var (k, v) in mraIn.ByMon) AddPo(k, v);
 
             double? effectiveMixPct = mixPct > 0 ? mixPct : (mcAvg > 0 ? 0 : null);
 
@@ -359,6 +367,7 @@ namespace DecisionEngine.Tool1
                 WindowDemand = windowDemand, WindowDailyRate = windowDailyRate, ArtSTR = artSTR, HasBreach = hasBreach,
                 MaxPermQty = maxPermQty, MixFailed = false, HasDailyF3 = hasDailyF3, ForecastByMon = forecastDict,
                 ExistingPO = existingPO.ToDictionary(), PrevMonthCarryNote = carryNote,
+                MraIn = mraIn, F2ByMon = mraIn != null ? f2Only : null, LedgerByMon = mraIn != null ? ledgerByMon : null,   // working only when MRAs count (v1.1.6 results unchanged)
                 PrevMonthCarry = new Tool1CarryDto { Qty = carry.Qty, Cutoff = carry.Cutoff, PrevKey = carry.PrevKey, CurrKey = carry.CurrKey },
                 FutureRiskMonths = futureRisk, PreRoll = preRoll, EffMix = effectiveMixPct, StockAtD1NoProp = stockAtD1NoProp, EffectiveT = effectiveT
             };

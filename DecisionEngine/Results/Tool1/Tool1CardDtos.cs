@@ -21,6 +21,10 @@ namespace DecisionEngine.Results.Tool1
 
     public sealed class Tool1CardDto
     {
+        /// <summary>v1.1.7 switch 1 OFF: "Check only – not saved, uses no capacity. Raise the request in SAP."</summary>
+        public bool CheckOnly { get; set; }
+        /// <summary>v1.1.7: open MRAs from SAP counted in this colour (single concept), shown under the summary tiles.</summary>
+        public DecisionEngine.Mra.MraIncoming? MraIn { get; set; }
         /// <summary>The number in the header circle (request id).</summary>
         public int Id { get; set; }
         public string Gm { get; set; } = "";

@@ -6,6 +6,7 @@
 @inject UserSessionState Session
 @inject ISnackbar Snackbar
 @inject ILogger<NewRequest> Log
+@inject ServerStatusService Status
 
 <PageTitle>New Request · VMM PO Governance</PageTitle>
 <HeadContent>
@@ -102,6 +103,12 @@
         </div>
     </div>
 
+    @if (!Status.ToolReqCapacity)
+    {
+        <div style="display:flex;align-items:center;gap:10px;margin:0 0 14px;padding:10px 14px;border-radius:10px;background:#FFF1D6;border:1px solid #F5D79E;color:#6B4500;font-size:12.5px;font-weight:600" data-testid="check-only-banner">
+            ℹ Raise the request in SAP – checks here are for information only: nothing is saved and nothing uses capacity.
+        </div>
+    }
     <div id="c-results" data-testid="results">
         @foreach (var r in _results)
         {
@@ -236,7 +243,8 @@
                 return;
             }
 
-            var result = await SubmitAsync(input, v.Data);
+            // v1.1.7 switch 1 OFF: check only — no pop-up, no reason box, nothing saved
+            var result = v.Data.Status == "checkOnly" ? v.Data : await SubmitAsync(input, v.Data);
             if (result == null) return;
 
             foreach (var t in result.Toasts) Toast(t, null);

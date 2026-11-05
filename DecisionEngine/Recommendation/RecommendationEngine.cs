@@ -153,6 +153,12 @@ namespace DecisionEngine.Recommendation
             var forecastByMon = BuildF4Map(data, mc, mrp, brand, flag);
             var f2OnlyCols = BuildF2RawMap(data, mc, mrp, brand, flag);
             var f2AllCols = MergeSessionLedgerIntoF2Map(ctx, DeepClone(f2OnlyCols), mc, mrp, brand, flag);
+            if (ctx.Mra != null)   // v1.1.7 open MRAs (single concept Recommendation only)
+                foreach (var (c, byMon) in ctx.Mra.ByColourFor(mc, mrp, brand, flag))
+                {
+                    if (!f2AllCols.TryGetValue(c, out var m)) f2AllCols[c] = m = new JsObjectMap<double>();
+                    foreach (var (k, v) in byMon) m[k] = m.Get(k) + v;
+                }
 
             var mixT = JsOps.Or(ctx.P.Mix, 2);
             var rows = cols.Select(col =>

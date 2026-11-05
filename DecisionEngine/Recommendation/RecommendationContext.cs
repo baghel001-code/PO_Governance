@@ -31,6 +31,8 @@ namespace DecisionEngine.Recommendation
         public int Y { get; }
         public int M { get; }
         public int D { get; }
+        /// <summary>v1.1.7: open MRAs counted in the single concept Recommendation (set only for that view, as app/index.html _v117RecoMRA).</summary>
+        public DecisionEngine.Mra.MraCapacity? Mra { get; set; }
     }
 
     /// <summary>

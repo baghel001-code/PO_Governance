@@ -14,9 +14,12 @@ namespace Application.Services.V1.Recommendation
         private readonly IAppClock _clock;
         private readonly IRecommendationEngine _engine;
 
-        public RecommendationService(IDatasetCache cache, IRequestLedger ledger, IAppClock clock, IRecommendationEngine engine)
+        private readonly Interfaces.V1.Sap.IMraCapacitySource? _mra;
+
+        public RecommendationService(IDatasetCache cache, IRequestLedger ledger, IAppClock clock, IRecommendationEngine engine,
+                                     Interfaces.V1.Sap.IMraCapacitySource? mra = null)
         {
-            _cache = cache; _ledger = ledger; _clock = clock; _engine = engine;
+            _cache = cache; _ledger = ledger; _clock = clock; _engine = engine; _mra = mra;
         }
 
         public async Task<RecommendationContext> CreateContextAsync(CancellationToken ct = default)
@@ -36,6 +39,8 @@ namespace Application.Services.V1.Recommendation
         public async Task<RecommendationViewDto> GetAsync(RecommendationRequestDto request, CancellationToken ct = default)
         {
             var ctx = await CreateContextAsync(ct);
+            // v1.1.7: open MRAs from SAP are added in the single concept Recommendation view
+            using var mra = DecisionEngine.Mra.MraScope.Use(_mra == null ? null : await _mra.GetAsync(ctx.Data, ct));
             return EngineErrors.Run(() => _engine.View(ctx, request));
         }
 

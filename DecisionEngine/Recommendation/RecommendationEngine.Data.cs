@@ -267,7 +267,7 @@ namespace DecisionEngine.Recommendation
         public static JsObjectMap<JsObjectMap<double>> MergeSessionLedgerIntoF2Map(RecommendationContext ctx, JsObjectMap<JsObjectMap<double>> f2AllCols,
                                                                                   string mc, string mrp, string brand, string flag)
         {
-            if (ctx.Requests.Count == 0) return f2AllCols;
+            if (ctx.Requests.Count == 0 || !DecisionEngine.Mra.MraScope.ToolRequestsCount(ctx.Data)) return f2AllCols;   // v1.1.7 switch 1
             foreach (var req in ctx.Requests)
             {
                 if (!LedgerHelpers.IsToday(req, ctx.Today)) continue;
@@ -314,7 +314,7 @@ namespace DecisionEngine.Recommendation
         public static JsObjectMap<JsObjectMap<JsObjectMap<double>>> MergeSessionLedgerIntoF2ByAttrMap(RecommendationContext ctx,
             JsObjectMap<JsObjectMap<JsObjectMap<double>>> f2ByAttr, string mc, string mrp, string brand, string flag, string dim)
         {
-            if (ctx.Requests.Count == 0) return f2ByAttr;
+            if (ctx.Requests.Count == 0 || !DecisionEngine.Mra.MraScope.ToolRequestsCount(ctx.Data)) return f2ByAttr;   // v1.1.7 switch 1
             var amMap = AmAttrMap(ctx.Data, dim);
             foreach (var req in ctx.Requests)
             {

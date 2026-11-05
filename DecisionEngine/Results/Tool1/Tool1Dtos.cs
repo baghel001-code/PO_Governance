@@ -104,6 +104,8 @@ namespace DecisionEngine.Results.Tool1
         /// (<see cref="Tool1SubmitInputDto.ColourReason"/>); "Don't send" saves nothing (toast <see cref="NotSentMessage"/>).
         /// </summary>
         public bool NeedsColourReason { get; set; }
+        /// <summary>v1.1.7 switch 1 "Tool requests use capacity" OFF: status "checkOnly" — information only, nothing saved, raise the request in SAP.</summary>
+        public bool CheckOnly { get; set; }
         /// <summary>v1.1.6 S5: "Not sent: nothing was saved for {gm} {colour}." (shown on "Don't send").</summary>
         public string? NotSentMessage { get; set; }
         /// <summary>Pop-up figures (when <see cref="NeedsConfirmation"/>): "You proposed" and "Max Permissible" (also the input's max and default).</summary>

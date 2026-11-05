@@ -1,0 +1,79 @@
+VMM PO Governance - v1.1.6  (4 Nov 2026)  - for 10.10.16.35
+==========================================================
+
+Built on v1.1.4 (3.1.4), the version installed on .35. Users, passwords, data, history and
+config.json are kept. No database change (same files), so going back to v1.1.4 is safe at any time.
+Multi concept (True Repeat, BOBs, new options) and the multi concept Recommendation are NOT changed.
+No workflow change: Watch List still goes to the Category Head under Approvals, as today.
+
+SINGLE CONCEPT - CALCULATION CHANGES (agreed 4 Nov 2026)
+--------------------------------------------------------
+1. Late PO (PO Assessment). From the 1st to the cut-off day (default 5), a pending PO of last
+   month is counted as stock at the window start (1st of this month), not as a PO landing inside
+   its own window. Only the first month of the roll changes. Note added to the reason:
+   "[Includes X units of previous month's (MM.YYYY) pending PO, counted in the stock at the window
+   start (MM.YYYY) - Day-of-month cut-off = N.]"
+   Example (29 Oct data, assessed 4 Nov): PO 5901123971, 1130156584 BLK, Oct 2026, 8,400 pcs:
+   v1.1.4 Retain (STR 54 days) -> v1.1.6 Reduce Qty, keep 490 (STR 926 days).
+2. No F4 plan (D1). No plan for the Brand x MC x MRP x Flag in the requirement window (D days
+   from the 1st of the month after delivery):
+   - New PO request: Hold - "No Plan Available ... Ask the planning team to add the plan."
+     (was Auto Allow, no limit). Checked first.
+   - PO Assessment: new status "No Plan - Review" (was Retain). No quantity is suggested; the
+     planner decides. Own KPI tile, own "No Plan" filter button, own colour in the Excel export.
+     Not counted in Qty / Value at Risk.
+3. Days left in the month count today (D2). F1 stock is yesterday's close, so today's sale is still
+   to come. On 4 Nov (30-day month) 27 days are counted instead of 26. New PO request, single
+   concept Recommendation and PO Assessment use the same rule. Effect: about one more day of sale
+   before the window start, so Max Permissible goes up by about one day's sale of the colour
+   (LGY Dec 2026 on 4 Nov: 9,064 -> 9,222).
+4. Colour with no sale (D3). A colour share under 2% already gave Watch List. New: when the MC has
+   no sale at all in F3 (the share cannot be worked out) the New PO request gives Watch List
+   (was Auto Allow "No forecast data").
+5. Article not in the Article Master -> the New PO request stops (single and multi concept),
+   with a message; nothing is saved. THE ARTICLE MASTER MUST BE UPLOADED (it was optional): without
+   it every New PO request stops with "The Article Master is not uploaded".
+
+SINGLE CONCEPT - SCREENS (display only, no number changes)
+----------------------------------------------------------
+6. Caution note on the New PO request (Allow only): when, with this request, a later PO will be
+   1,000 pcs or more too much on a later 1st, the card names it, e.g. "the Feb 2027 PO 5,000 will
+   be 1,963 too much on 1 Mar 2027 (118d vs 79d limit). Consider reducing it to 3,037."
+   Step 6 of the Step-by-Step Computation shows the working. Information only.
+7. Step 4 heading: "STR Calculation - 75-Day Window from Day 1 of the Month after Delivery"
+   (was "60-Day Window from Day 1 of Delivery Month"; the calculation was already right).
+8. "Why introduce this colour?" - single concept Watch List (colour under 2% or no sale): the buyer
+   must type the reason before the request is saved and sent to the Category Head. "Don't send"
+   saves nothing. The approver sees the reason in Approvals; it is also on the result card.
+9. Generic Article description (grey) and vendor under the code on the result card and in
+   Today's Requests.
+10. "How was this number worked out?" side panel: numbered steps in plain English with an Excel
+    download (formulas) - on the single concept New PO request card and on every quantity / Hold /
+    Watch List of the single concept Recommendation (+ "Download Excel (all lines)").
+11. Parameters panel: "Late PO counts until day" (default 5, whole days 1-28). It was fixed at 5
+    in the program with no screen.
+
+BOBs
+----
+12. BOBs result card: "Show the sibling colours of this style" - the BSR rows the BOBs rule looked
+    at (Generic Article + colour, BSR season, weeks on floor, rank, sell-through per day, first
+    3 weeks sale). Display only: the BOBs rule is unchanged.
+
+FIX
+---
+13. The browser no longer shows the error "'#rbtn-${r.id}' is not a valid selector" after every
+    request (no effect on results).
+
+SECOND COPY ON ANOTHER PORT (optional)
+14. install-side-by-side.ps1 / remove-side-by-side.ps1 + SIDE-BY-SIDE-STEPS.txt: run v1.1.6 next to the
+    current tool on its own port (e.g. 8090) with a snapshot of today's data; the current tool is not
+    touched. New config.json setting "cookie_name" (default "vmm_sess", unchanged) so signing in on one
+    port does not sign you out of the other.
+
+TABS
+15. Attribute Analysis and AI Insights tabs removed from the Planner view (5 Nov 2026).
+
+NOT IN THIS VERSION (on purpose)
+- Workflow (Buyer -> Category Head -> Commercial), BOBs business justification and routing.
+- Multi concept window / Max Permissible changes, 12-month colour mix.
+

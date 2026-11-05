@@ -1,0 +1,75 @@
+@* v1.1.6 S5 (legacy/v1.1.6/patches/28_colour_reason.py, _askColourReason): single concept Watch List — the buyer
+   must type "Why introduce this colour?" before the request is saved and sent to the Category Head.
+   AskAsync completes with the reason (trimmed, at most 1,000 characters), or null for "Don't send". *@
+
+@if (_visible)
+{
+    <div class="t1-qc-overlay" data-testid="colour-reason">
+        <div class="t1-qc t1-why" role="dialog" aria-modal="true" aria-labelledby="t1-why-title">
+            <div class="t1-why-title" id="t1-why-title">Why introduce this colour?</div>
+            <div class="t1-why-sub">
+                <b>@_gm · @_colour</b> · delivery @_month · @Js.Fmt(_qty) pcs<br />
+                @_reason<br />
+                The request goes to the Category Head only with your reason.
+            </div>
+            <label for="t1-why-txt" class="t1-why-lbl">Your reason (required)</label>
+            <textarea id="t1-why-txt" rows="4" maxlength="2000" @bind="_text" @bind:event="oninput" @ref="_input" data-testid="why-text"></textarea>
+            @if (_error)
+            {
+                <div class="t1-why-err" data-testid="why-error">Please type the reason before sending.</div>
+            }
+            <div class="t1-why-btns">
+                <button class="t1-btn-sec" @onclick="DontSend" data-testid="why-dont">Don't send</button>
+                <button class="t1-btn-pri" @onclick="Send" data-testid="why-send">Send to Category Head</button>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    private bool _visible, _error, _focus;
+    private string _gm = "", _colour = "", _month = "", _reason = "", _text = "";
+    private double _qty;
+    private ElementReference _input;
+    private TaskCompletionSource<string?>? _tcs;
+
+    /// <summary>Shows the dialog for one request; completes with the reason or null ("Don't send").</summary>
+    public Task<string?> AskAsync(string gm, string colour, string month, double qty, string decisionReason)
+    {
+        _tcs?.TrySetResult(null);
+        _tcs = new TaskCompletionSource<string?>(TaskCreationOptions.RunContinuationsAsynchronously);
+        (_gm, _colour, _month, _qty, _reason) = (gm, colour, month, qty, decisionReason);
+        _text = "";
+        _error = false;
+        _visible = true;
+        _focus = true;
+        StateHasChanged();
+        return _tcs.Task;
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (_focus && _visible)
+        {
+            _focus = false;
+            try { await _input.FocusAsync(); } catch { /* element gone */ }
+        }
+    }
+
+    private void Send()
+    {
+        var v = (_text ?? "").Trim();
+        if (v.Length == 0) { _error = true; _focus = true; return; }
+        Close(v.Length > 1000 ? v[..1000] : v);
+    }
+
+    private void DontSend() => Close(null);
+
+    private void Close(string? reason)
+    {
+        _visible = false;
+        var t = _tcs;
+        _tcs = null;
+        t?.TrySetResult(reason);
+    }
+}

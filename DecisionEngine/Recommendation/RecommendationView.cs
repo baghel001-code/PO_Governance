@@ -91,6 +91,8 @@ namespace DecisionEngine.Recommendation
                 ? MonthMath.SortByOrdinal(request.Months.Where(m => !string.IsNullOrWhiteSpace(m)).Select(m => m.Trim()).Distinct())
                 : engine.DefaultMonths(view.AllMonths, ctx.Today);
             view.DimOptions = engine.DimOverrideOptions(view.RelevantDim, view.DimOverride);
+            view.Params = ctx.P;          // v1.1.6 S8: "How was this number worked out?" is laid out by the portal
+            view.Today = ctx.Today;
 
             if (eng == "B")
             {

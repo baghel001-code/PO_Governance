@@ -1,0 +1,131 @@
+@* v1.1.6 S8 "How was this number worked out?" (legacy/v1.1.6/app/explain.js Explain.panel): a side panel with
+   numbered steps in plain English, the result, "Where the x% comes from", the step-by-step table and the Excel
+   downloads with formulas ("this calculation", and "all lines" on the Recommendation). Display only: every
+   number comes from the server's engines (SingleExplainDto). Closed with ✕, the backdrop or Esc. *@
+@using DecisionEngine.Results.Explain
+@using Infrastructure.Services.V1.Excel
+@inject FileDownloadService Files
+@inject UserSessionState Session
+@inject ISnackbar Snackbar
+
+@if (Explain != null)
+{
+    <div class="xp-ov" @onclick="CloseAsync"></div>
+    <div class="xp" role="dialog" aria-label="@(string.IsNullOrEmpty(Explain.Title) ? "How this number was worked out" : Explain.Title)" tabindex="-1" @onkeydown="OnKey" data-testid="explain-panel">
+        <div class="xp-hd">
+            <div>
+                <div class="xp-k">@Explain.Kicker</div>
+                <div class="xp-t">@Explain.Title</div>
+                @if (!string.IsNullOrEmpty(Explain.Sub))
+                {
+                    <div class="xp-s">@Explain.Sub</div>
+                }
+            </div>
+            <button class="xp-x" type="button" aria-label="Close" @onclick="CloseAsync">✕</button>
+        </div>
+        <div class="xp-b">
+            @if (Explain.WarnFirst != null)
+            {
+                <div class="xp-warn">@Explain.WarnFirst</div>
+            }
+            @foreach (var s in Explain.Steps)
+            {
+                <div class="xp-st">
+                    <div class="xp-no @(s.No.Length > 2 ? "l" : "")">@s.No</div>
+                    <div class="xp-tx">@Segs(s.Segments)</div>
+                </div>
+            }
+            @if (Explain.Result.Count > 0)
+            {
+                <div class="xp-res" data-testid="explain-result">@Segs(Explain.Result)</div>
+            }
+            @if (Explain.Warn != null)
+            {
+                <div class="xp-warn">@Explain.Warn</div>
+            }
+            @if (Explain.MixTitle != null)
+            {
+                <details>
+                    <summary>@Explain.MixTitle</summary>
+                    <div style="margin-top:6px;line-height:1.55">@Explain.MixText</div>
+                </details>
+            }
+            @if (Explain.TableHead != null && Explain.TableRows != null)
+            {
+                <details>
+                    <summary>Step-by-step table</summary>
+                    <table class="xp-t2">
+                        <thead><tr>@foreach (var h in Explain.TableHead) { <th>@h</th> }</tr></thead>
+                        <tbody>
+                            @foreach (var r in Explain.TableRows)
+                            {
+                                <tr>@foreach (var c in r) { <td>@c</td> }</tr>
+                            }
+                        </tbody>
+                    </table>
+                </details>
+            }
+        </div>
+        @if (Explain.Book != null || AllLines != null)
+        {
+            <div class="xp-ft">
+                @if (Explain.Book != null)
+                {
+                    <button type="button" class="xp-btn p" @onclick="() => DownloadAsync(Explain.Book)" data-testid="explain-excel">Download this calculation (Excel)</button>
+                }
+                @if (AllLines != null)
+                {
+                    <button type="button" class="xp-btn" @onclick="() => DownloadAsync(AllLines)" data-testid="explain-excel-all">Download Excel (all lines)</button>
+                }
+            </div>
+        }
+    </div>
+}
+
+@code {
+    /// <summary>The panel to show; null = closed.</summary>
+    [Parameter] public SingleExplainDto? Explain { get; set; }
+    /// <summary>"Download Excel (all lines)" (single concept Recommendation only).</summary>
+    [Parameter] public ExplainBookDto? AllLines { get; set; }
+    [Parameter] public EventCallback OnClose { get; set; }
+
+    private Task CloseAsync() => OnClose.InvokeAsync();
+
+    private async Task OnKey(KeyboardEventArgs e)
+    {
+        if (e.Key == "Escape") await CloseAsync();
+    }
+
+    private static RenderFragment Segs(List<ExplainSegDto> segs) => __builder =>
+    {
+        foreach (var g in segs)
+        {
+            if (g.Bold)
+            {
+                <b class="v">@g.Text</b>
+            }
+            else
+            {
+                @g.Text
+            }
+        }
+    };
+
+    /// <summary>Writes the workbook (formulas included) in the portal and hands it to the browser.</summary>
+    public async Task DownloadAsync(ExplainBookDto book)
+    {
+        try
+        {
+            var bytes = ExplainExcelWriter.Write(book, ExplainExcelWriter.Stamp(DateTimeOffset.Now, Session.Name));
+            await Files.SaveAsync(new ApiFileResponse
+            {
+                FileName = book.FileName, FileBytes = bytes,
+                ContentType = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            });
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or ArgumentException or IOException or Microsoft.JSInterop.JSException)
+        {
+            Snackbar.Add("Download failed: " + ex.Message, Severity.Error);
+        }
+    }
+}

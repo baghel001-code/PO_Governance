@@ -20,6 +20,10 @@ namespace Admin.Components.Shared.Tool2
             _ => ("#00873E", "#DCFCE7"),
         };
 
+        /// <summary>Decision colour of a PO row of the Brand → MRP tree (renderBrandSummary; v1.1.6: No Plan – Review navy).</summary>
+        public static string TreeColor(string decision) =>
+            decision == DecisionEngine.Model.Decisions.NoPlanReview ? "#3B5B92" : ReasonColors(decision).Color;
+
         /// <summary>Quartile chip colour of the Multi Concept table.</summary>
         public static string QuartileColor(string? q) => q switch
         {

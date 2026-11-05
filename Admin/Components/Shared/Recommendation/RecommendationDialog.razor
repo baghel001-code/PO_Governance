@@ -3,6 +3,9 @@
    PO_RECOMMENDATION_GET (RecommendationViewDto); this component only lays it out.
    Open it with RecommendationDialog.ShowAsync(DialogService, gm) or (…, new RecommendationRequestDto{…}). *@
 @using DecisionEngine.Results.Recommendation
+@using DecisionEngine.Results.Explain
+@using DecisionEngine.Explain
+@using Admin.Components.Shared.Explain
 @inject FileDownloadService Files
 @inject ISnackbar Snackbar
 @inject IDialogService Dialogs
@@ -48,6 +51,7 @@
                 </div>
             </div>
         </div>
+        <ExplainPanel @ref="_xp" Explain="_explain" AllLines="_explainAll" OnClose="() => { _explain = null; _explainAll = null; }" />
     </DialogContent>
 </MudDialog>
 
@@ -187,6 +191,31 @@
 
     private void Close() => MudDialog.Close();
 
+    // ── v1.1.6 S8 "How was this number worked out?" (explain.js hookPaint / recoAll) ──
+    private ExplainPanel? _xp;
+    private SingleExplainDto? _explain;
+    private ExplainBookDto? _explainAll;
+
+    private string ExplainGroup() => _view == null ? "" :
+        SingleExplainBuilder.GroupText(_view.Info.Brand, _view.Info.McDesc, _view.Info.McCd, _view.Info.Mrp, _view.Info.Flag);
+
+    private ExplainBookDto? AllLinesBook() =>
+        _view?.B == null || _view.Params == null ? null
+            : SingleExplainBuilder.RecommendationAll(_view.B, _view.Params, ExplainGroup(), _view.Info.McCd, _view.Today ?? DateTime.Today.ToString("yyyy-MM-dd"));
+
+    private void OpenExplain(RecBRowDto r, RecBMonthDto md)
+    {
+        if (_view?.Params == null) return;
+        _explain = SingleExplainBuilder.ForRecommendation(r, md, _view.Params, ExplainGroup(), _view.Today ?? DateTime.Today.ToString("yyyy-MM-dd"));
+        _explainAll = md.Action == "No data" ? null : AllLinesBook();
+    }
+
+    private async Task DownloadAllLinesAsync()
+    {
+        var book = AllLinesBook();
+        if (book != null && _xp != null) await _xp.DownloadAsync(book);
+    }
+
     // ─────────────────────────── painting (_paintRec) ───────────────────────────
 
     private double Eff => _view?.Paint.Eff ?? 0;
@@ -227,7 +256,17 @@
     private RenderFragment SingleConcept(RecBResultDto b) => __builder =>
     {
         var months = _view!.Months;
-        <div class="rec-sec">@_view.Paint.Heading</div>
+        @* v1.1.6 S8: window / limit, "Download Excel (all lines)" and every cell opens "How was this number worked out?" *@
+        <div class="rec-sec" style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">@_view.Paint.Heading
+            @if (_view.Paint.AllLinesLabel != null && _view.Params != null)
+            {
+                <button type="button" id="xs-all" class="rec-xs-all" @onclick="DownloadAllLinesAsync" data-testid="xs-all">@_view.Paint.AllLinesLabel</button>
+            }
+        </div>
+        @if (_view.Paint.HeadingHint != null)
+        {
+            <div style="font-size:11px;color:#5A6480;margin:-2px 0 8px">@_view.Paint.HeadingHint</div>
+        }
         <div class="rec-scroll">
             <table class="rec-tbl">
                 <thead>
@@ -268,16 +307,19 @@
                             {
                                 <td class="r mono" style="color:#9CA3AF;border-left:2px solid #F1F5F9">@F(md.Pend)</td>
                                 <td class="r mono" style="@(md.Appr > 0 ? "color:#7C3AED;font-weight:700" : "color:#CBD5E1")" title="Approved today in Tool 1, not yet in F2">@(md.Appr > 0 ? F(md.Appr) : "—")</td>
+                                var (rr, mm) = (r, md);
                                 @if (md.Action == "Watch List")
                                 {
-                                    <td><span class="rec-maxb" title="@r.WatchReason" style="background:#FFF7ED;color:#92400E;border-bottom:1px dotted #92400E">👁 Watch List</span></td>
+                                    <td><span class="rec-maxb" title="@(r.WatchReason + " Click to see why.")" style="background:#FFF7ED;color:#92400E;border-bottom:1px dotted #92400E;cursor:pointer"
+                                              @onclick="() => OpenExplain(rr, mm)" data-testid="xs-cell">👁 Watch List</span></td>
                                 }
                                 else
                                 {
                                     var raise = md.Action == "Raise";
                                     var ab = raise ? "#DCFCE7" : "#FEF2F2";
                                     var ac = raise ? "#00873E" : "#DC2626";
-                                    <td><span class="rec-maxb" title="@md.Tip" style="background:@ab;color:@ac;border-bottom:1px dotted @ac">@(md.Rec > 0 ? F(md.Rec) : md.Action)</span></td>
+                                    <td><span class="rec-maxb" title="@(md.Tip + ". Click to see how.")" style="background:@ab;color:@ac;border-bottom:1px dotted @ac;cursor:pointer"
+                                              @onclick="() => OpenExplain(rr, mm)" data-testid="xs-cell">@(md.Rec > 0 ? F(md.Rec) : md.Action)</span></td>
                                 }
                             }
                         </tr>

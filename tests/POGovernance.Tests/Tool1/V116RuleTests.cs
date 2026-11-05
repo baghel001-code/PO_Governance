@@ -168,5 +168,55 @@ namespace POGovernance.Tests.Tool1
             Assert.Equal(1800 + 1800 + 1800 * 13 / 28.0, n.WDem, 9);
             Assert.Equal(Math.Floor(75 * 1.05 * n.WDem / 75 - 380), n.Can);
         }
+
+        /// <summary>The workbooks' formulas, recalculated by ClosedXML, give the tool's own numbers (as explain.js' tests did).</summary>
+        [Theory]
+        [InlineData("8800000003", "BLU", "11.2026")]
+        [InlineData("8800000003", "BLU", "01.2027")]
+        [InlineData("1101000101", "WHT", "12.2026")]
+        public async Task Explain_workbook_formulas_recalculate_to_the_tools_numbers(string gm, string colour, string month)
+        {
+            var data = Tool1Fixture.Data("S1-early-month");
+            var v = await Service(data, new FakeRequestLedger { Today = "2026-10-03" }).ValidateAsync(new() { Gm = gm, Colour = colour, Month = month, Qty = 100 }, Buyer);
+            AssertRecalculates(v.Card!.Explain!.Book!);
+
+            // the single concept Recommendation: every colour × month and "all lines"
+            var rec = new RecommendationEngine();
+            var ctx = new RecommendationContext(data, Array.Empty<System.Text.Json.Nodes.JsonObject>(), "2026-10-03");
+            var b = rec.RunB(ctx, "1101", "399", "non-pl", "non-bogo", new[] { "10.2026", "11.2026", "12.2026" });
+            foreach (var r in b.Rows)
+                foreach (var md in r.MData)
+                {
+                    var x = SingleExplainBuilder.ForRecommendation(r, md, data.Params, "NON-PL · M-TSHIRT RN · ₹399 · NON-BOGO", "2026-10-03");
+                    if (md.Action is "Raise" or "Hold")
+                    {
+                        Assert.Null(x.Warn);   // the steps give the table's own Max Permissible
+                        AssertRecalculates(x.Book!);
+                    }
+                }
+            AssertRecalculates(SingleExplainBuilder.RecommendationAll(b, data.Params, "NON-PL", "1101", "2026-10-03"));
+        }
+
+        private static void AssertRecalculates(DecisionEngine.Results.Explain.ExplainBookDto book)
+        {
+            var bytes = Infrastructure.Services.V1.Excel.ExplainExcelWriter.Write(book, "test");
+            using var wb = new ClosedXML.Excel.XLWorkbook(new MemoryStream(bytes));
+            var n = 0;
+            foreach (var sh in book.Sheets)
+            {
+                var ws = wb.Worksheet(sh.Name);
+                for (var ri = 0; ri < sh.Rows.Count; ri++)
+                    for (var ci = 0; ci < sh.Cols.Count; ci++)
+                    {
+                        var c = sh.Rows[ri].Cells[ci];
+                        if (c?.Formula == null) continue;
+                        var cell = ws.Cell(5 + ri, ci + 1);
+                        Assert.Equal(c.Formula, cell.FormulaA1);
+                        if (c.Value is double d) { Assert.Equal(d, cell.Value.GetNumber(), 6); n++; }
+                        else if (c.Value is string s) Assert.Equal(s, cell.Value.GetText());
+                    }
+            }
+            Assert.True(n > 0);
+        }
     }
 }

@@ -46,3 +46,6 @@
 .gm-qty-trigger { opacity: 0; transition: opacity .12s ease; margin-left: 5px; font-size: 9px; color: #1A4FAF; background: #EAF0FB; border: 1px solid #B8CCE8; border-radius: 3px; padding: 1px 5px; cursor: pointer; white-space: nowrap; }
 .gm-qty-cell:hover .gm-qty-trigger { opacity: 1; }
 .gm-qty-trigger.gm-qty-open { opacity: 1; background: #1A4FAF; color: #fff; border-color: #1A4FAF; }
+
+/* v1.1.6 S8: "Download Excel (all lines)" next to the single concept heading */
+.rec-xs-all { margin-left: auto; background: #00873E; border: none; border-radius: 6px; color: #fff; font-size: 10.5px; font-weight: 700; cursor: pointer; padding: 5px 12px; font-family: var(--font); }

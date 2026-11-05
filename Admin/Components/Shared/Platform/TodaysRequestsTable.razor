@@ -54,7 +54,11 @@ else
                         var eng = r.Str("engine");
                         <tr>
                             <td class="pf-mono pf-nowrap" style="font-size:10.5px">@(r.Truthy("reqId") ? r.Str("reqId") : r.Str("id"))</td>
-                            <td class="pf-mono" style="font-size:11px">@r.Str("gm")</td>
+                            @* v1.1.6 S7: Generic Article description under the code, vendor on hover *@
+                            <td class="pf-mono" style="font-size:11px" title="@(i.Str("artDesc") + (i.Truthy("vendorName") ? " · Vendor: " + i.Str("vendorName") : ""))">@r.Str("gm")@if (i.Truthy("artDesc"))
+                                {
+                                    <div style="font-family:var(--font);font-size:10px;color:#6B7280;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:200px">@i.Str("artDesc")</div>
+                                }</td>
                             <td>@r.Str("colour")</td>
                             <td class="pf-small">@(i.Truthy("mcDesc") ? i.Str("mcDesc") : "—")</td>
                             <td>₹@(i.Truthy("mrp") ? i.Str("mrp") : "—")</td>

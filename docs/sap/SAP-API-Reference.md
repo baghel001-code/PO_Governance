@@ -754,7 +754,7 @@ message with status 3 for the same MRA makes it count.
 | `po_status` | with level 5 | `Released` / `Unreleased` / `1` / `2` / `3` / `Closed` — decides whether a level 5 MRA counts |
 | `occurred_at` | recommended | Time of the change in SAP |
 | `msg_id` | recommended | Unique per message |
-| `decision`, `decision_reason`, `decision_id`, `decision_at`, `max_permissible`, `decision_url`, `working` | no | The tool's verdict as given to the buyer (from `/decisions`): shown on the MRA Queues page; **never used to count**. Send with the MRA's first message or whenever it changes |
+| `decision`, `decision_reason`, `decision_id`, `decision_at`, `max_permissible`, `decision_url`, `working` | no | The tool's verdict as given to the buyer (from `/decisions`): shown on the MRA Queues page; **never used to count**. Send with the MRA's first message or whenever it changes. `working` (max 60 KB) has the fields of the tool's "Download working (JSON)": decision, reason, article, colour, deliveryMonth, askedQty, group, stockToday, colourShare, windowDays, windowStart, windowDailyRate, limitDays, stockNeededAtWindowStart, stockAtWindowStart, maxPermissible, monthByMonth, incomingParts (releasedPOs / openMRAs / approvedInToolToday), openMRAsCounted |
 
 Examples:
 

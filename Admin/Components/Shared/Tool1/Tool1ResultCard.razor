@@ -49,6 +49,10 @@
             <div class="xp-reslink">
                 <span class="xp-link" role="button" tabindex="0" @onclick="() => _explain = Card.Explain" @onkeydown="OpenOnEnter" data-testid="explain-link">How was this number worked out? →</span>
                 <span style="color:#6B7280">(steps, Excel with formulas)</span>
+                @if (Card.Working != null)
+                {
+                    <span class="xp-link" role="button" tabindex="0" style="margin-left:12px" @onclick="DownloadWorkingAsync" data-testid="working-json">⬇ Download working (JSON)</span>
+                }
             </div>
         }
         @if (Card.BobsSiblings is { Count: > 0 } sibs)
@@ -138,6 +142,15 @@
 
 @code {
     [Parameter, EditorRequired] public Tool1CardDto Card { get; set; } = default!;
+    [Inject] private FileDownloadService Files { get; set; } = default!;
+
+    /// <summary>v1.1.7: every number of the answer (Working_&lt;article&gt;_&lt;colour&gt;_&lt;MM-YYYY&gt;.json).</summary>
+    private Task DownloadWorkingAsync() => Files.SaveAsync(new Domain.Entities.Response.ApiFileResponse
+    {
+        FileName = "Working_" + Card.Gm + "_" + Card.Colour + "_" + (Card.Working?["deliveryMonth"]?.ToString() ?? "").Replace('.', '-') + ".json",
+        ContentType = "application/json",
+        FileBytes = System.Text.Encoding.UTF8.GetBytes(Card.Working!.ToJsonString(new System.Text.Json.JsonSerializerOptions { WriteIndented = true }))
+    });
 
     private static readonly string[] Mn = { "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec" };
     private static string MonLabel(string mk) { var p = mk.Split('.'); return p.Length == 2 && int.TryParse(p[0], out var m) && m is >= 1 and <= 12 ? Mn[m - 1] + " " + p[1] : mk; }

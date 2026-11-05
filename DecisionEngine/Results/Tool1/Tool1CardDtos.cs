@@ -25,6 +25,8 @@ namespace DecisionEngine.Results.Tool1
         public bool CheckOnly { get; set; }
         /// <summary>v1.1.7: open MRAs from SAP counted in this colour (single concept), shown under the summary tiles.</summary>
         public DecisionEngine.Mra.MraIncoming? MraIn { get; set; }
+        /// <summary>v1.1.7 "Download working (JSON)": every number of a single concept answer (SAP-MRA-INTERFACE §5).</summary>
+        public System.Text.Json.Nodes.JsonObject? Working { get; set; }
         /// <summary>The number in the header circle (request id).</summary>
         public int Id { get; set; }
         public string Gm { get; set; } = "";

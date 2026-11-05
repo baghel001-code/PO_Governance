@@ -73,6 +73,7 @@ namespace DecisionEngine.Tool1
             card.ReasonTitle = r.Decision + " — Reason";
             card.LaterCaution = Tool1LaterPoCaution.Compute(r.Engine, r.Decision, r.B, p);
             if (card.B != null) card.B.Step6 = card.LaterCaution;
+            if (r.Engine == "B" && r.B is { Chain.Count: > 0 }) card.Working = Tool1Working.Build(r, p, today, card.LaterCaution);   // v1.1.7
             // the Heads-up sentence is not repeated on the card when the caution names it
             card.Reason = Or(card.LaterCaution != null ? Tool1LaterPoCaution.ReasonWithoutHeadsUp(r.DecisionReason) : r.DecisionReason, "—");
             card.StrCaution = r.StrCaution;

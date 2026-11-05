@@ -42,6 +42,8 @@ namespace DecisionEngine.Explain
             public string Group = "";
             /// <summary>Server date "yyyy-MM-dd" (explain.js used the PC clock).</summary>
             public string Today = "";
+            /// <summary>v1.1.7 (New PO request): what lands in the delivery month — released POs, open MRAs, approved in the tool today.</summary>
+            public (double F2, double Mra, double Ledger)? Incoming;
         }
 
         // ── formatting (explain.js helpers) ────────────────────────────────
@@ -138,7 +140,9 @@ namespace DecisionEngine.Explain
                 x.Steps.Add(Step(s++, T("From step 1, take off the plan sale until " + LastDay(pre.Count > 0 ? pre[^1].MKey : curKey) + " (F4 plan × colour mix " + Pc(c.Mix, 1) +
                     ", days left only this month) and add POs landing by then" + (preTxt.Length > 0 ? " — " + preTxt : "") + ": stock on 1 " + MonL(dm) + " "), B(N(ch0?.OpenStock ?? double.NaN)), T(".")));
             }
-            var poTxt = "add " + MonL(dm) + " POs (F2) and quantities approved today (" + N(n.Po0) + ")";
+            var poTxt = c.Incoming is { } inc   // v1.1.7: released POs, open MRAs from SAP, approved in the tool today
+                ? "add what lands in " + MonL(dm) + ": released POs " + N(inc.F2) + " + open MRAs from SAP " + N(inc.Mra) + " + approved in the tool today " + N(inc.Ledger) + " (" + N(n.Po0) + ")"
+                : "add " + MonL(dm) + " POs (F2) and quantities approved today (" + N(n.Po0) + ")";
             var left = ch0 != null && JsOps.Truthy(ch0.DemandDays) && JsOps.Truthy(ch0.TotalDays) && ch0.DemandDays != ch0.TotalDays ? " (" + Num(ch0.DemandDays) + " days left)" : "";
             if (c.RequestQty != null)
             {
@@ -220,8 +224,10 @@ namespace DecisionEngine.Explain
                 T1 = JsOps.Or(p.T1, 75), Buf = JsOps.Or(p.StrBuffer, 0), D = JsOps.Or(p.D, 75), MixT = JsOps.Or(p.Mix, 2),
                 Rec = b.MaxPermQty, Pre = b.PreRoll ?? new(),
                 Chain = b.Chain.Select(x => new ChainMonth(x.Y, x.M, x.MKey, x.OpenStock, x.EPO, x.ColPlan, x.CloseStock, x.Fc, x.DemandDays, x.TotalDays)).ToList(),
-                RequestQty = r.Qty, Group = GroupText(i?.Brand, i?.McDesc, i?.McCd, i?.Mrp, i?.Flag), Today = today
+                RequestQty = r.Qty, Group = GroupText(i?.Brand, i?.McDesc, i?.McCd, i?.Mrp, i?.Flag), Today = today,
+                Incoming = b.F2ByMon == null ? null : (Get(b.F2ByMon, r.Month), b.MraIn != null && b.MraIn.ByMon.TryGetValue(r.Month, out var mq) ? mq : 0, Get(b.LedgerByMon, r.Month))
             };
+            static double Get(Dictionary<string, double>? d, string k) => d != null && d.TryGetValue(k, out var v) ? v : 0;
         }
 
         // ── single concept Recommendation (recoCtx / hookPaint / recoAll) ──
@@ -311,7 +317,7 @@ namespace DecisionEngine.Explain
 
             var mm = b.Sheet("Month by month", "Stock rolled month by month (plan sale = F4 × mix × days counted ÷ days in month)", null, null,
                 ("m", "Month", 10, null), ("fc", "F4 plan (group)", 14, "int"), ("days", "Days in month", 9, null), ("cnt", "Days counted", 9, null),
-                ("sale", "Plan sale", 12, "d1"), ("po", "POs in (F2 + approved today)", 14, "int"), ("ask", "Asked qty", 10, "int"),
+                ("sale", "Plan sale", 12, "d1"), ("po", "POs in (F2 + open MRAs + approved today)", 14, "int"), ("ask", "Asked qty", 10, "int"),
                 ("open", "Open stock", 12, "d1"), ("close", "Close stock", 12, "d1"), ("take", "Days in window", 9, null), ("win", "Window sale", 12, "d1"));
             string? prevId = null;
             for (var i = 0; i < pre.Count; i++)

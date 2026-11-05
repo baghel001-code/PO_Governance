@@ -91,6 +91,25 @@ namespace POGovernance.Tests.Mra
             Assert.Null(MraScope.Current);   // the scope ends with the call
         }
 
+        [Fact]
+        public void Working_json_and_the_explain_steps_split_the_incoming_qty()
+        {
+            var data = Data();
+            var eng = new Tool1DecisionEngine(new RecommendationEngine());
+            var colour = AllowColour(data, eng);
+            using var _ = MraScope.Use(Cap(data, colour, 1000));
+            var o = eng.Decide(data, Array.Empty<JsonObject>(), Today, 1, Gm, colour, Month, 100, null);
+            var card = eng.BuildCard(o, data.Params, Today);
+            var w = card.Working!;
+            Assert.Equal((Gm, Month, 100d), ((string)w["article"]!, (string)w["deliveryMonth"]!, (double)w["askedQty"]!));
+            Assert.Equal(1000, (long)w["incomingParts"]!["openMRAs"]![Month]!);
+            Assert.Equal("900201", (string)w["openMRAsCounted"]![0]!["no"]!);
+            Assert.Equal(o.B!.MaxPermQty, (double?)w["maxPermissible"]);
+            var steps = string.Join(" ", card.Explain!.Steps.SelectMany(st => st.Segments).Select(x => x.Text));
+            Assert.Contains("open MRAs from SAP 1,000", steps);
+            Assert.Null(JsonNode.Parse(JsonSerializer.Serialize(o.B))!["f2ByMon"]);   // working only: not saved with the request
+        }
+
         private static void Tool1DecisionEngineBResult(DecisionEngine.Results.Tool1.Tool1EngineBResult r) => Assert.Null(r.MraIn);
 
         [Fact]

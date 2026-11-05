@@ -62,7 +62,7 @@ namespace Application.Services.V1.Sap
                 answers.Add(new MraFeedAnswer
                 {
                     Seq = seqs[i], Outcome = rows[i].Error != null ? MraFeedOutcomes.Parked : r?.Outcome, Reason = rows[i].Error ?? r?.Reason,
-                    Mra = kind == "mra" ? MraStoreJson.Deserialize<MraMessage>(rows[i].MsgJson)?.Mra : r?.Mra,
+                    Mra = kind == "mra" ? MraStoreJson.Deserialize<MraMessage>(rows[i].MsgJson)?.Mra : MraStoreJson.Deserialize<PoMessage>(rows[i].MsgJson)?.Mra,
                     Po = kind == "po" ? MraStoreJson.Deserialize<PoMessage>(rows[i].MsgJson)?.Po : null
                 });
             }
@@ -73,26 +73,26 @@ namespace Application.Services.V1.Sap
     /// <summary>SAP answer of /mra-events and /po-events (snake_case).</summary>
     public sealed class SapMraFeedResponse
     {
-        public string BatchId { get; set; } = "";
-        public int Received { get; set; }
-        public int Applied { get; set; }
-        public int NoChange { get; set; }
-        public int Duplicate { get; set; }
-        public int Older { get; set; }
-        public int Parked { get; set; }
-        public int Stored { get; set; }
-        public List<SapMraFeedResult> Results { get; set; } = new();
-        public string ReceivedAt { get; set; } = "";
+        [JsonPropertyName("batch_id")] public string BatchId { get; set; } = "";
+        [JsonPropertyName("received")] public int Received { get; set; }
+        [JsonPropertyName("applied")] public int Applied { get; set; }
+        [JsonPropertyName("no_change")] public int NoChange { get; set; }
+        [JsonPropertyName("duplicate")] public int Duplicate { get; set; }
+        [JsonPropertyName("older")] public int Older { get; set; }
+        [JsonPropertyName("parked")] public int Parked { get; set; }
+        [JsonPropertyName("stored")] public int Stored { get; set; }
+        [JsonPropertyName("results")] public List<SapMraFeedResult> Results { get; set; } = new();
+        [JsonPropertyName("received_at")] public string ReceivedAt { get; set; } = "";
     }
 
     public sealed class SapMraFeedResult
     {
-        public int Index { get; set; }
-        public long Seq { get; set; }
-        public string? Outcome { get; set; }
-        public string? Reason { get; set; }
-        public string? MraNo { get; set; }
-        public string? PoNo { get; set; }
+        [JsonPropertyName("index")] public int Index { get; set; }
+        [JsonPropertyName("seq")] public long Seq { get; set; }
+        [JsonPropertyName("outcome")] public string? Outcome { get; set; }
+        [JsonPropertyName("reason")] public string? Reason { get; set; }
+        [JsonPropertyName("mra_no")] public string? MraNo { get; set; }
+        [JsonPropertyName("po_no")] public string? PoNo { get; set; }
     }
 
     /// <summary>

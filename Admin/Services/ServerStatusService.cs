@@ -29,6 +29,8 @@ namespace Admin.Services
         public string? ServerVersion { get; private set; }
         public bool AiChat { get; private set; }
         public bool AiInsights { get; private set; }
+        /// <summary>v1.1.7 switch 1 "Tool requests use capacity" (params swToolReqCapacity, default ON). OFF: New PO request is check only, Approvals hidden.</summary>
+        public bool ToolReqCapacity { get; private set; } = true;
         /// <summary>The last status answer (null until one arrived).</summary>
         public StatusResponse? Last { get; private set; }
 
@@ -78,6 +80,8 @@ namespace Admin.Services
                 ServerVersion = string.IsNullOrEmpty(d.Version) ? ServerVersion : d.Version;
                 AiChat = d.Ai?.Chat == true;
                 AiInsights = d.Ai?.Insights == true;
+                ToolReqCapacity = d.Params?[DecisionEngine.Results.Mra.MraSwitches.ToolReqKey] is not System.Text.Json.Nodes.JsonValue sw
+                                  || sw.GetValueKind() != System.Text.Json.JsonValueKind.False;
                 if (SeenDataVersion == 0) { SeenDataVersion = DataVersion; SeenParamsVersion = ParamsVersion; }
                 Message = "● Shared · " + (Today ?? "");
             }

@@ -65,7 +65,8 @@ today. All examples below were captured from the running interface.
 | 3 | `POST /decisions` | Release workflow background step "PO Governance check" (after OTB + depth check passed) | **Governance verdict per PO item** (synchronous, SAP waits max 3 s) |
 | 4 | `POST /events` | bgRFC queue from BAdIs (after commit) | PO, goods receipt / return and governance-outcome events (asynchronous) |
 | 5 | `POST /documents` | After the PO is really created / received in SAP | **Final document number (MRN) against the `request_id`** of the decision — feeds the "PO generated" report |
-| 6 | `POST /mra-status` | Every time an MRA changes in SAP during the day (created, discarded, rejected, self-rejected …) | **MRA status per line**; the morning MRA file in the tool's Data Setup is merged into the same lines |
+| 6 | `POST /mra-events` | Every time an MRA changes level in SAP during the day (new, approved, self rejected, rejected, final …) | **Open MRAs take capacity** in the next decision; the morning MRA file in Data Setup replaces the list first |
+| 7 | `POST /po-events` | Every PO release / unrelease | Stored; moves capacity only with the admin switch "Live PO changes" |
 
 ---
 
@@ -688,114 +689,157 @@ tool can report which checked POs were actually generated — not only which one
 
 ---
 
-## 8. `POST /mra-status` — MRA status changes during the day
+## 8. `POST /mra-events` and `POST /po-events` — live MRA and PO changes
 
-The tool keeps the current status of every MRA line; it will be used in the verdicts later on (open MRA quantity).
+MRA = Merchandise Request, the SAP document raised before the PO. The tool counts the **open MRAs** against the
+colour capacity, like a released PO: Max Permissible = what is still free after the plan, the stock, the released
+POs (morning F2 file), the open MRAs and today's tool approvals. Single concept only; multi concept MRAs are shown
+but not counted.
 
-- **Each morning** the planner uploads the MRA report in the tool (📂 Data Setup → MRA Status). The file is
-  **merged** into the tool's MRA list: its lines are added or updated (qty, status and every filled column); lines that
-  are not in the file stay as they are, with the changes SAP sent.
-- **During the whole day** SAP sends every change of an MRA to this endpoint, as soon as it happens: a new MRA, and an
-  MRA that is discarded, rejected or self-rejected (or any other status change, or a quantity change).
+- **Each morning** the planner uploads the MRA workbook in the tool (📂 Data Setup → MRA file): the item lines
+  (DOC.NO, ARTICLE CODE, Color, Generic Article, TOTAL PO QTY, DEL. DATE, LEVEL) and the header report (Document
+  Number, Purchase order, Status). It **replaces** the previous MRA list.
+- **During the whole day** SAP sends every MRA change to `/mra-events` and every PO release / unrelease to
+  `/po-events`, as soon as it happens. Changes received on or after the upload day are applied on top of the file.
 
-### Rules
+### What counts against capacity
 
-- **Required per line: `mra_no`, `qty`, `status`.** All other fields are optional. A field that is not sent keeps the
-  value the tool already has (from the morning file or an earlier message).
-- 1–500 lines per call, **applied in the order sent**, in one transaction. If **any** line is wrong, the whole call is
-  refused (`400`) and nothing is stored, so correct it and send the call again.
-- **Line of an MRA:** `mra_no` + `generic_article` + `colour`. For an MRA with **one** line, `mra_no` alone is enough.
-  For an MRA with **several** lines (colours / articles), send `generic_article` and `colour`; otherwise that line is not
-  changed (`AMBIGUOUS`).
-- **`changed_at`** (recommended): when the change happened in SAP. A message with an **older** `changed_at` than the one
-  the tool has is ignored (`STALE`), so messages that arrive late or are retried never undo a newer change.
-- **Safe to resend**: the same message again gives `UNCHANGED`.
-- `status` values (spelling is not case-sensitive; spaces and hyphens are allowed):
+| Counted (takes capacity) | Not counted |
+|---|---|
+| Level 1 First Level | Level 3 Third Level |
+| Level 2 Second Level | Level 6 Discarded |
+| Level 4 Fourth Level | Level 7 Self Reject → capacity comes back |
+| Level 5 final — **only** when it became final by a live change today **and** its PO is not sent as unreleased; counted until the next morning's files (then the released PO in F2 counts) | Level 8 Forced Approved (exception waiting for Commercial) |
+| Level 8 → 1 (exception approved by Commercial) — from that moment | Level 9 Draft, X Reject → capacity comes back |
+| | Level 5 with PO status 1 / 2 (unreleased) or closed |
 
-| `status` | Meaning | Also accepted |
+… and only while the delivery date is today or later (an MRA past its delivery date cannot become a PO — it is
+"expired"), the Generic Article is in the Article Master and the article is single concept.
+
+**Level 5 + PO status:** send `po_no` and `po_status` with the level 5 change. Status 3 (Released) → counted until the
+next morning's files. Status 1 / 2 (Unreleased) → not counted. No status sent → counted (safe side). A later level 5
+message with status 3 for the same MRA makes it count.
+
+### Rules (both endpoints)
+
+- Body: **one message** `{…}` or a **batch** `{"messages": [ {…}, {…} ]}` — at most 5,000 per call (above: `413`).
+- **Every message is stored**, also one that is not understood; the answer has one result per message, in the same
+  order. Nothing is refused as a whole — check `results[].outcome`.
+- Field names are not case sensitive; `_` and spaces are ignored (`mra_no`, `MRA No`, `mraNo` are the same).
+- MRA / PO numbers: letters, digits, `-` and `_`; leading zeros are dropped (`0000900201` = `900201`).
+- **`msg_id`** (recommended): unique per message. The same `msg_id` again → `duplicate` (safe to resend a batch).
+- **`occurred_at`** (recommended): when the change happened in SAP (ISO 8601; with `Z` / `+05:30` or local time). A
+  change older than the one already applied for that MRA / PO → `older` (ignored).
+
+| `outcome` | Meaning | SAP action |
 |---|---|---|
-| `ALLOW` | MRA created after an ALLOW verdict | `Allow`, `Allowed` |
-| `WATCHLIST` | MRA created after a WATCH verdict | `Watchlist`, `Watch List`, `Watch` |
-| `CANCELLED` | MRA cancelled | `Cancelled`, `Canceled`, `Cancel` |
-| `DISCARDED` | MRA discarded | `Discard`, `Discarded` |
-| `REJECTED` | MRA rejected by an approver | `Reject`, `Rejected` |
-| `SELF_REJECTED` | MRA rejected by the buyer | `Self Reject`, `Self-Rejected` |
+| `applied` | The change was applied | – |
+| `no change` | Same as already known | – |
+| `duplicate` | The same `msg_id` was received before | – |
+| `older` | Older than the change already applied | – |
+| `parked` | Not understood (reason given), or a new MRA without `generic_article` / `colour` / `qty` / `delivery_date` | Correct and send again with a new `msg_id` |
+| `stored` | PO message stored (it moves capacity only when the admin switch "Live PO changes" is ON) | – |
 
-  More values can be added in the tool's settings (`SapInterface:MraStatuses`) without a change for SAP.
+### 8a. `POST /mra-events` — MRA message
 
-### Request
+| Field | Req. | Meaning |
+|---|---|---|
+| `mra_no` | **yes** | MRA number (also `mra`, `mra_number`, `document_number`, `doc_no`) |
+| `level` | **yes** | Code `1`–`9`, `X`, or the short description (`First Level`, `Second Level`, `Third Level`, `Fourth Level`, `final`, `Discarded`, `Self Reject`, `Forced Approved`, `Draft`, `Reject`) — also `level_code`, `level_desc`, `short_description` |
+| `generic_article` | for a **new** MRA | 18 or 10 digits (the tool keeps the last 10) — also `generic_material`, `ga` |
+| `colour` | for a new MRA | also `color` |
+| `qty` | for a new MRA | Pieces, all sites added up (also `quantity`, `total_po_qty`). Send the new qty when an approver changes it |
+| `delivery_date` | for a new MRA | `YYYY-MM-DD`, `DD.MM.YYYY`, `DD/MM/YYYY` or `YYYYMMDD` |
+| `po_no` | no | PO made from the MRA (also `po_number`, `purchase_order`) |
+| `po_status` | with level 5 | `Released` / `Unreleased` / `1` / `2` / `3` / `Closed` — decides whether a level 5 MRA counts |
+| `occurred_at` | recommended | Time of the change in SAP |
+| `msg_id` | recommended | Unique per message |
+| `decision`, `decision_reason`, `decision_id`, `decision_at`, `max_permissible`, `decision_url`, `working` | no | The tool's verdict as given to the buyer (from `/decisions`): shown on the MRA Queues page; **never used to count**. Send with the MRA's first message or whenever it changes |
 
-Minimal (status change of an MRA with one line):
+Examples:
 
 ```json
-{ "mras": [ { "mra_no": "0000317231", "qty": 1200, "status": "SELF_REJECTED", "changed_at": "2026-11-04T10:15:00+05:30" } ] }
+{ "mra_no": "0000900201", "level": "First Level", "generic_article": "000000001112045675", "colour": "LGY",
+  "qty": 3000, "delivery_date": "2026-12-20", "msg_id": "SAP-77812", "occurred_at": "2026-11-05T10:12:00+05:30" }
 ```
-
-Full (a new MRA, every field):
 
 ```json
-{ "mras": [
-  { "mra_no": "0000317250", "generic_article": "1101000150", "colour": "YLW", "qty": 75, "status": "ALLOW",
-    "changed_at": "2026-11-04T10:20:00+05:30", "request_id": "WI000004711-4500099001-V1",
-    "generic_art_desc": "MENS KURTA", "vendor_code": "0000201345", "vendor_name": "ABC TEXTILES", "brand_type": "NON-PL",
-    "mc_code": "121030002", "mc_name": "L_EW_MM_KURTA", "mrp": 799, "planning_flag": "NON-BOGO", "fit": "REGULAR",
-    "design": "SOLID", "style": "KURTA", "fabric": "COTTON", "product_material": "COTTON", "po_value": 59925.00,
-    "delivery_date": "2026-12-31", "approval_level": "Level 2", "remark": "" } ] }
+{ "messages": [
+  { "mra_no": "900201", "level": "7", "msg_id": "SAP-77890", "occurred_at": "2026-11-05T11:02:00+05:30" },
+  { "mra_no": "900202", "level": "final", "po_no": "4500099001", "po_status": "Released", "msg_id": "SAP-77891" },
+  { "mra_no": "900203", "level": "1", "decision": "Auto Allow", "decision_reason": "Within Max Permissible",
+    "decision_id": "D-20261105-000089", "max_permissible": 6200, "msg_id": "SAP-77892" } ] }
 ```
 
-| Field | Type | Req. | Meaning |
-|---|---|---|---|
-| `mras` | array, 1–500 | **yes** | The changes, in the order they happened |
-| `mras[].mra_no` | string, max 20 | **yes** | MRA number (keep the leading zeros) |
-| `mras[].qty` | number ≥ 0 | **yes** | MRA quantity (pieces) after the change |
-| `mras[].status` | string | **yes** | See the table above |
-| `mras[].generic_article` | string, max 40 | for MRAs with several lines | Generic article of the line |
-| `mras[].colour` | string, max 40 | for MRAs with several lines | Colour of the line |
-| `mras[].changed_at` | timestamp | recommended | When the change happened in SAP (ISO 8601 with offset) |
-| `mras[].request_id` | string, max 80 | no | The tool's `request_id` of the check that allowed the MRA |
-| `mras[].generic_art_desc` | string, max 200 | no | Article description |
-| `mras[].vendor_code`, `vendor_name` | string, max 20 / 200 | no | Vendor |
-| `mras[].brand_type` | string, max 40 | no | e.g. `NON-PL` |
-| `mras[].mc_code`, `mc_name` | string, max 20 / 100 | no | Merchandise category |
-| `mras[].mrp` | number | no | MRP |
-| `mras[].planning_flag` | string, max 20 | no | e.g. `BOGO` / `NON-BOGO` |
-| `mras[].fit`, `design`, `style`, `fabric`, `product_material` | string, max 100 | no | Attributes (Multi Concept) |
-| `mras[].po_value` | number | no | Value |
-| `mras[].delivery_date` | date | no | `YYYY-MM-DD` |
-| `mras[].approval_level` | string, max 30 | no | Where the MRA is waiting, e.g. `Level 2` |
-| `mras[].remark` | string, max 500 | no | Free text |
+### 8b. `POST /po-events` — PO message
+
+| Field | Req. | Meaning |
+|---|---|---|
+| `po_no` | **yes** | PO number (also `po_number`, `purchase_order`) |
+| `po_status` | **yes** | `Released` / `Unreleased` / `1` / `2` / `3`; `Closed` / `Deleted` = 0 (also `status`, `release_status`) |
+| `mra_no` | for a PO made from an MRA | Links the PO to its MRA |
+| `qty`, `generic_article`, `colour`, `delivery_date`, `occurred_at`, `msg_id` | no | As above (`qty` = open qty) |
+
+With the admin switch "Live PO changes" ON, a PO counts its qty only with status 3 (Released), compared with the
+morning F2 pending qty of the same PO number (only the difference moves capacity). An MRA whose PO has a live message
+is governed by the PO (the MRA is not counted again). GR / GRT are not followed live. With the switch OFF (start),
+PO messages are only stored.
+
+```json
+{ "po_no": "4500099001", "po_status": "Released", "mra_no": "900201", "qty": 2800, "msg_id": "SAP-PO-5512" }
+```
 
 ### Response `200` (captured)
 
+One new MRA:
+
 ```json
-{ "batch_id": "MRA-20261104-160840-5d1e", "received": 3, "created": 1, "updated": 2, "unchanged": 0, "stale": 0, "ambiguous": 0,
-  "results": [
-    { "index": 0, "mra_no": "0000317231", "generic_article": null, "colour": null, "result": "UPDATED",
-      "previous_status": "ALLOW", "status": "SELF_REJECTED", "qty": 1200 },
-    { "index": 1, "mra_no": "0000317232", "generic_article": null, "colour": null, "result": "UPDATED",
-      "previous_status": "WATCHLIST", "status": "DISCARDED", "qty": 300 },
-    { "index": 2, "mra_no": "0000317250", "generic_article": "1101000150", "colour": "YLW", "result": "CREATED",
-      "previous_status": null, "status": "ALLOW", "qty": 75 } ],
-  "received_at": "2026-11-04T16:08:40+05:30" }
+{ "batch_id": "MRAEV-20261105-144859-5e77", "received": 1, "applied": 1, "no_change": 0, "duplicate": 0, "older": 0,
+  "parked": 0, "stored": 0,
+  "results": [ { "index": 0, "seq": 8, "outcome": "applied", "reason": null, "mra_no": "900201", "po_no": null } ],
+  "received_at": "2026-11-05T14:48:59+05:30" }
 ```
 
-| `result` | Meaning | SAP action |
-|---|---|---|
-| `CREATED` | New MRA line stored | – |
-| `UPDATED` | Status / quantity / fields changed | – |
-| `UNCHANGED` | Same as already stored (a resend) | – |
-| `STALE` | `changed_at` older than the stored change: ignored | – (a newer change is already there) |
-| `AMBIGUOUS` | The MRA has several lines and no `generic_article` / `colour` was sent: **not stored** | Send the line again with `generic_article` and `colour` |
+A batch of five (self reject; the first message again; an older change; a new MRA without its fields; a level that is
+not known):
+
+```json
+{ "batch_id": "MRAEV-20261105-144859-553b", "received": 5, "applied": 1, "no_change": 0, "duplicate": 1, "older": 1,
+  "parked": 2, "stored": 0,
+  "results": [
+    { "index": 0, "seq": 9,  "outcome": "applied",   "reason": null, "mra_no": "900201", "po_no": null },
+    { "index": 1, "seq": 10, "outcome": "duplicate", "reason": "same message id received before", "mra_no": "900201", "po_no": null },
+    { "index": 2, "seq": 11, "outcome": "older",     "reason": "older than the change already applied", "mra_no": "900201", "po_no": null },
+    { "index": 3, "seq": 12, "outcome": "parked",    "reason": "new MRA without ga, colour, qty, dd", "mra_no": "900299", "po_no": null },
+    { "index": 4, "seq": 13, "outcome": "parked",    "reason": "level not recognised: 'Approved'", "mra_no": null, "po_no": null } ],
+  "received_at": "2026-11-05T14:48:59+05:30" }
+```
+
+A PO message:
+
+```json
+{ "batch_id": "POEV-20261105-144859-d7bd", "received": 1, "applied": 0, "no_change": 0, "duplicate": 0, "older": 0,
+  "parked": 0, "stored": 1,
+  "results": [ { "index": 0, "seq": 14, "outcome": "stored", "reason": null, "mra_no": "900201", "po_no": "4500099001" } ],
+  "received_at": "2026-11-05T14:48:59+05:30" }
+```
 
 ### Error answers (captured)
 
 | Case | HTTP | Body |
 |---|---|---|
-| A required field missing | 400 | `{"error_code":"VALIDATION_FAILED","message":"mras[0].qty is required","trace_id":"T-c1f11c"}` |
-| Unknown status | 400 | `{"error_code":"VALIDATION_FAILED","message":"mras[0].status 'APPROVED' is not one of ALLOW, WATCHLIST, CANCELLED, DISCARDED, REJECTED, SELF_REJECTED","trace_id":"…"}` |
-| More than 500 lines | 413 | `{"error_code":"BATCH_TOO_LARGE","message":"501 MRA lines in one batch - at most 500","trace_id":"…"}` |
+| Not JSON | 400 | `{"error_code":"INVALID_JSON","message":"Invalid JSON: Expected depth to be zero at the end of the JSON payload. …","trace_id":"T-a6a951"}` |
+| More than 5,000 messages | 413 | `{"error_code":"BATCH_TOO_LARGE","message":"5001 messages in one call - at most 5000","trace_id":"T-62086f"}` |
+| A PO status that is not known | 200 | `results[0]`: `"outcome": "parked", "reason": "PO status not recognised: 'open'"` |
 
-`401` for credentials, `503` for a temporary problem (retry; resending is safe).
+`401` for credentials, `503` for a temporary problem (retry; resending with the same `msg_id` is safe).
+
+### Admin switches (tool side, SAP Feed page)
+
+- **Switch 1 "Tool requests use capacity"** (starts ON). OFF: the tool's New PO request is a check only (nothing saved,
+  "Raise the request in SAP"), today's tool approvals stop counting. Use OFF when buyers raise MRAs in SAP and this
+  feed is live — otherwise the same qty would be counted twice on the same day (tool approval + MRA).
+- **Switch 2 "Live PO changes"** (starts OFF). ON: `/po-events` messages move capacity as described in 8b.
 
 ---
 
@@ -803,8 +847,8 @@ Full (a new MRA, every field):
 
 | Item | Status |
 |---|---|
-| `ping`, `reason-codes`, `decisions`, `events`, `documents`, `mra-status` | **Available for testing** on staging |
-| MRA status in the verdicts | MRA lines are stored now (morning file + `mra-status`); using them in the verdicts (open MRA quantity) is the next step |
+| `ping`, `reason-codes`, `decisions`, `events`, `documents`, `mra-events`, `po-events` | **Available for testing** on staging |
+| Open MRAs in the verdicts | Counted in `/decisions` (single concept): levels 1, 2, 4 and level 5 reached live today lower Max Permissible of their colour and delivery month |
 | Verdict link (`view_url`) | Available; the portal page `/verdict/<token>` opens without sign-in |
 | Decision logic | Same rules as the tool's New Request screen (Single Concept, Multi Concept, Watch List, Max Permissible) |
 | Data used for decisions | Uploaded BW / SAP extracts (stock, pending PO, sales, plan, BSR) + the day's approved requests |
@@ -821,7 +865,8 @@ Full (a new MRA, every field):
 5. `POST /events` for a PO save, a goods receipt and a GOV_OUTCOME, then the same batch again to see `duplicates`.
 6. Open a `view_url` from a decision answer in a browser.
 7. `POST /documents` with the MRN of a PO that was created, then the same call again (`UNCHANGED`).
-8. `POST /mra-status`: a new MRA (`ALLOW`), then the same MRA `SELF_REJECTED`, then the first message again (`STALE`).
+8. `POST /mra-events`: a new MRA at level 1 (`applied`; the next `/decisions` for that colour and month has a lower Max
+   Permissible), then the same MRA at level 7 (capacity comes back), then the first message again (`duplicate`).
 
 The tool's administrator sees every call — request, response, timing and trace ID — on **🔌 SAP Interface** in the
 portal, so results can be checked together.

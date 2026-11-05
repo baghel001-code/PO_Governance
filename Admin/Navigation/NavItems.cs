@@ -14,9 +14,11 @@ namespace Admin.Navigation
             new("/planner/grc", "GRC Back Testing", "📈", new[] { Roles.Admin, Roles.Planner }),
             new("/planner/attributes", "Attribute Analysis", "🔎", new[] { Roles.Admin, Roles.Planner }),
             new("/planner/ai-insights", "AI Insights", "🤖", new[] { Roles.Admin, Roles.Planner }),
+            new("/mra", "MRA Queues", "📦"),
             new("/history", "History", "🗂"),
             new("/approvals", "Approvals", "✅", new[] { Roles.Admin, Roles.Planner, Roles.CatHead }, true),
             new("/admin/users", "Users", "👥", new[] { Roles.Admin }),
+            new("/admin/sap-feed", "SAP Feed", "🔌", new[] { Roles.Admin }),
         };
 
         public static readonly NavItem[] Category =
@@ -25,6 +27,7 @@ namespace Admin.Navigation
             new("/category/requests", "Requests", "📄"),
             new("/category/insights", "Insights", "📊"),
             new("/category/video", "How-to Video", "🎬"),
+            new("/mra", "MRA Queues", "📦"),
             new("/approvals", "Approvals", "✅", new[] { Roles.Admin, Roles.Planner, Roles.CatHead }, true),
             new("/history", "History", "🗂"),
             new("/category/how-it-works", "How it works", "❓"),

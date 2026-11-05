@@ -1,0 +1,163 @@
+@page "/admin/sap-feed"
+@* SAP Feed (v1.1.7, admin): connection status of the live MRA / PO feed, the two switches, a test sender and every message
+   received since the MRA file (raw message, result, effect on capacity). PO_MRA_STATE, PO_MRA_SWITCHES, PO_MRA_TEST_SEND. *@
+@using DecisionEngine.Results.Mra
+@using Admin.Services.Platform
+@inject UserSessionState Session
+@inject ISnackbar Snackbar
+@inject ServerStatusService Status
+
+<PageTitle>SAP Feed · VMM PO Governance</PageTitle>
+<PlatformStyles />
+<style>
+    .sf-sw { display: flex; gap: 14px; align-items: flex-start; border: 1px solid var(--brd); border-radius: 12px; padding: 12px 14px; background: #fff; margin-bottom: 10px; }
+    .sf-sw .t { font-weight: 800; color: #13254A; }
+    .sf-sw .d { font-size: 12px; color: var(--ink2); line-height: 1.55; margin-top: 3px; }
+    .sf-tbl { width: 100%; border-collapse: collapse; font-size: 12px; }
+    .sf-tbl th { background: #F4F6FA; text-align: left; padding: 6px 8px; font-size: 10.5px; text-transform: uppercase; color: var(--ink2); position: sticky; top: 0; }
+    .sf-tbl td { padding: 6px 8px; border-bottom: 1px solid #EEF0F4; vertical-align: top; }
+    .sf-raw { font-family: var(--mono, monospace); font-size: 10.5px; color: var(--ink2); word-break: break-all; max-width: 420px; }
+    .sf-eff { font-size: 11px; font-weight: 800; border-radius: 6px; padding: 2px 7px; display: inline-block; }
+    .sf-eff.dn { background: #FEE2E2; color: #B91C1C; } .sf-eff.up { background: #DCFCE7; color: #00873E; } .sf-eff.zr { background: #F3F4F6; color: #6B7280; }
+</style>
+
+<PfHeader Icon="🔌" Title="SAP Feed">
+    <Sub>Live MRA and PO changes from SAP (<code>POST /api/sap/v1/mra-events</code>, <code>/po-events</code>, technical user with HTTP Basic) and the two switches that decide what uses capacity.</Sub>
+</PfHeader>
+
+@if (_s == null)
+{
+    <div class="pf-empty">Loading…</div>
+}
+else if (!Session.IsAdmin)
+{
+    <div class="card pf-err">Admin only</div>
+}
+else if (!_s.Available)
+{
+    <div class="card pf-note">SAP MRAs are not available: @_s.UnavailableReason</div>
+}
+else
+{
+    <div class="card" style="padding:10px 14px;font-size:12.5px;margin-bottom:10px" data-testid="sf-status">
+        Connection: <strong style="color:@(_s.ApiEnabled ? "#00873E" : "#B91C1C")">@(_s.ApiEnabled ? "SAP interface ON – SAP can send changes" : "SAP interface OFF (SapInterface:Enabled) – only this page's test sender works")</strong>
+        · messages since the MRA file: <strong>@_s.Log.Count.ToString("N0")</strong>
+        (@_s.Log.Count(l => l.Outcome == "applied") applied · @_s.Log.Count(l => l.Outcome == "parked") set aside · @_s.Log.Count(l => l.Outcome is "duplicate" or "older") ignored)
+        · MRA file: <strong>@(_s.Snapshot?.FileName ?? "not loaded")</strong>
+        <button class="btn-sec btn-sm" style="margin-left:10px" @onclick="LoadAsync">↻ Refresh</button>
+    </div>
+
+    <div class="sf-sw" data-testid="sf-switch-toolreq">
+        <MudSwitch T="bool" Value="_s.Switches.ToolReqCapacity" ValueChanged="v => SetAsync(v, null)" Color="Color.Success" Disabled="_busy" />
+        <div>
+            <div class="t">Switch 1 · Tool requests use capacity: @(_s.Switches.ToolReqCapacity ? "ON" : "OFF")</div>
+            <div class="d">
+                ON (as today): a New PO request confirmed in the tool takes capacity for the day.<br />
+                OFF: the New PO request is a <b>check only</b> – no quantity pop-up, no reason box, nothing saved, “Raise the request in SAP”;
+                today's tool approvals stop counting; the Approvals tab is hidden; the server refuses to save requests (409).
+                Use OFF when buyers raise MRAs in SAP and the MRA feed is live – otherwise the same qty would be counted twice on the same day.
+            </div>
+        </div>
+    </div>
+    <div class="sf-sw" data-testid="sf-switch-livepo">
+        <MudSwitch T="bool" Value="_s.Switches.LivePo" ValueChanged="v => SetAsync(null, v)" Color="Color.Success" Disabled="_busy" />
+        <div>
+            <div class="t">Switch 2 · Live PO changes: @(_s.Switches.LivePo ? "ON" : "OFF")</div>
+            <div class="d">
+                OFF (start): PO messages are stored only. ON: a live PO release / unrelease from SAP moves capacity (only the difference with the morning
+                released-PO file), an MRA whose PO has a live message is governed by that PO, and the PO queue tab appears on MRA Queues.
+            </div>
+        </div>
+    </div>
+
+    <div class="card" style="padding:12px 14px;margin-bottom:10px" data-testid="sf-test">
+        <div style="font-weight:800;margin-bottom:6px">Test sender <span class="mq-sub" style="font-weight:400">(stored and applied exactly like a message from SAP; shown with your name)</span></div>
+        <div style="display:flex;gap:8px;align-items:center;margin-bottom:6px">
+            <select @bind="_kind" style="border:1px solid var(--brd);border-radius:8px;padding:5px 8px">
+                <option value="mra">MRA message</option>
+                <option value="po">PO message</option>
+            </select>
+            <button class="btn-sec btn-sm" @onclick="Example">Example</button>
+            <button class="btn-pri btn-sm" @onclick="SendAsync" disabled="@_busy" data-testid="sf-send">Send</button>
+        </div>
+        <textarea @bind="_json" rows="5" style="width:100%;box-sizing:border-box;font-family:var(--mono,monospace);font-size:12px;border:1px solid var(--brd);border-radius:8px;padding:8px" data-testid="sf-json"></textarea>
+        @if (_sent != null)
+        {
+            <div style="font-size:12px;margin-top:6px" data-testid="sf-result">
+                @foreach (var r in _sent.Results)
+                {
+                    <div>#@r.Seq · <b>@r.Outcome</b>@(r.Reason != null ? " – " + r.Reason : "")@(r.Mra != null ? " · MRA " + r.Mra : "")@(r.Po != null ? " · PO " + r.Po : "")</div>
+                }
+            </div>
+        }
+    </div>
+
+    <div class="card" style="padding:10px 12px">
+        <div style="font-weight:800;margin-bottom:6px">Messages received <span class="mq-sub" style="font-weight:400">(newest first, since the MRA file; every message is stored, also a bad one)</span></div>
+        <div style="overflow:auto;max-height:60vh;border:1px solid var(--brd);border-radius:10px">
+            <table class="sf-tbl" data-testid="sf-log">
+                <thead><tr><th>#</th><th>Time</th><th>Kind</th><th>Message as received</th><th>Result</th><th>Effect</th><th>From</th></tr></thead>
+                <tbody>
+                    @if (_s.Log.Count == 0) { <tr><td colspan="7" class="pf-empty">No message received yet.</td></tr> }
+                    @foreach (var r in Enumerable.Reverse(_s.Log).Take(1500))
+                    {
+                        <tr>
+                            <td>@r.Seq</td><td style="white-space:nowrap">@Fmt.When(r.At.ToString("o"))</td><td>@r.Kind.ToUpperInvariant()</td>
+                            <td class="sf-raw">@r.Raw</td>
+                            <td><b>@r.Outcome</b>@if (r.Reason != null) { <div class="mq-sub">@r.Reason</div> }</td>
+                            <td><span class="sf-eff @r.EffectCls">@r.EffectText</span></td>
+                            <td class="mq-sub">@r.By</td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    </div>
+}
+
+@code {
+    private MraStateResponse? _s;
+    private MraFeedResponse? _sent;
+    private bool _busy;
+    private string _kind = "mra";
+    private string _json = "";
+
+    protected override async Task OnInitializedAsync()
+    {
+        await Session.InitAsync();
+        Example();
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        var res = await ApiMasterService.MraStateAsync();
+        if (res.IsSuccess && res.Data != null) _s = res.Data;
+        else { Snackbar.Warn(res.responseMessage); _s ??= new MraStateResponse { Available = false, UnavailableReason = res.responseMessage }; }
+    }
+
+    private void Example() => _json = _kind == "po"
+        ? """{"po_no":"4500099001","po_status":"Released","mra_no":"900201","qty":3000,"msg_id":"TEST-PO-1"}"""
+        : """{"mra_no":"900201","level":"First Level","generic_article":"000000001112045675","colour":"LGY","qty":3000,"delivery_date":"2026-12-20","msg_id":"TEST-1"}""";
+
+    private async Task SetAsync(bool? toolReq, bool? livePo)
+    {
+        _busy = true;
+        var res = await ApiMasterService.MraSwitchesAsync(new MraSwitchesReq { ToolReqCapacity = toolReq, LivePo = livePo });
+        _busy = false;
+        if (!res.IsSuccess || res.Data == null) { Snackbar.Warn(res.responseMessage); return; }
+        Snackbar.Toast("Switches saved: tool requests use capacity " + (res.Data.Switches.ToolReqCapacity ? "ON" : "OFF") + ", live PO changes " + (res.Data.Switches.LivePo ? "ON" : "OFF"));
+        await Status.RefreshAsync();
+        await LoadAsync();
+    }
+
+    private async Task SendAsync()
+    {
+        _busy = true;
+        var res = await ApiMasterService.MraTestSendAsync(new MraTestSendReq { Kind = _kind, Json = _json });
+        _busy = false;
+        if (!res.IsSuccess || res.Data == null) { Snackbar.Warn(res.responseMessage); return; }
+        _sent = res.Data;
+        await LoadAsync();
+    }
+}

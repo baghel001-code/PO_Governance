@@ -95,7 +95,8 @@
 @code {
     private IEnumerable<NavItem> Items =>
         (Session.View == "planner" ? NavItems.Planner : NavItems.Category)
-        .Where(i => i.Roles == null || Session.Has(i.Roles));
+        .Where(i => i.Roles == null || Session.Has(i.Roles))
+        .Where(i => !(i.ApprovalsBadge && !Status.ToolReqCapacity));   // v1.1.7 switch 1 OFF: Approvals hidden
 
     protected override async Task OnInitializedAsync()
     {

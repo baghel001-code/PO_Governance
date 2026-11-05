@@ -1,0 +1,525 @@
+@page "/mra"
+@* MRA Queues (v1.1.7 app/mra.js): every MRA from the morning file + SAP's live changes, where it waits, whether it takes
+   capacity and why, the decision SAP sent (shown only), its level history; "By colour", "Today's changes" and (with the
+   switch "Live PO changes") the PO queue. Buyers / category heads see their own MCs (the API filters). PO_MRA_STATE. *@
+@using ClosedXML.Excel
+@using DecisionEngine.Mra
+@using DecisionEngine.Results.Mra
+@using Admin.Services.Platform
+@inject UserSessionState Session
+@inject ISnackbar Snackbar
+@inject FileDownloadService Files
+
+<PageTitle>MRA Queues · VMM PO Governance</PageTitle>
+<PlatformStyles />
+<style>
+    .mq-groups { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 10px; }
+    .mq-grpbox { background: #fff; border: 1px solid var(--brd); border-radius: 12px; padding: 8px 10px; }
+    .mq-gt { font-size: 10.5px; font-weight: 800; text-transform: uppercase; letter-spacing: .05em; color: var(--ink2); margin-bottom: 6px; }
+    .mq-gt span { font-weight: 500; text-transform: none; letter-spacing: 0; color: var(--ink3); }
+    .mq-tiles { display: grid; gap: 8px; }
+    .mq-tile { border: 1.5px solid var(--brd); border-radius: 10px; padding: 8px 10px; cursor: pointer; background: #FAFBFD; text-align: left; font-family: inherit; }
+    .mq-tile.a { border-color: var(--vmm-navy); background: #EEF3FC; }
+    .mq-tile b { font-size: 20px; display: block; color: var(--ink); }
+    .mq-tile .l { font-size: 11.5px; font-weight: 700; color: var(--ink); }
+    .mq-tile .s { font-size: 10.5px; color: var(--ink3); }
+    .mq-decs { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; margin: 4px 0 10px; font-size: 11.5px; }
+    .mq-dchip { border: 1px solid var(--brd); border-radius: 14px; padding: 3px 10px; cursor: pointer; background: #fff; font-size: 11.5px; }
+    .mq-dchip.a { outline: 2px solid var(--vmm-navy); }
+    .mq-d { border-radius: 6px; padding: 1px 7px; font-size: 11px; font-weight: 700; display: inline-block; }
+    .d-al { background: #DCFCE7; color: #00873E; } .d-rd { background: #FEF3C7; color: #B45309; } .d-wl { background: #FFF7ED; color: #92400E; }
+    .d-hd { background: #FEE2E2; color: #B91C1C; } .d-bk { background: #F3E8FF; color: #6B21A8; } .d-np { background: #E8EEF8; color: #3B5B92; }
+    .d-ot { background: #F3F4F6; color: #374151; } .d-ns { background: #F9FAFB; color: #9CA3AF; font-weight: 500; }
+    .mq-f { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-bottom: 10px; }
+    .mq-f input, .mq-f select { border: 1px solid var(--brd); border-radius: 8px; padding: 6px 9px; font-size: 12px; background: #fff; }
+    .mq-tbl { width: 100%; border-collapse: collapse; font-size: 12px; }
+    .mq-tbl th { position: sticky; top: 0; background: #F4F6FA; text-align: left; padding: 7px 8px; font-size: 10.5px; text-transform: uppercase; letter-spacing: .04em; color: var(--ink2); z-index: 1; }
+    .mq-tbl td { padding: 6px 8px; border-bottom: 1px solid #EEF0F4; vertical-align: top; }
+    .mq-tbl tr.cl { cursor: pointer; } .mq-tbl tr.cl:hover td { background: #F7F9FD; }
+    .mq-tbl td.n, .mq-tbl th.n { text-align: right; font-family: var(--mono, monospace); }
+    .mq-wrap { overflow: auto; max-height: 64vh; border: 1px solid var(--brd); border-radius: 10px; background: #fff; }
+    .mq-sub { font-size: 10.5px; color: var(--ink3); }
+    .mq-lv { display: inline-block; min-width: 18px; text-align: center; border-radius: 5px; background: #13254A; color: #fff; font-weight: 800; font-size: 11px; padding: 0 4px; }
+    .mq-c { border-radius: 6px; padding: 1px 7px; font-size: 11px; font-weight: 700; display: inline-block; }
+    .mq-c.y { background: #DCFCE7; color: #00873E; } .mq-c.n { background: #F3F4F6; color: #6B7280; } .mq-c.w { background: #FEF3C7; color: #92400E; }
+    .mq-grow td { background: #EEF3FC; font-weight: 800; color: #13254A; } .mq-grow span { font-weight: 500; color: var(--ink2); margin-left: 8px; }
+    .mq-eff { font-size: 11px; font-weight: 800; border-radius: 6px; padding: 2px 7px; display: inline-block; }
+    .mq-eff.dn { background: #FEE2E2; color: #B91C1C; } .mq-eff.up { background: #DCFCE7; color: #00873E; } .mq-eff.zr { background: #F3F4F6; color: #6B7280; }
+    .mq-chip { border-radius: 14px; padding: 3px 10px; font-size: 11px; font-weight: 700; }
+    .mq-chip.on { background: #DCFCE7; color: #00873E; } .mq-chip.off { background: #FEE2E2; color: #B91C1C; }
+    .mq-panel { position: fixed; top: 0; right: 0; bottom: 0; width: min(560px, 100vw); background: #fff; box-shadow: -10px 0 40px rgba(0,0,0,.18); z-index: 1300; overflow: auto; padding: 18px 20px; }
+    .mq-ph { font-size: 10.5px; font-weight: 800; text-transform: uppercase; letter-spacing: .05em; color: var(--ink2); margin: 14px 0 6px; }
+    .mq-kv { width: 100%; font-size: 12px; border-collapse: collapse; } .mq-kv td { padding: 4px 6px; border-bottom: 1px solid #F0F2F6; vertical-align: top; }
+    .mq-kv td:first-child { color: var(--ink2); width: 42%; }
+    .mq-pbox { border-radius: 10px; padding: 10px 12px; font-size: 12.5px; }
+</style>
+
+<PfHeader Icon="📦" Title="MRA Queues">
+    <Sub>
+        SAP Merchandise Requests: the morning MRA file plus SAP's live changes. Levels 1, 2 and 4 (and level 5 reached today) take capacity from
+        their colour and delivery month in the single concept Max Permissible, like a released PO.
+    </Sub>
+</PfHeader>
+
+@if (_s == null)
+{
+    <div class="pf-empty">Loading…</div>
+}
+else if (!_s.Available)
+{
+    <div class="card pf-note">SAP MRAs are not available: @_s.UnavailableReason</div>
+}
+else
+{
+    <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:10px;font-size:12px;color:var(--ink2)" data-testid="mq-header">
+        @if (_s.Snapshot is { } snap)
+        {
+            <span>MRA file: <strong>@snap.FileName</strong> · loaded @Fmt.When(snap.UploadedAt.ToString("o")) by @snap.By · live MRA changes since: <strong>@_s.Log.Count(l => l.Kind == "mra").ToString("N0")</strong></span>
+        }
+        else
+        {
+            <span>No MRA file loaded yet. Planner › Data Setup › “MRA – SAP Merchandise Requests”.</span>
+        }
+        <span style="margin-left:auto" class="mq-chip @(_s.Switches.ToolReqCapacity ? "on" : "off")">Tool requests use capacity: @(_s.Switches.ToolReqCapacity ? "ON" : "OFF")</span>
+        <span class="mq-chip @(_s.Switches.LivePo ? "on" : "off")">Live PO changes: @(_s.Switches.LivePo ? "ON" : "OFF")</span>
+        <button class="btn-sec btn-sm" @onclick="LoadAsync" disabled="@_busy">↻ Refresh</button>
+    </div>
+
+    <div class="pf-pills">
+        <button class="pf-pill @(_tab == "queues" ? "on" : "")" @onclick='() => _tab = "queues"' data-testid="mq-tab-queues">MRA queues</button>
+        <button class="pf-pill @(_tab == "colour" ? "on" : "")" @onclick='() => _tab = "colour"' data-testid="mq-tab-colour">By colour</button>
+        <button class="pf-pill @(_tab == "changes" ? "on" : "")" @onclick='() => _tab = "changes"' data-testid="mq-tab-changes">Today's changes</button>
+        @if (_s.Switches.LivePo)
+        {
+            <button class="pf-pill @(_tab == "po" ? "on" : "")" @onclick='() => _tab = "po"' data-testid="mq-tab-po">PO queue</button>
+        }
+    </div>
+
+    @switch (_tab)
+    {
+        case "colour": @ColourTab() break;
+        case "changes": @ChangesTab() break;
+        case "po": @PoTab() break;
+        default: @QueuesTab() break;
+    }
+
+    @if (_open is { } x)
+    {
+        @Panel(x)
+    }
+}
+
+@code {
+    private MraStateResponse? _s;
+    private bool _busy;
+    private string _tab = "queues";
+    private string _tile = "", _q = "", _lv = "", _ch = "", _dh = "", _mon = "", _dec = "", _gb = "", _counted = "";
+    private bool _mine;
+    private MraRowDto? _open;
+
+    private static readonly string[] Mn = { "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec" };
+    private static string MonL(string? mk) { var p = (mk ?? "").Split('.'); return p.Length == 2 && int.TryParse(p[0], out var m) && m is >= 1 and <= 12 ? Mn[m - 1] + " " + p[1] : mk ?? ""; }
+    private static int MonOrd(string? mk) { var p = (mk ?? "").Split('.'); return p.Length == 2 && int.TryParse(p[0], out var m) && int.TryParse(p[1], out var y) ? y * 12 + m : 0; }
+    private static string Nf(long? v) => v == null ? "—" : DecisionEngine.Common.Js.Fmt(v.Value);
+    private string Who(string? e) => string.IsNullOrEmpty(e) || e.Contains("vacant", StringComparison.OrdinalIgnoreCase) ? "" : _s!.Owners.TryGetValue(e, out var n) ? n : e.Split('@')[0];
+    private static string Lvl(string? l) => l != null && MraNorm.Levels.TryGetValue(l, out var d) ? d : "";
+    private static string DecCls(string g) => g switch { "Allow" => "d-al", "Reduce" => "d-rd", "Watch List" => "d-wl", "Hold" => "d-hd", "Block" => "d-bk", "No Plan" => "d-np", "Other" => "d-ot", _ => "d-ns" };
+    private static string Group(MraArticleInfo? i) => i == null ? "(not in Article Master)" : string.Join(" · ", i.Brand, string.IsNullOrEmpty(i.McDesc) ? i.McCd : i.McDesc, "₹" + i.Mrp, i.Flag);
+    private static string Time(DateTimeOffset? t) => t == null ? "—" : Fmt.When(t.Value.ToString("o"));
+    private static string PoStatusText(string? st) => st switch { "3" => "Released", "1" or "2" => "Unreleased", "C" => "Closed", "mixed" => "Mixed", _ => st ?? "" };
+
+    private sealed record Tile(string K, string G, string Label, string Sub, Func<MraRowDto, bool> F);
+    private static readonly Tile[] Tiles =
+    {
+        new("l1", "w", "With Division Head", "Level 1 → 2", x => x.M.Level == "1" && !x.M.Was8),
+        new("l2", "w", "With Category Head", "Level 2 → 4", x => x.M.Level == "2"),
+        new("l4", "w", "With Commercial", "Level 4 → final", x => x.M.Level == "4"),
+        new("dh", "w", "Exception – with Division Head", "Level 8 → 1", x => x.M.Level == "1" && x.M.Was8),
+        new("l8", "e", "Exception asked", "Level 8, with Commercial", x => x.M.Level == "8"),
+        new("l5t", "t", "PO created today", "final today", x => x.M.Level == "5" && x.M.L5Live),
+        new("l5", "c", "Final (earlier)", "PO in released-PO file", x => x.M.Level == "5" && !x.M.L5Live),
+        new("rej", "c", "Cancelled / rejected", "Level 7 / X", x => x.M.Level is "7" or "X"),
+        new("dd", "c", "Expired", "delivery date passed", x => x.C.DdPassed && x.M.Level is "1" or "2" or "4" or "8"),
+        new("aside", "c", "Set aside", "multi concept / not in Article Master", x => x.C.SetAside),
+    };
+    private static readonly (string G, string T, string N)[] TGroups =
+    {
+        ("w", "Open – waiting for approval", "counted against capacity"), ("e", "Exception", "not counted until approved"),
+        ("t", "Today", "counted until tomorrow's files"), ("c", "Closed / not counted", "")
+    };
+    private static readonly Dictionary<string, string> GroupBy = new()
+    {
+        [""] = "No grouping", ["queue"] = "Waiting with", ["decision"] = "Decision (SAP)", ["dh"] = "Division Head", ["ch"] = "Category Head",
+        ["group"] = "Brand · MC · MRP · Flag", ["mon"] = "Delivery month", ["level"] = "Level"
+    };
+
+    protected override async Task OnInitializedAsync()
+    {
+        await Session.InitAsync();
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        _busy = true;
+        var res = await ApiMasterService.MraStateAsync();
+        _busy = false;
+        if (res.IsSuccess && res.Data != null)
+        {
+            _s = res.Data;
+            if (_open != null) _open = _s.Rows.FirstOrDefault(r => r.No == _open.No);
+        }
+        else { Snackbar.Warn(res.responseMessage); _s ??= new MraStateResponse { Available = false, UnavailableReason = res.responseMessage }; }
+    }
+
+    private bool IsMine(MraRowDto x)
+    {
+        var e = Session.Email.ToLowerInvariant();
+        return e.Length > 0 && ((x.M.Level == "1" && x.C.DhEmail == e) || (x.M.Level == "2" && x.C.ChEmail == e));
+    }
+
+    private IEnumerable<MraRowDto> Filtered(bool skipDec = false)
+    {
+        var tile = Tiles.FirstOrDefault(t => t.K == _tile);
+        var q = _q.Trim().ToLowerInvariant();
+        return _s!.Rows.Where(x =>
+        {
+            if (tile != null && !tile.F(x)) return false;
+            if (_mine && !IsMine(x)) return false;
+            if (_lv.Length > 0 && x.M.Level != _lv) return false;
+            if (_counted == "y" && !x.C.Counted) return false;
+            if (_counted == "n" && x.C.Counted) return false;
+            if (_ch.Length > 0 && x.C.ChEmail != _ch) return false;
+            if (_dh.Length > 0 && x.C.DhEmail != _dh) return false;
+            if (_mon.Length > 0 && x.C.Mon != _mon) return false;
+            if (!skipDec && _dec.Length > 0 && x.DecGroup != _dec) return false;
+            if (q.Length > 0)
+            {
+                var hay = string.Join(" ", x.No, x.M.Ga, x.M.Colour, x.M.GaDesc, x.M.CreatedBy, x.M.CreatedById, x.M.PoNo, x.M.Decision.Decision,
+                                      x.M.Decision.DecisionId, x.C.Info?.McDesc, x.C.Info?.Desc).ToLowerInvariant();
+                if (!hay.Contains(q)) return false;
+            }
+            return true;
+        }).OrderByDescending(x => x.C.Counted).ThenBy(x => x.M.Dd, StringComparer.Ordinal).ThenByDescending(x => x.M.Qty);
+    }
+
+    private string GrpKey(MraRowDto x) => _gb switch
+    {
+        "queue" => x.C.Queue.Length > 0 ? x.C.Queue : "Level " + x.M.Level,
+        "decision" => x.DecGroup,
+        "dh" => x.C.DhEmail.Length > 0 ? (Who(x.C.DhEmail) is { Length: > 0 } w ? w : x.C.DhEmail) : "(no Division Head in SCR)",
+        "ch" => x.C.ChEmail.Length > 0 ? (Who(x.C.ChEmail) is { Length: > 0 } w2 ? w2 : x.C.ChEmail) : "(no Category Head in SCR)",
+        "group" => Group(x.C.Info),
+        "mon" => MonL(x.C.Mon) is { Length: > 0 } m ? m : "—",
+        "level" => x.M.Level + " – " + Lvl(x.M.Level),
+        _ => ""
+    };
+
+    private void ClearFilters() { _tile = _q = _lv = _ch = _dh = _mon = _dec = _counted = ""; _mine = false; }
+
+    private RenderFragment QueuesTab() => __builder =>
+    {
+        var all = _s!.Rows;
+        var baseRows = Filtered(skipDec: true).ToList();
+        var dc = baseRows.GroupBy(x => x.DecGroup).ToDictionary(g => g.Key, g => g.Count());
+        var rows = Filtered().ToList();
+        var shown = rows.Take(600).ToList();
+        var chs = all.Where(x => x.C.ChEmail.Length > 0).Select(x => x.C.ChEmail).Distinct().OrderBy(Who).ToList();
+        var dhs = all.Where(x => x.C.DhEmail.Length > 0).Select(x => x.C.DhEmail).Distinct().OrderBy(Who).ToList();
+        var mons = all.Select(x => x.C.Mon).Where(m => m.Length > 0).Distinct().OrderBy(MonOrd).ToList();
+        var mineN = all.Count(IsMine);
+        var anyF = _tile.Length + _lv.Length + _q.Length + _ch.Length + _dh.Length + _mon.Length + _counted.Length + _dec.Length > 0 || _mine;
+        <div class="mq-groups" data-testid="mq-tiles">
+            @foreach (var g in TGroups)
+            {
+                var ts = Tiles.Where(t => t.G == g.G).ToList();
+                <div class="mq-grpbox" style="flex:@ts.Count 1 @(ts.Count * 150)px">
+                    <div class="mq-gt">@g.T @if (g.N.Length > 0) { <span>@g.N</span> }</div>
+                    <div class="mq-tiles" style="grid-template-columns:repeat(@ts.Count,minmax(0,1fr))">
+                        @foreach (var t in ts)
+                        {
+                            var hit = all.Where(t.F).ToList();
+                            <button class="mq-tile @(_tile == t.K ? "a" : "")" @onclick="() => _tile = _tile == t.K ? string.Empty : t.K" data-testid="mq-tile-@t.K">
+                                <b>@hit.Count.ToString("N0")</b><div class="l">@t.Label</div><div class="s">@t.Sub · @Nf(hit.Sum(h => h.M.Qty)) pcs</div>
+                            </button>
+                        }
+                    </div>
+                </div>
+            }
+        </div>
+        <div class="mq-decs">
+            <span style="font-weight:700;color:var(--ink2)">Decision (from SAP):</span>
+            @foreach (var d in MraCapacity.DecisionGroups.Where(d => dc.ContainsKey(d) || d is "Not sent" or "Allow" or "Reduce" or "Watch List" or "Hold" or "Block"))
+            {
+                <button class="mq-dchip @(_dec == d ? "a" : "")" @onclick="() => _dec = _dec == d ? string.Empty : d"><span class="mq-d @DecCls(d)">@d</span> <b>@(dc.TryGetValue(d, out var n) ? n : 0)</b></button>
+            }
+        </div>
+        <div class="mq-f">
+            <input placeholder="Search MRA No, article, colour, PO, buyer, decision…" style="min-width:250px;flex:1 1 250px" @bind="_q" @bind:event="oninput" data-testid="mq-q" />
+            @if (mineN > 0)
+            {
+                <button class="@(_mine ? "btn-pri" : "btn-sec") btn-sm" @onclick="() => _mine = !_mine">Waiting with me <b>@mineN</b></button>
+            }
+            <select @bind="_dh"><option value="">All Division Heads</option>@foreach (var e in dhs) { <option value="@e">@Who(e)</option> }</select>
+            <select @bind="_ch"><option value="">All Category Heads</option>@foreach (var e in chs) { <option value="@e">@Who(e)</option> }</select>
+            <select @bind="_mon"><option value="">All delivery months</option>@foreach (var m in mons) { <option value="@m">@MonL(m)</option> }</select>
+            <select @bind="_lv"><option value="">All levels</option>@foreach (var l in MraNorm.LevelOrder) { <option value="@l">@l – @Lvl(l)</option> }</select>
+            <select @bind="_counted"><option value="">Counted and not counted</option><option value="y">Counted only</option><option value="n">Not counted only</option></select>
+            <select @bind="_gb">@foreach (var (k, v) in GroupBy) { <option value="@k">@(k.Length > 0 ? "Group by: " : "")@v</option> }</select>
+            @if (anyF) { <button class="btn-sec btn-sm" @onclick="ClearFilters">✕ Clear filters</button> }
+            <button class="btn-pri btn-sm" style="margin-left:auto" @onclick="() => ExcelAsync(rows)">⬇ Excel (what is on screen)</button>
+        </div>
+        <div class="card" style="padding:10px 12px">
+            <div style="font-weight:700;margin-bottom:6px">MRAs <span class="mq-sub">(@rows.Count.ToString("N0")@(rows.Count > 600 ? ", first 600 shown – narrow with the filters" : "") · click an MRA for its decision and history)</span></div>
+            <div class="mq-wrap">
+                <table class="mq-tbl" data-testid="mq-table">
+                    <thead><tr><th>MRA No</th><th>Generic article</th><th>Colour</th><th>Delivery</th><th class="n">Qty</th><th>Level / waiting with</th><th>Decision (SAP)</th><th>Capacity</th><th>PO</th><th>Changed</th></tr></thead>
+                    <tbody>
+                        @if (shown.Count == 0)
+                        {
+                            <tr><td colspan="10" class="pf-empty">@(_s.Snapshot != null ? "No MRA matches the filters." : "No MRA file loaded yet.")</td></tr>
+                        }
+                        else if (_gb.Length > 0)
+                        {
+                            var groups = shown.GroupBy(GrpKey).ToList();
+                            IEnumerable<IGrouping<string, MraRowDto>> ordered = _gb == "decision" ? groups.OrderBy(g => Array.IndexOf(MraCapacity.DecisionGroups, g.Key))
+                                : _gb == "mon" ? groups.OrderBy(g => MonOrd(g.First().C.Mon)) : groups.OrderByDescending(g => g.Count()).ThenBy(g => g.Key);
+                            foreach (var g in ordered)
+                            {
+                                var pcs = g.Sum(x => x.M.Qty); var cp = g.Where(x => x.C.Counted).Sum(x => x.M.Qty);
+                                <tr class="mq-grow"><td colspan="10">@g.Key <span>@g.Count() MRA@(g.Count() > 1 ? "s" : "") · @Nf(pcs) pcs@(cp > 0 ? " · " + Nf(cp) + " pcs counted" : "")</span></td></tr>
+                                foreach (var x in g) { @Row(x) }
+                            }
+                        }
+                        else
+                        {
+                            foreach (var x in shown) { @Row(x) }
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    };
+
+    private RenderFragment Row(MraRowDto x) => __builder =>
+    {
+        var m = x.M; var c = x.C;
+        <tr class="cl" @onclick="() => _open = x" data-testid="mq-row">
+            <td><b>@x.No</b><div class="mq-sub">@(m.CreatedBy ?? m.CreatedById)@(m.Src == "live" ? " · live" : "")</div></td>
+            <td>@m.Ga<div class="mq-sub">@(c.Info?.Desc is { Length: > 0 } d ? d : m.GaDesc)</div></td>
+            <td><b>@m.Colour</b></td>
+            <td style="white-space:nowrap">@MraCapacity.DayLabel(m.Dd)<div class="mq-sub">@MonL(c.Mon)</div></td>
+            <td class="n">@Nf(m.Qty)</td>
+            <td><span class="mq-lv">@m.Level</span> @(c.Queue.Length > 0 ? c.Queue : Lvl(m.Level))@if (c.Owner.Length > 0 && c.Owner != c.Queue) { <div class="mq-sub">@c.Owner</div> }</td>
+            <td style="max-width:220px">
+                @if (x.DecGroup == "Not sent") { <span class="mq-d d-ns">not sent</span> }
+                else { <span class="mq-d @DecCls(x.DecGroup)">@m.Decision.Decision</span> <div class="mq-sub" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="@m.Decision.DecisionReason">@m.Decision.DecisionReason</div> }
+            </td>
+            <td style="max-width:240px"><span class="mq-c @(c.Counted ? "y" : c.SetAside || c.DdPassed ? "w" : "n")">@(c.Counted ? "Counted" : "Not counted")</span><div class="mq-sub">@c.Why</div></td>
+            <td>@if (!string.IsNullOrEmpty(m.PoNo)) { <span>@m.PoNo</span><div class="mq-sub">@PoStatusText(m.PoStatus)@(m.PoSrc == "live" ? " · live" : "")</div> } else { <span class="mq-sub">—</span> }</td>
+            <td class="mq-sub">@(m.ChangedAt != null ? Time(m.ChangedAt) : "morning file")</td>
+        </tr>
+    };
+
+    private RenderFragment Panel(MraRowDto x) => __builder =>
+    {
+        var m = x.M; var c = x.C; var d = m.Decision;
+        <div class="mq-panel" data-testid="mq-panel">
+            <div style="display:flex;align-items:flex-start;gap:8px">
+                <div>
+                    <div class="mq-sub" style="font-weight:800;letter-spacing:.06em">MRA – DECISION AND HISTORY</div>
+                    <div style="font-size:17px;font-weight:800;color:#13254A">MRA @x.No · @m.Ga @m.Colour</div>
+                    <div class="mq-sub">@(c.Info?.Desc ?? m.GaDesc) · @Nf(m.Qty) pcs · @MraCapacity.DayLabel(m.Dd)</div>
+                </div>
+                <button class="btn-sec btn-sm" style="margin-left:auto" @onclick="() => _open = null">✕ Close</button>
+            </div>
+            <div class="mq-ph">Decision (sent by SAP)</div>
+            @if (x.DecGroup == "Not sent")
+            {
+                <div class="mq-pbox d-ns">No decision has been received from SAP for this MRA yet. When SAP sends the decision (with its reason and working) it shows here.</div>
+            }
+            else
+            {
+                <div class="mq-pbox @DecCls(x.DecGroup)"><div style="font-size:15px;font-weight:800">@d.Decision</div>@if (!string.IsNullOrEmpty(d.DecisionReason)) { <div style="margin-top:4px">@d.DecisionReason</div> }</div>
+                <table class="mq-kv">
+                    @if (d.DecisionId != null) { <tr><td>Decision ID</td><td>@d.DecisionId</td></tr> }
+                    @if (d.DecisionAt != null) { <tr><td>Decided at</td><td>@d.DecisionAt</td></tr> }
+                    @if (d.DecisionMaxPerm != null) { <tr><td>Max Permissible at the decision</td><td>@Nf(d.DecisionMaxPerm)</td></tr> }
+                    @if (d.DecisionUrl != null) { <tr><td>Verdict page</td><td><a href="@d.DecisionUrl" target="_blank" rel="noopener noreferrer">open ↗</a></td></tr> }
+                </table>
+                @if (d.Working != null)
+                {
+                    <div class="mq-ph">Working sent with the decision</div>
+                    <pre style="font-size:10.5px;background:#F7F8FA;border-radius:8px;padding:8px;max-height:220px;overflow:auto">@d.Working.ToJsonString(new System.Text.Json.JsonSerializerOptions { WriteIndented = true })</pre>
+                }
+            }
+            <div class="mq-ph">Where it is now</div>
+            <table class="mq-kv">
+                <tr><td>Level</td><td><span class="mq-lv">@m.Level</span> @Lvl(m.Level)</td></tr>
+                <tr><td>Waiting with</td><td>@(c.Queue.Length > 0 ? c.Queue + (c.Owner.Length > 0 && c.Owner != c.Queue ? " – " + c.Owner : "") : "—")</td></tr>
+                <tr><td>Capacity</td><td><b>@(c.Counted ? "Counted" : "Not counted")</b> – @c.Why</td></tr>
+                <tr><td>Qty</td><td>@Nf(m.Qty)@if (m.FileQty != null && m.FileQty != m.Qty) { <span class="mq-sub"> (morning file @Nf(m.FileQty))</span> }</td></tr>
+                <tr><td>Delivery</td><td>@MraCapacity.DayLabel(m.Dd) · counts in @MonL(c.Mon)</td></tr>
+                @if (!string.IsNullOrEmpty(m.PoNo)) { <tr><td>PO</td><td>@m.PoNo · @PoStatusText(m.PoStatus)@(m.PoSrc == "live" ? " · live" : "")</td></tr> }
+                <tr><td>Group</td><td>@Group(c.Info)</td></tr>
+                @if (c.DhEmail.Length > 0) { <tr><td>Division Head</td><td>@Who(c.DhEmail)</td></tr> }
+                @if (c.ChEmail.Length > 0) { <tr><td>Category Head</td><td>@Who(c.ChEmail)</td></tr> }
+                @if (!string.IsNullOrEmpty(m.CreatedBy) || !string.IsNullOrEmpty(m.CreatedById)) { <tr><td>Created by</td><td>@string.Join(" · ", new[] { m.CreatedBy, m.CreatedById }.Where(s => !string.IsNullOrEmpty(s)))</td></tr> }
+                @if (!string.IsNullOrEmpty(m.Inspiration)) { <tr><td>Inspiration</td><td>@m.Inspiration</td></tr> }
+                @if (m.Lines > 0) { <tr><td>Item lines</td><td>@m.Lines</td></tr> }
+            </table>
+            <div class="mq-ph">Level changes since the morning file</div>
+            @if (m.History.Count == 0)
+            {
+                <div class="mq-sub">None – level from the morning file.</div>
+            }
+            else
+            {
+                <table class="mq-tbl"><thead><tr><th>Time</th><th>Change</th><th class="n">Qty</th></tr></thead><tbody>
+                    @foreach (var h in m.History)
+                    {
+                        <tr><td>@Time(h.At)</td><td>@(h.From != null ? "Level " + h.From + " → " : "created at ")Level @h.To @Lvl(h.To)</td><td class="n">@Nf(h.Qty)</td></tr>
+                    }
+                </tbody></table>
+            }
+        </div>
+    };
+
+    private RenderFragment ColourTab() => __builder =>
+    {
+        var g = new Dictionary<string, ColourAgg>();
+        ColourAgg Get(MraArticleInfo info, string colour, string mon)
+        {
+            var k = MraCapacity.GKey(info) + "|" + colour + "|" + mon;
+            if (!g.TryGetValue(k, out var e)) g[k] = e = new ColourAgg { Info = info, Colour = colour, Mon = mon };
+            return e;
+        }
+        foreach (var x in _s!.Rows.Where(r => r.C.Counted && r.C.Info != null))
+        {
+            var e = Get(x.C.Info!, x.M.Colour, x.C.Mon);
+            e.N++; e.Pcs += x.M.Qty; e.Mras.Add(x.No);
+            if (x.M.Level == "1") e.L1 += x.M.Qty; else if (x.M.Level == "2") e.L2 += x.M.Qty; else if (x.M.Level == "4") e.L4 += x.M.Qty; else e.L5 += x.M.Qty;
+        }
+        if (_s.Switches.LivePo)
+            foreach (var p in _s.Pos.Where(p => p.Effect is { Counted: true }))
+                foreach (var a in p.Effect!.Parts.Where(a => a.Counted && a.Delta != 0 && a.Info != null))
+                {
+                    var e = Get(a.Info!, a.Colour, a.Mon);
+                    e.Po += a.Delta; e.Pcs += a.Delta;
+                }
+        var list = g.Values.OrderByDescending(e => e.Pcs).ToList();
+        <div class="card" style="padding:10px 12px">
+            <div style="font-weight:700;margin-bottom:6px">What the MRAs take from each colour <span class="mq-sub">(counted only; these pcs are added to the released POs in the Max Permissible of that colour and delivery month)</span></div>
+            <div class="mq-wrap">
+                <table class="mq-tbl" data-testid="mq-colour">
+                    <thead><tr><th>Group</th><th>Colour</th><th>Delivery month</th><th class="n">MRAs</th><th class="n">Level 1</th><th class="n">Level 2</th><th class="n">Level 4</th><th class="n">Final today</th>@if (_s.Switches.LivePo) { <th class="n">Live PO change</th> }<th class="n">Pcs counted</th><th>MRA Nos</th></tr></thead>
+                    <tbody>
+                        @if (list.Count == 0) { <tr><td colspan="11" class="pf-empty">Nothing counted right now.</td></tr> }
+                        @foreach (var e in list)
+                        {
+                            <tr><td>@Group(e.Info)</td><td><b>@e.Colour</b></td><td>@MonL(e.Mon)</td><td class="n">@e.N</td><td class="n">@Nf(e.L1)</td><td class="n">@Nf(e.L2)</td><td class="n">@Nf(e.L4)</td><td class="n">@Nf(e.L5)</td>
+                                @if (_s.Switches.LivePo) { <td class="n">@Nf(e.Po)</td> }
+                                <td class="n"><b>@Nf(e.Pcs)</b></td><td class="mq-sub">@string.Join(", ", e.Mras.Take(6))@(e.Mras.Count > 6 ? " …" : "")</td></tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    };
+
+    private RenderFragment ChangesTab() => __builder =>
+    {
+        var rows = _s!.Log.Where(r => r.Kind != "po" || _s.Switches.LivePo || Session.IsAdmin).Reverse().Take(800).ToList();
+        <div class="card" style="padding:10px 12px">
+            <div style="font-weight:700;margin-bottom:6px">Live changes received <span class="mq-sub">(newest first; since the MRA file was loaded)</span></div>
+            <div class="mq-wrap">
+                <table class="mq-tbl" data-testid="mq-changes">
+                    <thead><tr><th>Time</th><th>Document</th><th>Change</th><th>Effect on Max Permissible</th><th>Result</th><th>From</th></tr></thead>
+                    <tbody>
+                        @if (rows.Count == 0) { <tr><td colspan="6" class="pf-empty">No live change received yet.</td></tr> }
+                        @foreach (var r in rows) { @LogRow(r) }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    };
+
+    private RenderFragment LogRow(MraLogRowDto r) => __builder =>
+    {
+        <tr>
+            <td class="mq-sub">@Time(r.At)</td>
+            <td>@(r.Kind == "po" ? "PO " + (r.Po?.Po ?? "?") : "MRA " + (r.Mra?.Mra ?? "?"))@if (r.Po?.Mra != null) { <span class="mq-sub"> MRA @r.Po.Mra</span> }</td>
+            <td>
+                @if (r.Error != null) { <span class="mq-sub">@((r.Raw ?? "").Length > 120 ? r.Raw![..120] : r.Raw)</span> }
+                else if (r.Kind == "po") { <span>status → @(r.Po!.Status == "C" ? "closed" : r.Po.Status)@(r.Po.Qty != null ? " · " + Nf(r.Po.Qty) + " pcs" : "")</span> }
+                else { <span>level → <span class="mq-lv">@r.Mra!.Level</span> @Lvl(r.Mra.Level)@(r.Mra.Qty != null ? " · " + Nf(r.Mra.Qty) + " pcs" : "")@(r.Mra.PoNo != null ? " · PO " + r.Mra.PoNo : "")</span> }
+            </td>
+            <td><span class="mq-eff @r.EffectCls">@r.EffectText</span></td>
+            <td>@r.Outcome@if (r.Reason != null) { <div class="mq-sub">@r.Reason</div> }</td>
+            <td class="mq-sub">@r.By</td>
+        </tr>
+    };
+
+    private RenderFragment PoTab() => __builder =>
+    {
+        var rows = _s!.Pos.Where(p => p.Effect != null).ToList();
+        <div class="card" style="padding:10px 12px">
+            <div style="font-weight:700;margin-bottom:6px">PO queue <span class="mq-sub">(live PO changes since the morning files; “In released-PO file” = pending qty of that PO in this morning's file)</span></div>
+            <div class="mq-wrap">
+                <table class="mq-tbl" data-testid="mq-po">
+                    <thead><tr><th>PO</th><th>MRA</th><th>Generic article</th><th>Colour</th><th>Delivery month</th><th>Status now</th><th class="n">In released-PO file</th><th class="n">Now</th><th>Effect</th><th>Changed</th></tr></thead>
+                    <tbody>
+                        @if (rows.Count == 0) { <tr><td colspan="10" class="pf-empty">No live PO change received.</td></tr> }
+                        @foreach (var p in rows)
+                        {
+                            var e = p.Effect!;
+                            var cls = !e.Counted ? "zr" : e.Delta > 0 ? "dn" : e.Delta < 0 ? "up" : "zr";
+                            <tr><td><b>@p.Po</b></td><td>@(e.Mra.Length > 0 ? e.Mra : "—")</td><td>@e.Ga</td><td>@e.Colour</td><td>@MonL(e.Mon)</td>
+                                <td>@(e.Status == "3" ? "Released (3)" : e.Status == "C" ? "Closed" : "Unreleased (" + e.Status + ")")</td><td class="n">@Nf(e.Was)</td><td class="n">@Nf(e.Now)</td>
+                                <td><span class="mq-eff @cls">@(!e.Counted ? "not counted (" + e.Why + ")" : e.Delta > 0 ? "▼ " + Nf(e.Delta) + " down" : e.Delta < 0 ? "▲ " + Nf(-e.Delta) + " up" : "no change")</span></td>
+                                <td class="mq-sub">@Time(e.ChangedAt)</td></tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    };
+
+    private sealed class ColourAgg
+    {
+        public MraArticleInfo Info = new();
+        public string Colour = "", Mon = "";
+        public int N;
+        public long Pcs, L1, L2, L4, L5, Po;
+        public List<string> Mras = new();
+    }
+
+    private async Task ExcelAsync(List<MraRowDto> rows)
+    {
+        using var wb = new XLWorkbook();
+        var ws = wb.AddWorksheet("MRAs");
+        string[] head = { "MRA No", "Generic Article", "Description", "Colour", "Delivery date", "Delivery month", "Qty", "Level", "Level description", "Waiting with",
+                          "Owner", "Counted", "Why", "Decision (SAP)", "Decision reason", "Decision ID", "Max Permissible at decision", "PO", "PO status",
+                          "Brand", "MC", "MRP", "Flag", "Division Head", "Category Head", "Created by", "Source", "Changed" };
+        for (var i = 0; i < head.Length; i++) { ws.Cell(1, i + 1).Value = head[i]; ws.Cell(1, i + 1).Style.Font.Bold = true; }
+        var r = 2;
+        foreach (var x in rows)
+        {
+            var m = x.M; var c = x.C;
+            object?[] v = { x.No, m.Ga, c.Info?.Desc ?? m.GaDesc, m.Colour, m.Dd, MonL(c.Mon), m.Qty, m.Level, Lvl(m.Level), c.Queue, c.Owner, c.Counted ? "Yes" : "No", c.Why,
+                            m.Decision.Decision, m.Decision.DecisionReason, m.Decision.DecisionId, m.Decision.DecisionMaxPerm, m.PoNo, PoStatusText(m.PoStatus),
+                            c.Info?.Brand, c.Info?.McCd, c.Info?.Mrp, c.Info?.Flag, Who(c.DhEmail), Who(c.ChEmail), m.CreatedBy ?? m.CreatedById,
+                            m.Src == "live" ? "live" : "morning file", m.ChangedAt?.ToString("yyyy-MM-dd HH:mm") };
+            for (var i = 0; i < v.Length; i++) ws.Cell(r, i + 1).Value = XLCellValue.FromObject(v[i]);
+            r++;
+        }
+        ws.SheetView.FreezeRows(1);
+        ws.Columns().AdjustToContents(1, Math.Min(r, 200));
+        using var ms = new MemoryStream();
+        wb.SaveAs(ms);
+        await Files.SaveAsync(new Domain.Entities.Response.ApiFileResponse
+        {
+            FileName = "MRA_Queues_" + (_s?.Today ?? "") + ".xlsx", ContentType = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", FileBytes = ms.ToArray()
+        });
+    }
+}

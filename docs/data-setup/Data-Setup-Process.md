@@ -187,20 +187,20 @@ The stored versions stay in `dataset_versions`, so the file can be made current 
 | Every PO check / SAP decision / Tool 2 run | `DOC_GET GET_DOC manifest` | "Same dataVersion and paramsVersion as in memory?" Yes → no more SQL. |
 | After an upload / clear / restore / parameter save | `DOC_GET GET_DOC manifest` → `BLOB_GET GET` **only for the datasets whose version changed** → `DOC_GET GET_DOC params` | The new snapshot replaces the old one |
 
-### 4.9 MRA Status (morning file + SAP during the day)
+### 4.9 MRA file (morning file + SAP during the day)
 
-A card on 📂 Data Setup, separate from the eleven datasets: the MRA lines are stored as **table rows**
-(`SAP_MRA_STATUS`), not as a gzipped version, because SAP changes single lines all day. SQL Server only.
+A card on 📂 Data Setup, separate from the eleven datasets: MRAs are stored as **table rows**, not as a gzipped
+version, because SAP changes single MRAs all day. SQL Server only. Rules of v1.1.7 (Python tool): open MRAs
+(levels 1, 2, 4; level 5 reached live today) take capacity from their colour and delivery month in the single
+concept Max Permissible, like a released PO.
 
 | Step | Procedure (@Cmd) | What |
 |---|---|---|
-| Morning: ⬆ Upload MRA file (.xlsx / .csv) | – (read in the API) | Header row found by name (MRA No / MRN No, Qty / PO Qty, Status / Decision …). **MRA No, Qty and Status are required**; one wrong row → the whole file is refused with the row numbers, nothing changes |
-| | `PRO_SAP_MRA_STATUS UPLOAD` | One transaction: **merges** the file into `SAP_MRA_STATUS` — a line already there (MRA No + article + colour) takes the file's Qty, Status and every filled cell (an empty cell keeps the stored value); a new line is added; lines not in the file stay. An MRA line without article / colour for an MRA with several lines is skipped and listed. Added / changed lines get a history row (`FILE_CREATED` / `FILE_UPDATED`); counts in `SAP_MRA_UPLOADS` |
-| During the day: SAP `POST /api/sap/v1/mra-status` | `PRO_SAP_MRA_STATUS APPLY` | Each change in order: CREATED / UPDATED / UNCHANGED / STALE / AMBIGUOUS; every change written to `SAP_MRA_STATUS_HISTORY` |
-| Opening the card, ↻ Refresh | `PRO_SAP_MRA_STATUS SUMMARY` → `LIST` | Lines / MRAs / quantity per status, last upload, SAP changes today; the list with search and paging |
-| Clicking an MRA | `PRO_SAP_MRA_STATUS HISTORY` | Every SAP change of that MRA |
+| Morning: ⬆ Upload MRA file (.xlsx / .xlsb) | – (read in the API) | One workbook, two sheets found by their headers: item lines (DOC.NO, ARTICLE CODE, Color, Generic Article, TOTAL PO QTY, DEL. DATE, LEVEL) and the header report (Document Number, Purchase order, Status). TOTAL PO QTY added up per MRA (all sites); Generic Article = last 10 digits; rows that cannot be read are skipped and counted |
+| | `PRO_SAP_MRA UPLOAD` | One transaction: **replaces** `SAP_MRA_FILE` (one row per MRA), one `SAP_MRA_FILE_UPLOADS` row with the counts. A decision SAP sent live earlier is kept when the file has none |
+| During the day: SAP `POST /api/sap/v1/mra-events`, `/po-events` | `PRO_SAP_MRA FEED_ADD` | Every message stored in arrival order (`SAP_MRA_FEED`), also a bad one |
+| Every New PO request / SAP decision / single concept Recommendation, MRA Queues, SAP Feed | `PRO_SAP_MRA STAMP` (→ `STATE` when something changed) | The last file + the messages received since its upload day, replayed in the API (applied / duplicate / older / parked) and classified (counted or not, and why) |
 
-Statuses: ALLOW, WATCHLIST, CANCELLED, DISCARDED, REJECTED, SELF_REJECTED (setting `SapInterface:MraStatuses`).
 Full SAP contract: `docs/sap/SAP-API-Reference.md` §8.
 
 ---
@@ -229,7 +229,7 @@ Full SAP contract: `docs/sap/SAP-API-Reference.md` §8.
 | `PRO_POGOV_AUDIT` | `APPEND` | audit lines |
 | `PRO_POGOV_DOC_MAP_PUT` | `USERS` / `SESSIONS` | SCR file only (4.4) |
 | `PRO_POGOV_STORE_INFO` | `STORAGE_BYTES` | History page total |
-| `PRO_SAP_MRA_STATUS` | `UPLOAD` / `APPLY` / `LIST` / `SUMMARY` / `HISTORY` | MRA Status card and SAP `mra-status` (4.9) |
+| `PRO_SAP_MRA` | `UPLOAD` / `STATE` / `STAMP` / `FEED_ADD` | MRA file card, MRA Queues, SAP Feed, SAP `mra-events` / `po-events` (4.9) |
 
 ---
 

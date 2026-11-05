@@ -13,7 +13,9 @@ namespace DecisionEngine.Tool2
     /// </summary>
     public sealed partial class Tool2Workspace
     {
-        private static bool IsAction(Tool2LineResult r) => r.Decision != Decisions.Retain && r.Decision != Decisions.CannotValidate;
+        /// <summary>A line that needs action: not Retain, Cannot Validate or (v1.1.6) No Plan – Review.</summary>
+        private static bool IsAction(Tool2LineResult r) =>
+            r.Decision != Decisions.Retain && r.Decision != Decisions.CannotValidate && r.Decision != Decisions.NoPlanReview;
 
         /// <summary>cut qty × (PO rate, else MRP) when that rate is a positive finite number, else 0.</summary>
         public static double ValueAtRisk(Tool2LineResult r, double cutQty)
@@ -74,6 +76,7 @@ namespace DecisionEngine.Tool2
             var total = Results.Count;
             int By(string d) => Results.Count(r => r.Decision == d);
             int retain = By(Decisions.Retain), reduce = By(Decisions.ReduceQty), cancel = By(Decisions.Cancel), watch = By(Decisions.WatchList);
+            var noPlan = By(Decisions.NoPlanReview);
             double atRisk = 0, value = 0;
             foreach (var r in Results.Where(IsAction)) { atRisk += r.CutQty; value += ValueAtRisk(r, r.CutQty); }
             var pctAction = total > 0 ? Js.Round((double)(reduce + cancel + watch) / total * 100) : 0;
@@ -84,6 +87,7 @@ namespace DecisionEngine.Tool2
                 new() { Label = "Reduce Qty", Value = reduce.ToString(), Number = reduce, Color = "#D97706", Bg = "#FFFBEB", Decision = Decisions.ReduceQty },
                 new() { Label = "Cancel", Value = cancel.ToString(), Number = cancel, Color = "#DC2626", Bg = "#FEF2F2", Decision = Decisions.Cancel },
                 new() { Label = "Watch List", Value = watch.ToString(), Number = watch, Color = "#D97706", Bg = "#FFF3CD", Decision = Decisions.WatchList },
+                new() { Label = "No Plan – Review", Value = noPlan.ToString(), Number = noPlan, Color = "#3B5B92", Bg = "#E8EEF8", Decision = Decisions.NoPlanReview },
                 new() { Label = "Qty at Risk", Value = Js.Fmt(atRisk), Number = atRisk, Color = "#E8006E", Bg = "#FCE7F3" },
                 new() { Label = "₹ Value at Risk", Value = value > 0 ? "₹" + Js.FmtCr(value) : "—", Number = value, Color = "#7C3AED", Bg = "#F5F3FF" },
                 new() { Label = "% Need Action", Value = N(pctAction) + "%", Number = pctAction, Color = "#7C3AED", Bg = "#F5F3FF" }
@@ -369,8 +373,10 @@ namespace DecisionEngine.Tool2
                     maxPerm = Math.Max(0, Js.Round(EffT2 * dailyRate - stockNoPO));
                     excess = Math.Max(0, totalQty - maxPerm);
                 }
+                if (g.Decision == Decisions.NoPlanReview) { maxPerm = 0; excess = 0; }   // v1.1.6: no quantity suggested
                 string cd;
                 if (g.Decision == Decisions.CannotValidate) cd = Decisions.CannotValidate;
+                else if (g.Decision == Decisions.NoPlanReview) cd = Decisions.NoPlanReview;
                 else if (g.Decision == Decisions.WatchList) cd = Decisions.WatchList;
                 else if (g.ArtStr == null) cd = Decisions.Retain;
                 else if (excess == 0) cd = Decisions.Retain;
@@ -382,12 +388,14 @@ namespace DecisionEngine.Tool2
                 var remaining = excess;
                 var actions = sorted.Select(p =>
                 {
+                    if (cd == Decisions.NoPlanReview)
+                        return new Tool2PoActionDto { PoNum = p.PoNum, Gm = p.Gm, RelQty = p.RelQty, Action = Decisions.NoPlanReview, RecQty = 0, NoPlan = true };
                     if (remaining <= 0) return new Tool2PoActionDto { PoNum = p.PoNum, Gm = p.Gm, RelQty = p.RelQty, Action = Decisions.Retain, RecQty = p.RelQty };
                     if (remaining >= p.RelQty) { remaining -= p.RelQty; return new Tool2PoActionDto { PoNum = p.PoNum, Gm = p.Gm, RelQty = p.RelQty, Action = Decisions.Cancel, RecQty = 0 }; }
                     var retain = p.RelQty - remaining; remaining = 0;
                     return new Tool2PoActionDto { PoNum = p.PoNum, Gm = p.Gm, RelQty = p.RelQty, Action = Decisions.ReduceQty, RecQty = retain };
                 }).ToList();
-                foreach (var a in actions) a.ActionColor = a.Action == Decisions.Cancel ? "#DC2626" : a.Action == Decisions.ReduceQty ? "#D97706" : "#00873E";
+                foreach (var a in actions) a.ActionColor = a.Action == Decisions.Cancel ? "#DC2626" : a.Action == Decisions.ReduceQty ? "#D97706" : a.NoPlan ? "#3B5B92" : "#00873E";
 
                 var dto = new Tool2ColourGroupDto
                 {
@@ -406,8 +414,8 @@ namespace DecisionEngine.Tool2
         private void FillGroupDisplay(Tool2ColourGroupDto g)
         {
             var dec = g.ColourDecision;
-            g.DecisionColor = dec == "Cancel All" || dec == "Cancel" ? "#DC2626" : dec == "Reduce Qty" ? "#D97706" : dec == "Watch List" ? "#92400E" : dec == "Cannot Validate" ? "#6B7280" : "#00873E";
-            g.DecisionBg = dec == "Cancel All" || dec == "Cancel" ? "#FEF2F2" : dec == "Reduce Qty" ? "#FFFBEB" : dec == "Watch List" ? "#FFF7ED" : dec == "Cannot Validate" ? "#F3F4F6" : "#DCFCE7";
+            g.DecisionColor = dec == "Cancel All" || dec == "Cancel" ? "#DC2626" : dec == "Reduce Qty" ? "#D97706" : dec == "Watch List" ? "#92400E" : dec == "Cannot Validate" ? "#6B7280" : dec == Decisions.NoPlanReview ? "#3B5B92" : "#00873E";
+            g.DecisionBg = dec == "Cancel All" || dec == "Cancel" ? "#FEF2F2" : dec == "Reduce Qty" ? "#FFFBEB" : dec == "Watch List" ? "#FFF7ED" : dec == "Cannot Validate" ? "#F3F4F6" : dec == Decisions.NoPlanReview ? "#E8EEF8" : "#DCFCE7";
             g.StrText = StrText(g.ArtStr);
             g.StrColor = g.ArtStr != null && g.ArtStr > EffT2 ? "#DC2626" : "var(--ink2)";
             g.MixText = Pct1(g.MixPct) + "%";
@@ -415,7 +423,7 @@ namespace DecisionEngine.Tool2
             g.TotalQtyText = Js.Fmt(g.TotalQty);
             g.MaxPermText = g.MaxPermissible > 0 ? Js.Fmt(g.MaxPermissible) : "—";
             g.PanelTitle = dec + " — Colour STR Computation & PO Allocation";
-            if (g.RowDecision == Decisions.CannotValidate || g.RowDecision == Decisions.WatchList || (g.ArtStr == null && g.RowDecision == Decisions.Retain))
+            if (g.RowDecision == Decisions.CannotValidate || g.RowDecision == Decisions.NoPlanReview || g.RowDecision == Decisions.WatchList || (g.ArtStr == null && g.RowDecision == Decisions.Retain))
                 g.WhyNoStr = Or(g.RowDecisionReason, "No reason recorded.");
             var wdr = g.WindowDailyRate is double w && w != 0 ? w : 0;
             g.Kvs = new List<KvDto>

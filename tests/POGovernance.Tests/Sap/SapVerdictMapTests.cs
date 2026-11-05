@@ -18,6 +18,12 @@ namespace POGovernance.Tests.Sap
             BFirst = new Tool1EngineBResult { Decision = decision, MaxPermQty = maxPerm, WindowDemand = windowDemand, DecisionReason = reason }
         };
 
+        private static Tool1Outcome BNoPlan() => new()
+        {
+            Engine = "B", OptionType = "—", Decision = Decisions.Hold,
+            BFirst = new Tool1EngineBResult { Decision = Decisions.Hold, NoPlan = true, MaxPermQty = 0, DecisionReason = "No Plan Available: there is no F4 plan for …" }
+        };
+
         private static Tool1Outcome A(string decision, string? quartile, string reason, string optionType = "True Repeat") => new()
         {
             Engine = "A", OptionType = optionType, Decision = decision,
@@ -28,7 +34,9 @@ namespace POGovernance.Tests.Sap
         {
             // Single Concept (runEngineB)
             new object[] { "B Auto Allow (cover within norm)", B(Decisions.AutoAllow, 500), SapOutcomePath.CoverWithinNorm, "ALLOW", "ALLOW", "COVER_WITHIN_NORM", "COVER-00" },
-            new object[] { "B Auto Allow (no plan)", B(Decisions.AutoAllow, 0, 0, "No forecast data found for MC CD 1101 MRP 399 in F4."), SapOutcomePath.NoPlanData, "ALLOW", "ALLOW", "NO_PLAN_DATA", "PLAN-00" },
+            // v1.1.6 D1: "No Plan Available" Hold → HOLD NO_PLAN_DATA (was Auto Allow → ALLOW)
+            new object[] { "B Hold, No Plan Available", BNoPlan(), SapOutcomePath.NoPlanData, "HOLD", "HOLD", "NO_PLAN_DATA", "PLAN-00" },
+            new object[] { "B Watch List (no F3 sale, v1.1.6 D3)", B(Decisions.WatchList, 0, 0, "No sale in F3 for MC CD 1101 MRP 399 (last 45 days), so the colour share cannot be worked out."), SapOutcomePath.MixBelowMin, "WATCH", "WATCH", "MIX_BELOW_MIN", "MIX-01" },
             new object[] { "B Hold, Max Permissible > 0", B(Decisions.Hold, 500), SapOutcomePath.CoverAboveNorm, "REDUCE", "REDUCE", "COVER_ABOVE_NORM", "COVER-01" },
             new object[] { "B Recommend Reduced Qty (README relabel)", B(Decisions.ReduceRecommended, 320), SapOutcomePath.CoverAboveNorm, "REDUCE", "REDUCE", "COVER_ABOVE_NORM", "COVER-01" },
             new object[] { "B Hold, Max Permissible 0", B(Decisions.Hold, 0), SapOutcomePath.CoverNoHeadroom, "HOLD", "HOLD", "COVER_NO_HEADROOM", "COVER-02" },

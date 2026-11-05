@@ -40,7 +40,8 @@ namespace DecisionEngine.Sap
     /// <list type="bullet">
     /// <item>Auto Allow / Allow → ALLOW</item>
     /// <item>Single Concept quantity above Max Permissible with Max Permissible &gt; 0 → REDUCE + max_qty</item>
-    /// <item>Max Permissible 0 (Hold — Don't Raise) → HOLD</item>
+    /// <item>Max Permissible 0 (Hold — Don't Raise) → HOLD; v1.1.6 "No Plan Available" Hold (no F4 plan in the requirement
+    /// window) → HOLD with reason NO_PLAN_DATA</item>
     /// <item>Watch List → WATCH (route CATHEAD)</item>
     /// <item>Block → HOLD with reason_code BLOCK — or the new verdict BLOCK when <c>SapInterface:BlockVerdict = BLOCK</c>
     /// (one switch, see <see cref="VerdictFor"/>)</item>
@@ -59,7 +60,8 @@ namespace DecisionEngine.Sap
         public static readonly IReadOnlyList<SapVerdictRule> Table = new[]
         {
             new SapVerdictRule(SapOutcomePath.CoverWithinNorm, Decisions.AutoAllow, SapVerdicts.Allow, "COVER_WITHIN_NORM", "COVER-00", "Cover within the norm (STR <= T + buffer)"),
-            new SapVerdictRule(SapOutcomePath.NoPlanData, Decisions.AutoAllow, SapVerdicts.Allow, "NO_PLAN_DATA", "PLAN-00", "No plan for the MC-MRP-Flag: cover not computed, allowed"),
+            // v1.1.6 D1: no F4 plan in the requirement window → Hold "No Plan Available" (was Auto Allow / ALLOW)
+            new SapVerdictRule(SapOutcomePath.NoPlanData, Decisions.Hold, SapVerdicts.Hold, "NO_PLAN_DATA", "PLAN-00", "No Plan Available: no F4 plan for the MC-MRP-Flag in the requirement window, ask the planning team to add it"),
             new SapVerdictRule(SapOutcomePath.CoverAboveNorm, Decisions.Hold, SapVerdicts.Reduce, "COVER_ABOVE_NORM", "COVER-01", "Cover above the norm: reduce to Max Permissible"),
             new SapVerdictRule(SapOutcomePath.CoverNoHeadroom, Decisions.Hold, SapVerdicts.Hold, "COVER_NO_HEADROOM", "COVER-02", "Existing stock + pending already above the norm: Max Permissible 0"),
             new SapVerdictRule(SapOutcomePath.MixBelowMin, Decisions.WatchList, SapVerdicts.Watch, "MIX_BELOW_MIN", "MIX-01", "Colour mix below the minimum share of its MC-MRP"),
@@ -100,12 +102,13 @@ namespace DecisionEngine.Sap
                 var b = o.BFirst ?? o.B;
                 var d = b?.Decision ?? o.Decision;
                 if (d == Decisions.CannotValidate || b == null) return SapOutcomePath.CannotValidate;
+                // v1.1.6 D1: "No Plan Available" Hold — checked first by the engine
+                if (b.NoPlan == true) return SapOutcomePath.NoPlanData;
+                // Watch List: colour mix under the minimum, or (v1.1.6 D3) no F3 sale for the MC — same rule
                 if (d == Decisions.WatchList) return SapOutcomePath.MixBelowMin;
                 if (d == Decisions.Hold || d == Decisions.ReduceRecommended)
                     return b.MaxPermQty is double m && double.IsFinite(m) && m > 0 ? SapOutcomePath.CoverAboveNorm : SapOutcomePath.CoverNoHeadroom;
-                // Auto Allow: no plan for the bucket (windowDemand 0) or cover within the norm
-                if (b.WindowDemand is 0 || b.DecisionReason.StartsWith("No forecast data found", StringComparison.Ordinal))
-                    return SapOutcomePath.NoPlanData;
+                // Auto Allow: cover within the norm (v1.1.6: no plan is a Hold, no sale a Watch List — never Auto Allow)
                 return SapOutcomePath.CoverWithinNorm;
             }
             if (o.Engine == "A")

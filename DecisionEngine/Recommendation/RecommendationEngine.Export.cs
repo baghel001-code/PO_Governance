@@ -187,7 +187,11 @@ namespace DecisionEngine.Recommendation
             if (b != null)
             {
                 if (b.Rows.Count == 0) { paint.EmptyMessage = "No colour data found for this MC×MRP in F1/F3."; return paint; }
-                paint.Heading = "Colour-wise Stock & PO Recommendation — " + b.Rows.Count + " colours · ranked Stock High to Low · EffT=" + Js.NumberToString(b.Eff) + "d";
+                // v1.1.6 S8: the window / limit in the heading, "Download Excel (all lines)" and the hint (every cell opens the steps)
+                paint.Heading = "Colour-wise Stock & PO Recommendation — " + b.Rows.Count + " colours · ranked Stock High to Low · window " +
+                                Js.NumberToString(JsOps.Or(p.D, 75)) + " days from the month after delivery · limit " + Js.NumberToString(Js.Round(eff * 100) / 100) + " days";
+                paint.AllLinesLabel = "⬇ Download Excel (all lines)";
+                paint.HeadingHint = "Click any quantity, Hold or Watch List to see how it was worked out.";
                 double totalRec = 0;
                 foreach (var r in b.Rows)
                     foreach (var md in r.MData)

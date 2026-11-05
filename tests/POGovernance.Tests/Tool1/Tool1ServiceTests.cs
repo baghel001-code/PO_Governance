@@ -133,7 +133,7 @@ namespace POGovernance.Tests.Tool1
         {
             var svc = new Tool1Service(new FakeDatasetCache { Data = Tool1Fixture.Data(Scenario) }, new ForbiddenLedger(), new FakeAppClock { TodayValue = "2026-10-03" },
                 new Tool1DecisionEngine(new RecommendationEngine()));
-            var s = await svc.SubmitAsync(In("ZZ0000001", "BLK", "11.2026", 10), Buyer);
+            var s = await svc.SubmitAsync(In("7700000001", "BLK", "11.2026", 10), Buyer);   // v1.1.6: a new article must be in the Article Master
             Assert.Equal("notSaved", s.Status);
             Assert.Equal(new[] { "⚠ This Brand / MC / MRP is not mapped to you in the SCR products file. Ask the administrator.", "⚠ Request decided but NOT saved to server (HTTP 403)" }, s.Toasts);
             Assert.Equal("New Product", s.Card!.EngineLabel);

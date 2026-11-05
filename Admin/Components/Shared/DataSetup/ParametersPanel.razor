@@ -43,13 +43,15 @@
         <span class="p-lbl" title="Mix % = colour sales ÷ MC sales across Day 1 to Day N of a daily F3 (default 45)">Mix Window (days) <span class="p-note">(daily F3)</span></span>
         @Input("mixWindowDays")
     </div>
-    <div class="p-row">
-        <span class="p-lbl" title="Up to this day of the month, last month's still-pending PO qty is carried into this month's pending PO figure (default 5)">Prev-month PO cut-off (day)</span>
-        @Input("prevMonthPendingCutoffDay")
+    @* v1.1.6 S2 (legacy/v1.1.6/patches/25_cutoff_setting.py): the late PO cut-off day, whole days 1–28 *@
+    <div class="p-row" style="border-top:1px solid rgba(255,255,255,0.12);margin-top:6px;padding-top:6px"
+         title="From the 1st to this day of the month, a pending PO of last month still counts (PO Assessment: as stock at the window start). Whole days 1–28.">
+        <span class="p-lbl" style="color:#1A4FAF;font-weight:600">Late PO counts until day <span class="p-note">(Single Concept MRP)</span></span>
+        @Input("prevMonthPendingCutoffDay", blue: true)
     </div>
     <div class="p-help">
-        Mix Window: Mix % uses Day 1 … Day N of a daily F3. Cut-off: up to this day of the month, last month's
-        still-pending PO is carried into this month's pending PO.
+        Mix Window: Mix % uses Day 1 … Day N of a daily F3. Late PO: from the 1st to this day of the month, a pending PO
+        of last month still counts (PO Assessment: as stock at the window start).
     </div>
     <div class="ds-psave @(_saveError ? "er" : "")">
         @if (_saving)
@@ -110,15 +112,34 @@
         _ = InvokeAsync(async () => { await LoadAsync(); StateHasChanged(); });
     }
 
-    private RenderFragment Input(string key, string? width = null, bool amber = false) => __builder =>
+    private RenderFragment Input(string key, string? width = null, bool amber = false, bool blue = false) => __builder =>
     {
         <input @key="(key + _keys.GetValueOrDefault(key))" class="p-inp @(amber ? "amber" : "")" id="pp-@key" value="@_text[key]"
-               style="@(width ?? "width:56px")" disabled="@ReadOnly" inputmode="decimal"
+               style="@InputStyle(width, blue)" disabled="@ReadOnly" inputmode="decimal"
                @onchange="e => ChangedAsync(key, e.Value?.ToString())" />
     };
 
+    private static string InputStyle(string? width, bool blue) =>
+        (width ?? "width:56px") + (blue ? ";background:#EAF0FB;color:#1A4FAF;font-weight:700" : "");
+
+    /// <summary>v1.1.6 S2: the late PO cut-off day must be a whole day from 1 to 28 (JS <c>Number.isInteger(Number(v))</c>).</summary>
+    public static bool ValidCutoffDay(string? raw)
+    {
+        var v = Js.Number(raw);
+        return double.IsFinite(v) && Math.Floor(v) == v && v >= 1 && v <= 28;
+    }
+
     private async Task ChangedAsync(string key, string? raw)
     {
+        if (key == "prevMonthPendingCutoffDay" && !ValidCutoffDay(raw))
+        {
+            // anything else keeps the old value
+            _saveError = true;
+            _saveMsg = "Late PO cut-off day must be a whole day from 1 to 28.";
+            Snackbar.Add(_saveMsg, Severity.Warning);
+            Bump(key);
+            return;
+        }
         // syncParams: const v = parseFloat(input.value); if (!isNaN(v)) S.params[k] = v;
         var v = Js.ParseFloat(raw);
         if (double.IsNaN(v) || double.IsInfinity(v))

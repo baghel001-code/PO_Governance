@@ -333,7 +333,7 @@ plus pending POs is sold out before the delivery window starts.
 | Verdict | reason_code | rule_id | Meaning |
 |---|---|---|---|
 | ALLOW | `COVER_WITHIN_NORM` | COVER-00 | Stock + pending + this PO within the cover norm |
-| ALLOW | `NO_PLAN_DATA` | PLAN-00 | No sales plan for the bucket — allowed |
+| HOLD | `NO_PLAN_DATA` | PLAN-00 | No Plan Available: no F4 plan for the bucket in the requirement window — ask the planning team to add it (v1.1.6; was ALLOW) |
 | ALLOW | `PEER_Q1` / `PEER_Q2` | PEER-Q1 / PEER-Q2 | Multi Concept: ranks in the top half of its peer group |
 | ALLOW | `PEER_Q3` | PEER-Q3-OK | Q3 but at / near the peer average (border zone) |
 | ALLOW | `BOBS_SIBLINGS_OK` | BOBS-01 | New colour of a selling style; sibling colours sell well |

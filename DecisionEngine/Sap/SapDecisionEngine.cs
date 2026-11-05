@@ -214,11 +214,13 @@ namespace DecisionEngine.Sap
             return path switch
             {
                 SapOutcomePath.CoverWithinNorm => "Cover " + cover + " days within the " + effT + "-day norm" + grp,
-                SapOutcomePath.NoPlanData => "No plan for this MC-MRP-Flag in the uploaded plan; cover not computed, allowed",
+                SapOutcomePath.NoPlanData => "No Plan Available: no F4 plan for this MC-MRP-Flag in the requirement window; ask planning to add it",
                 SapOutcomePath.CoverAboveNorm => "Stock + pending + this PO cover " + cover + " days, above the " + effT + "-day norm; max " +
                                                  Js.Fmt(m.HeadroomQty ?? 0) + " pcs" + grp,
                 SapOutcomePath.CoverNoHeadroom => "Stock + pending already above the " + effT + "-day cover norm; no headroom (max 0)" + grp,
-                SapOutcomePath.MixBelowMin => "Colour mix " + Pct((b?.MixPct ?? 0) * 100) + "% below the " + Js.NumberToString(p.Mix) + "% minimum of its MC-MRP",
+                SapOutcomePath.MixBelowMin => b != null && b.DecisionReason.StartsWith("No sale in F3", StringComparison.Ordinal)
+                    ? "No sale in F3 for the MC: colour share cannot be worked out, treated like a share under the " + Js.NumberToString(p.Mix) + "% minimum"
+                    : "Colour mix " + Pct((b?.MixPct ?? 0) * 100) + "% below the " + Js.NumberToString(p.Mix) + "% minimum of its MC-MRP",
                 SapOutcomePath.PeerQ1 or SapOutcomePath.PeerQ2 => "Ranks " + a?.Quartile + " in its peer group (sell-thru " + pd + "%/day): healthy seller",
                 SapOutcomePath.PeerQ3WithinBorder => "Ranks Q3 (sell-thru " + pd + "%/day), at or near the peer average",
                 SapOutcomePath.PeerQ3BeyondBorder => "Ranks Q3, sell-thru " + gap + "% below the peer average (beyond the " +

@@ -105,7 +105,8 @@ namespace POGovernance.Tests.Sap
         [InlineData("2203000201", "ZZZ", 100, "WATCH", "BOBS_SIBLING_LOW", "BOBS-02", "CATHEAD")]
         [InlineData("2203000203", "ZZZ", 100, "ALLOW", "BOBS_SIBLINGS_OK", "BOBS-01", "NONE")]
         [InlineData("2203000204", "BLK", 100, "ALLOW", "LOW_HISTORY", "WOF-00", "NONE")]
-        [InlineData("8800000001", "BLK", 100, "ALLOW", "NO_PLAN_DATA", "PLAN-00", "NONE")]
+        [InlineData("8800000001", "BLK", 100, "HOLD", "NO_PLAN_DATA", "PLAN-00", "CATHEAD")]   // v1.1.6 D1: No Plan Available → HOLD (was ALLOW)
+        [InlineData("8800000002", "WHT", 100, "WATCH", "MIX_BELOW_MIN", "MIX-01", "CATHEAD")]  // v1.1.6 D3: no F3 sale → Watch List
         [InlineData("5509000501", "RED", 100, "ALLOW", "NO_PEER_POOL", "PEER-00", "NONE")]
         [InlineData("5509000502", "ZZZ", 100, "ALLOW", "NEW_ARTICLE", "NEW-00", "NONE")]
         public void Each_verdict_path_on_the_fixture(string gm, string colour, double qty, string verdict, string reason, string rule, string route)

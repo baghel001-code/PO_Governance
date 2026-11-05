@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // Recommendation-engine parity harness.
 //
-// Loads the ORIGINAL v1.1.4 functions from legacy/python-app/app/index.html (the whole second
+// Loads the ORIGINAL v1.1.6 functions from legacy/v1.1.6/app/index.html (the whole second
 // <script> — the recommendation engine — plus the first-script helpers it calls, extracted by
 // name), runs them in a vm sandbox with minimal shims (S, Shared, document, XLSX, a fixed Date)
 // on Fixtures/dataset.json for several scenarios, and writes the expected results to
@@ -16,7 +16,7 @@ const path = require('path');
 const vm = require('vm');
 
 const ROOT = path.resolve(__dirname, '../../..');
-const HTML = fs.readFileSync(path.join(ROOT, 'legacy/python-app/app/index.html'), 'utf8');
+const HTML = fs.readFileSync(path.join(ROOT, 'legacy/v1.1.6/app/index.html'), 'utf8');
 const FIX = path.join(ROOT, 'tests/POGovernance.Tests/Recommendation/Fixtures');
 const dataset = JSON.parse(fs.readFileSync(path.join(FIX, 'dataset.json'), 'utf8'));
 
@@ -57,7 +57,7 @@ const helperSrc = [
   extractLine('const isMMYYYY = k =>'),
   'const _idx={};',
   ...['col', '_buildUMIndex', '_buildBSRIndex', '_buildResolveIndex', 'addMonths', 'daysInMonth', 'monLabel', 'mmyyyy',
-    '_prevMonthCarry', '_prevMonthCarryNote', '_ePOWithCarry', '_todayStr', '_approvedQtyFor', 'ymKey',
+    '_prevMonthCarry', '_prevMonthCarryNote', '_lateCarryNote', '_ePOWithCarry', '_todayStr', '_daysLeft', '_windowMonths', '_noPlanReason', '_paNoPlan', '_approvedQtyFor', 'ymKey',
     'getWOF', 'getPDSTR', 'quartile', 'pctRank', 'resolveGM', 'routeRequest'].map(extractFunction),
   'let _runACache = null;', 'let _runBCache = null;',
   extractFunction('_runACached'), extractFunction('_runBCached')
@@ -85,12 +85,17 @@ const driverSrc = `
   function htmlTexts(html) {
     const t = {};
     const sum = /💡 (.*?)<\\/div>/.exec(html); if (sum) t.summary = strip(sum[1]);
-    t.tips = all(/title="(Based on threshold STR of [^"]*)"/g, html).map(m => m[1]);
-    t.watchTips = all(/<span title="(Colour Mix % = [^"]*)"/g, html).map(m => m[1]);
+    // v1.1.6: the single concept cells are clickable ("… Click to see how." / "… Click to see why." added to the tooltip)
+    t.tips = all(/title="(Based on threshold STR of [^"]*?)(?:\. Click to see how\.)?"/g, html).map(m => m[1]);
+    t.watchTips = all(/<span (?:data-xs="[^"]*" )?title="(Colour Mix % = [^"]*?)(?: Click to see why\.)?"/g, html).map(m => m[1]);
+    t.clickable = all(/data-xs="([^"]*)"/g, html).map(m => m[1]);
     t.formulas = all(/<td style="font-family:var\\(--mono\\);font-size:9\\.5px;color:#9CA3AF">(.*?)<\\/td>/g, html).map(m => strip(m[1]));
     const empty = /<div class="rec-empty"[^>]*>(.*?)<\\/div>/.exec(html); if (empty) t.empty = strip(empty[1]);
     const h1 = /<span>(Step 1 — .*?)<\\/span>/.exec(html); if (h1) t.heading = strip(h1[1]);
     const hb = /<div class="rec-sec">(.*?)<\\/div>/.exec(html); if (hb) t.heading = strip(hb[1]);
+    // v1.1.6: single concept header with the window / limit, the "Download Excel (all lines)" button and the hint
+    const hb6 = /<div class="rec-sec" style="display:flex;[^"]*">(.*?)<button type="button" id="xs-all"[^>]*>(.*?)<\\/button><\\/div><div[^>]*>(.*?)<\\/div>/.exec(html);
+    if (hb6) { t.heading = strip(hb6[1]); t.allLinesButton = strip(hb6[2]); t.headingHint = strip(hb6[3]); }
     const h2 = /<div class="rec-sec" style="margin-top:18px">(.*?)<\\/div>/.exec(html); if (h2) t.step2Heading = strip(h2[1]);
     t.traceHeaders = all(/<div style="font-size:10\\.5px;color:#6B7280;margin-bottom:8px">(.*?)<\\/div>/g, html).map(m => strip(m[1]));
     t.qtyHeaders = all(/<div style="font-size:10\\.5px;color:#1E2A55;margin-bottom:8px">(.*?)<\\/div>/g, html).map(m => strip(m[1]));
@@ -269,7 +274,7 @@ const scenarios = [
   { name: 'S5-cutoff-zero', today: '2026-11-01', params: { prevMonthPendingCutoffDay: 0, seasonCurrent: ['AW26', 'SS26'], T1: 120 }, drop: ['bsr'] }
 ];
 
-const expected = { generatedBy: 'tests/parity/recommendation/run-parity.js', source: 'legacy/python-app/app/index.html (v1.1.4)', scenarios: [] };
+const expected = { generatedBy: 'tests/parity/recommendation/run-parity.js', source: 'legacy/v1.1.6/app/index.html (v1.1.6)', scenarios: [] };
 let errors = 0;
 for (const sc of scenarios) {
   sc.cases = casesFor(sc.today);

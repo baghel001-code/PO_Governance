@@ -16,6 +16,14 @@
                         <span class="rh-ot">@Card.OptionTypeChip</span>
                     }
                 </div>
+                @if (Card.ArtLine is { } art)
+                {
+                    @* v1.1.6 S7: Generic Article description (grey) and vendor *@
+                    <div class="rh-art" title="@art.Title" data-testid="art-line">@art.Description@if (art.Vendor != null)
+                        {
+                            <span class="rh-art-v"> · @art.Vendor</span>
+                        }</div>
+                }
                 <div class="rh-sub">@Card.SubLine</div>
             </div>
         </div>
@@ -29,6 +37,18 @@
     </div>
 
     <div class="res-body">
+        @if (Card.Explain != null)
+        {
+            @* v1.1.6 S8 (explain.js addLink) *@
+            <div class="xp-reslink">
+                <span class="xp-link" role="button" tabindex="0" @onclick="() => _explain = Card.Explain" @onkeydown="OpenOnEnter" data-testid="explain-link">How was this number worked out? →</span>
+                <span style="color:#6B7280">(steps, Excel with formulas)</span>
+            </div>
+        }
+        @if (Card.BobsSiblings is { Count: > 0 } sibs)
+        {
+            <BobsSiblings List="sibs" />
+        }
         <div class="t1-chips">
             @for (var i = 0; i < Card.Chips.Count; i++)
             {
@@ -58,6 +78,33 @@
             <span>@(string.IsNullOrEmpty(Card.Reason) ? "—" : Card.Reason)</span>
         </div>
 
+        @if (Card.LaterCaution is { } lc)
+        {
+            @* v1.1.6 S3: later-PO caution (information only) *@
+            <div class="later-po-caution" data-testid="later-po-caution">
+                <strong class="lpc-k">Caution</strong><br />
+                @foreach (var s in lc.Segments)
+                {
+                    if (s.Bold)
+                    {
+                        <strong>@s.Text</strong>
+                    }
+                    else
+                    {
+                        @s.Text
+                    }
+                }
+                <div class="lpc-note">@lc.Note</div>
+            </div>
+        }
+        @if (!string.IsNullOrEmpty(Card.ColourReason))
+        {
+            @* v1.1.6 S5: the buyer's reason *@
+            <div class="t1-colour-reason" data-testid="colour-reason-box">
+                <strong>Why introduce this colour? (buyer)</strong><br />@Card.ColourReason
+            </div>
+        }
+
         <StrCautionBox Caution="Card.StrCaution" />
     </div>
 
@@ -67,10 +114,19 @@
     </div>
 </div>
 
+<ExplainPanel Explain="_explain" OnClose="() => _explain = null" />
+
 @code {
     [Parameter, EditorRequired] public Tool1CardDto Card { get; set; } = default!;
     /// <summary>The saved request (for the approval badge); null before it is saved.</summary>
     [Parameter] public JsonObject? Request { get; set; }
+
+    private SingleExplainDto? _explain;
+
+    private void OpenOnEnter(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter") _explain = Card.Explain;
+    }
 
     // openRec(btn): the bucket of the card (MC / MRP / Brand / Flag / Div / MC desc) and its engine.
     private Task OpenRecommendation() =>

@@ -30,6 +30,12 @@ namespace DecisionEngine.Common
             return DateTime.DaysInMonth(yy, mm);
         }
 
+        /// <summary>
+        /// v1.1.6 D2 (single concept) — port of <c>_daysLeft(totalDays, todayDate)</c>: the days left in the current
+        /// month COUNT TODAY (F1 stock is yesterday's close, so today's sale is still to come). 4 Nov, 30-day month → 27.
+        /// </summary>
+        public static double DaysLeft(double totalDays, double todayDate) => Math.Max(0, totalDays - todayDate + 1);
+
         /// <summary>Port of index.html <c>mmyyyy(y,m)</c> (line 1759): "07.2026".</summary>
         public static string Mmyyyy(int y, int m) => m.ToString(CultureInfo.InvariantCulture).PadLeft(2, '0') + "." + y.ToString(CultureInfo.InvariantCulture);
 

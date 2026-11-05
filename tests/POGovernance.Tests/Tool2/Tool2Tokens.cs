@@ -91,7 +91,7 @@ namespace POGovernance.Tests.Tool2
                         if (g.Formula != null) foreach (var l in g.Formula) t.AddRange(Segs(l));
                         t.Add("PO-wise Allocation (FIFO: largest PO cut first)");
                         t.AddRange(new[] { "Colour", "Generic Material", "PO Number", "Released Qty", "Recommended Action", "Max Permissible Qty" });
-                        foreach (var p in g.PoActions) t.AddRange(new[] { g.Colour, p.Gm, p.PoNum, Js.Fmt(p.RelQty), p.Action, p.RecQty > 0 ? Js.Fmt(p.RecQty) : "0" });
+                        foreach (var p in g.PoActions) t.AddRange(new[] { g.Colour, p.Gm, p.PoNum, Js.Fmt(p.RelQty), p.Action, p.NoPlan ? "—" : p.RecQty > 0 ? Js.Fmt(p.RecQty) : "0" });
                         t.AddRange(new[] { "TOTAL", Js.Fmt(g.TotalQty), Js.Fmt(g.TotalRetain) });
                     }
                 }

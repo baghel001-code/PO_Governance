@@ -8,6 +8,11 @@
 //   6600000002 single concept, F4 with Excel-serial headers only (numeric fallback)
 //   7700000001 Article Master only (not in UM / BSR)        → New article with resolved info
 //   B1 NVY     a very large pending PO                       → Hold, Max Permissible 0
+// v1.1.6 (the New PO request stops when the article is not in the Article Master, so the Tool 1-only GMs are added there):
+//   8800000001 no F4 plan in the requirement window          → Hold "No Plan Available" (D1)
+//   8800000002 F4 plan but no F3 sale for the MC             → Watch List (D3)
+//   8800000003 F4 plan, F3 sale, a big later PO              → Auto Allow + later-PO caution (Step 6)
+//   ZZ0000001  not in the Article Master                     → stops, nothing saved
 // Output: tests/POGovernance.Tests/Tool1/Fixtures/dataset.json (deterministic).
 'use strict';
 const fs = require('fs');
@@ -47,6 +52,29 @@ const f3b7o = Object.assign({ 'Generic Material': '6601000001', 'Color': 'PNK' }
 for (let i = 1; i <= 30; i++) { f3b7['D' + i] = String(10 + (i % 4)); f3b7o['DAY ' + i] = String(25); }
 F.f3.push(f3b7, f3b7o);
 F.f4.push(Object.assign({}, b7, { '46296': '6,000', '46327': '6,500', '46357': '7,000', '46388': '5,500', '46419': '5,000', '46447': '4,800' }));
+
+// v1.1.6: the Tool 1-only Universe Master GMs are in the Article Master too (else the request stops)
+const amOf = (gm, o) => Object.assign({ 'Generic Material': gm, 'Season': 'AW26', 'ART DESC': 'ART ' + gm, 'VENDOR NAME': 'Vendor ' + gm.slice(-2) }, o);
+F.artmaster.push(amOf('1101NOMC', { 'Brand Type': 'NON-PL', 'Division': 'MENS', 'MC CD': '', 'MC DESC': '', 'MRP': '399', 'Flag': 'NON-BOGO' }));
+F.artmaster.push(amOf('8800000001', { 'Brand Type': 'NON-PL', 'Division': 'MENS', 'MC CD': '8800', 'MC DESC': 'M-SOCKS', 'MRP': '299', 'Flag': 'NON-BOGO' }));
+F.artmaster.push(amOf('6601000001', Object.assign({ 'Division': 'KIDS', 'MC DESC': 'K-TEE' }, b7)));
+// D3: F4 plan, stock, no F3 sale for the MC
+const b8 = { 'Brand Type': 'NON-PL', 'MC CD': '8801', 'MRP': '199', 'Flag': 'NON-BOGO' };
+F.um.push(Object.assign({ 'Generic Material': '8800000002', 'Division': 'MENS', 'MC DESC': 'M-HANKY' }, b8));
+F.artmaster.push(amOf('8800000002', Object.assign({ 'Division': 'MENS', 'MC DESC': 'M-HANKY' }, b8)));
+F.f1.push(Object.assign({ 'Generic Material': '8800000002', 'Color': 'WHT', 'OP STK': '900' }, b8));
+F.f4.push(Object.assign({}, b8, { '10.2026': '3,000', '11.2026': '3,000', '12.2026': '3,000', '01.2027': '3,000', '02.2027': '3,000', '03.2027': '3,000', '04.2027': '3,000' }));
+// later-PO caution: steady plan, a big PO two months after the requests' delivery months
+const b9 = { 'Brand Type': 'NON-PL', 'MC CD': '8802', 'MRP': '349', 'Flag': 'NON-BOGO' };
+F.um.push(Object.assign({ 'Generic Material': '8800000003', 'Division': 'MENS', 'MC DESC': 'M-POLO' }, b9));
+F.artmaster.push(amOf('8800000003', Object.assign({ 'Division': 'MENS', 'MC DESC': 'M-POLO' }, b9)));
+F.f1.push(Object.assign({ 'Generic Material': '8800000003', 'Color': 'BLU', 'OP STK': '2000' }, b9));
+const f3b9 = Object.assign({ 'Generic Material': '8800000003', 'Color': 'BLU' }, b9), f3b9o = Object.assign({ 'Generic Material': '8800000003', 'Color': 'GRY' }, b9);
+for (let i = 1; i <= 45; i++) { f3b9['Day ' + i] = '60'; f3b9o['Day ' + i] = '40'; }
+F.f3.push(f3b9, f3b9o);
+F.f4.push(Object.assign({}, b9, { '10.2026': '3,000', '11.2026': '3,000', '12.2026': '3,000', '01.2027': '3,000', '02.2027': '3,000', '03.2027': '3,000', '04.2027': '3,000', '05.2027': '3,000', '06.2027': '3,000', '07.2027': '3,000' }));
+F.f2.push(Object.assign({ 'PO Number': '4500088801', 'Generic Material': '8800000003', 'Color': 'BLU', 'Delivery Month': '01.2027', 'Pending Qty': '9000', 'Vendor Name': 'Vendor P' }, b9));
+F.f2.push(Object.assign({ 'PO Number': '4500088802', 'Generic Material': '8800000003', 'Color': 'BLU', 'Delivery Month': '02.2027', 'Pending Qty': '6000', 'Vendor Name': 'Vendor P' }, b9));
 
 // Article Master only
 F.artmaster.push({ 'Generic Material': '7700000001', 'Brand Type': 'NON-PL', 'Division': 'LADIES', 'MC CD': '2203', 'MC DESC': 'L-JEANS', 'MRP': '599', 'Flag': 'BOGO', 'Season': 'AW26', 'ART DESC': 'NEW JEANS', 'VENDOR NAME': 'New Vendor' });

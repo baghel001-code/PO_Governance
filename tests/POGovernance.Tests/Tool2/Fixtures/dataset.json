@@ -558,6 +558,33 @@
     "MRP": "299",
     "Flag": "NON-BOGO",
     "OP STK": "1544"
+   },
+   {
+    "Generic Material": "8810000701",
+    "Color": "BLK",
+    "OP STK": "1200",
+    "Brand Type": "NON-PL",
+    "MC CD": "8810",
+    "MRP": "149",
+    "Flag": "NON-BOGO"
+   },
+   {
+    "Generic Material": "8810000701",
+    "Color": "WHT",
+    "OP STK": "1200",
+    "Brand Type": "NON-PL",
+    "MC CD": "8810",
+    "MRP": "149",
+    "Flag": "NON-BOGO"
+   },
+   {
+    "Generic Material": "8811000801",
+    "Color": "RED",
+    "OP STK": "500",
+    "Brand Type": "NON-PL",
+    "MC CD": "8811",
+    "MRP": "179",
+    "Flag": "NON-BOGO"
    }
   ],
   "f2": [
@@ -1731,6 +1758,81 @@
     "Pending Qty": "2548",
     "Vendor Name": "Kids Wear Co",
     "PO Value": "274924"
+   },
+   {
+    "PO Number": "4500009201",
+    "Generic Material": "1101000101",
+    "Color": "BLK",
+    "Brand Type": "NON-PL",
+    "MC CD": "1101",
+    "MRP": "399",
+    "Flag": "NON-BOGO",
+    "Delivery Month": "09.2026",
+    "Pending Qty": "8,400",
+    "Vendor Name": "Raymond Ltd",
+    "PO Value": "1764000"
+   },
+   {
+    "PO Number": "4500009202",
+    "Generic Material": "1101000102",
+    "Color": "WHT",
+    "Brand Type": "NON-PL",
+    "MC CD": "1101",
+    "MRP": "399",
+    "Flag": "NON-BOGO",
+    "Delivery Month": "11.2026",
+    "Pending Qty": "600",
+    "Vendor Name": "Raymond Ltd"
+   },
+   {
+    "PO Number": "450000933700",
+    "Generic Material": "8810000701",
+    "Color": "BLK",
+    "Delivery Month": "12.2026",
+    "Pending Qty": "700",
+    "Vendor Name": "Sock Co",
+    "PO Value": "63000",
+    "Brand Type": "NON-PL",
+    "MC CD": "8810",
+    "MRP": "149",
+    "Flag": "NON-BOGO"
+   },
+   {
+    "PO Number": "450000933450",
+    "Generic Material": "8810000701",
+    "Color": "WHT",
+    "Delivery Month": "08.2026",
+    "Pending Qty": "450",
+    "Vendor Name": "Sock Co",
+    "PO Value": "40500",
+    "Brand Type": "NON-PL",
+    "MC CD": "8810",
+    "MRP": "149",
+    "Flag": "NON-BOGO"
+   },
+   {
+    "PO Number": "45000094010",
+    "Generic Material": "8811000801",
+    "Color": "RED",
+    "Delivery Month": "10.2026",
+    "Pending Qty": "900",
+    "Vendor Name": "Cap Co",
+    "Brand Type": "NON-PL",
+    "MC CD": "8811",
+    "MRP": "179",
+    "Flag": "NON-BOGO"
+   },
+   {
+    "PO Number": "45000094001",
+    "Generic Material": "8811000801",
+    "Color": "RED",
+    "Delivery Month": "01.2027",
+    "Pending Qty": "900",
+    "Vendor Name": "Cap Co",
+    "Brand Type": "NON-PL",
+    "MC CD": "8811",
+    "MRP": "179",
+    "Flag": "NON-BOGO"
    }
   ],
   "f3": [
@@ -5120,6 +5222,14 @@
     "01.2027": "7449",
     "02.2027": "3480",
     "2027-03-01": "8507"
+   },
+   {
+    "Brand Type": "NON-PL",
+    "MC CD": "8811",
+    "MRP": "179",
+    "Flag": "NON-BOGO",
+    "10.2026": "2,000",
+    "11.2026": "2,000"
    }
   ],
   "um": [
@@ -5183,6 +5293,24 @@
     "MC CD": "6611",
     "MC DESC": "K-SHORTS",
     "MRP": "299",
+    "Flag": "NON-BOGO"
+   },
+   {
+    "Generic Material": "8810000701",
+    "Division": "MENS",
+    "MC DESC": "M-SOCKS",
+    "Brand Type": "NON-PL",
+    "MC CD": "8810",
+    "MRP": "149",
+    "Flag": "NON-BOGO"
+   },
+   {
+    "Generic Material": "8811000801",
+    "Division": "MENS",
+    "MC DESC": "M-CAPS",
+    "Brand Type": "NON-PL",
+    "MC CD": "8811",
+    "MRP": "179",
     "Flag": "NON-BOGO"
    }
   ],

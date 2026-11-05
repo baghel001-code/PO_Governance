@@ -19,9 +19,12 @@ namespace DecisionEngine.Recommendation
         /// pre-rolls stock from today's month to the anchor, builds a 13-month chain from the anchor,
         /// then the rolling D-day window from Day 1 of the month after the anchor → STR and the floored
         /// Max Permissible qty. Null when the anchor is not "MM.YYYY".
+        /// v1.1.6 D2: <paramref name="countToday"/> (single concept Recommendation only) counts today in the days left
+        /// of the current month; the multi concept callers leave it off (unchanged). The pre-roll months are kept
+        /// (<c>pre</c>) and every chain month carries its plan inputs — display only.
         /// </summary>
         public static CoreStrResultDto? CoreColourStrFast(RecommendationContext ctx, double opStock, double mixPct,
-            JsObjectMap<double> forecastByMon, JsObjectMap<double>? f2RawMap, string anchorMonth)
+            JsObjectMap<double> forecastByMon, JsObjectMap<double>? f2RawMap, string anchorMonth, bool countToday = false)
         {
             var parts = MonthMath.ParseMmyyyy(anchorMonth);
             if (parts == null) return null;
@@ -32,6 +35,7 @@ namespace DecisionEngine.Recommendation
             var carry = PrevMonthCarry.Compute(f2RawMap, currY, currM, todayDate, ctx.P);
 
             var runStock = opStock;
+            var pre = new List<PreRollMonthDto>();
             for (var i = 0; ; i++)
             {
                 var ym = MonthMath.AddMonths(currY, currM, i);
@@ -41,9 +45,11 @@ namespace DecisionEngine.Recommendation
                 var ePO = PrevMonthCarry.EPOWithCarry(f2RawMap, mkey, carry);
                 var fc = JsOps.Or(forecastByMon.Get(mkey), 0);
                 double totalDays = MonthMath.DaysInMonth(ym.Y, ym.M);
-                var remainingDays = i == 0 ? totalDays - todayDate : totalDays;
+                var remainingDays = i == 0 ? (countToday ? MonthMath.DaysLeft(totalDays, todayDate) : totalDays - todayDate) : totalDays;
                 var cp = fc * mixPct * (remainingDays / totalDays);
+                var open = runStock;
                 runStock = Math.Max(runStock + ePO - cp, 0);
+                pre.Add(new PreRollMonthDto { MKey = mkey, Y = ym.Y, M = ym.M, Fc = fc, Days = totalDays, Counted = remainingDays, Po = ePO, Sale = cp, Open = open, Close = runStock });
             }
 
             var currKey = MonthMath.Mmyyyy(currY, currM);
@@ -55,11 +61,15 @@ namespace DecisionEngine.Recommendation
                 var fc2 = JsOps.Or(forecastByMon.Get(mkey2), 0);
                 double totalDays2 = MonthMath.DaysInMonth(ym2.Y, ym2.M);
                 var isCurrMonth = mkey2 == currKey;
-                var demandDays = isCurrMonth ? totalDays2 - todayDate : totalDays2;
+                var demandDays = isCurrMonth ? (countToday ? MonthMath.DaysLeft(totalDays2, todayDate) : totalDays2 - todayDate) : totalDays2;
                 var colPlan = fc2 * mixPct * (demandDays / totalDays2);
                 var openStock = j == 0 ? runStock : chain[j - 1].CloseStock;
                 var closeStock = Math.Max(openStock + ePO2 - colPlan, 0);
-                chain.Add(new ChainStepDto { Y = ym2.Y, M = ym2.M, MKey = mkey2, OpenStock = openStock, PoIn = ePO2, ColPlan = colPlan, CloseStock = closeStock });
+                chain.Add(new ChainStepDto
+                {
+                    Y = ym2.Y, M = ym2.M, MKey = mkey2, OpenStock = openStock, PoIn = ePO2, ColPlan = colPlan, CloseStock = closeStock,
+                    Fc = fc2, DemandDays = demandDays, TotalDays = totalDays2
+                });
             }
 
             var winDays = JsOps.Or(ctx.P.D, 60);
@@ -81,7 +91,7 @@ namespace DecisionEngine.Recommendation
                 return new CoreStrResultDto
                 {
                     Str = null, Dr = 0, Rec = 0, Action = "No data", OpStock = opStock, MixPct = Js.Round(mixPct * 1000) / 10,
-                    WinStockStart = Js.Round(winStockStart), RemForecast = remForecast, Chain = chain, WinDays = winDays, D1Idx = d1Idx
+                    WinStockStart = Js.Round(winStockStart), RemForecast = remForecast, Chain = chain, WinDays = winDays, D1Idx = d1Idx, Pre = pre
                 };
             }
 
@@ -95,7 +105,7 @@ namespace DecisionEngine.Recommendation
             {
                 Str = Js.Round(artSTR), Dr = Js.Round(windowDailyRate * 10) / 10, Rec = maxPermQty, Eff = Js.Round(effectiveT), EffExact = effectiveT,
                 Action = action, OpStock = opStock, MixPct = Js.Round(mixPct * 1000) / 10, WinStockStart = Js.Round(winStockStart),
-                RemForecast = remForecast, Chain = chain, WinDays = winDays, D1Idx = d1Idx
+                RemForecast = remForecast, Chain = chain, WinDays = winDays, D1Idx = d1Idx, Pre = pre
             };
         }
 
@@ -166,12 +176,13 @@ namespace DecisionEngine.Recommendation
                     var appr = Math.Max(0, (f2Raw == null ? 0 : JsOps.Or(f2Raw.Get(mon), 0)) - (f2Only == null ? 0 : JsOps.Or(f2Only.Get(mon), 0)));
                     if (watchList)
                         return new RecBMonthDto { Mon = mon, Pend = PrevMonthCarry.EPOWithCarry(f2Raw, mon, carry) - appr, Appr = appr, Rec = 0, Str = null, Dr = 0, Action = "Watch List" };
-                    var cs = CoreColourStrFast(ctx, stk, mixRatio, forecastByMon, f2Raw, mon);
+                    // v1.1.6 D2: the single concept Recommendation counts today (countToday)
+                    var cs = CoreColourStrFast(ctx, stk, mixRatio, forecastByMon, f2Raw, mon, true);
                     var pend = PrevMonthCarry.EPOWithCarry(f2Raw, mon, carry) - appr;
                     if (cs == null) return new RecBMonthDto { Mon = mon, Pend = pend, Appr = appr, Rec = 0, Str = null, Dr = 0, Action = "No data" };
-                    return new RecBMonthDto { Mon = mon, Pend = pend, Appr = appr, Rec = cs.Rec, Str = cs.Str, Dr = cs.Dr, Eff = cs.Eff, Action = cs.Action };
+                    return new RecBMonthDto { Mon = mon, Pend = pend, Appr = appr, Rec = cs.Rec, Str = cs.Str, Dr = cs.Dr, Eff = cs.Eff, Action = cs.Action, Cs = cs, MixUsed = mixRatio };
                 }).ToList();
-                return new RecBRowDto { Col = col, Stk = stk, S45 = s45, Mix = mix, StkMix = stkmix, StrRos = strRos, WatchList = watchList, WatchReason = watchReason, MData = mdata };
+                return new RecBRowDto { Col = col, Stk = stk, S45 = s45, Mix = mix, MixRatio = mixRatio, StkMix = stkmix, StrRos = strRos, WatchList = watchList, WatchReason = watchReason, MData = mdata };
             }).ToList();
 
             JsSort.StableSort(rows, (a, b) => b.Stk - a.Stk);

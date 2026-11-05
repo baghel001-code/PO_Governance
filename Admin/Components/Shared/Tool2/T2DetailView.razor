@@ -131,6 +131,8 @@
         new("cancel", "Cancel", "🚫 Cancel", "Show Cancel decisions", "#DC2626", "#FEF2F2", "#DC2626"),
         new("reduce", "Reduce Qty", "⬇ Reduce", "Show Reduce decisions", "#D97706", "#FFFBEB", "#D97706"),
         new("watch", "Watch List", "👁 Watch", "Show Watch List decisions", "#D97706", "#FFF7ED", "#92400E"),
+        // v1.1.6 D1: own "No Plan" filter button
+        new("noplan", DecisionEngine.Model.Decisions.NoPlanReview, "No Plan", "Show No Plan – Review decisions", "#3B5B92", "#E8EEF8", "#3B5B92"),
         new("retain", "Retain", "✅ Retain", "Show Retain decisions", "#00873E", "#DCFCE7", "#00873E"),
         new("all", "", "All", "Show every decision", "var(--vmm-navy)", "var(--vmm-navy)", "#fff"),
     };
@@ -386,7 +388,7 @@
                                 <td class="mono" style="color:var(--ink3)">@pa.PoNum</td>
                                 <td class="t2-r mono" style="font-weight:600">@T2Ui.Fmt(pa.RelQty)</td>
                                 <td class="t2-c"><span style="font-size:10px;font-weight:700;padding:2px 10px;border-radius:8px;background:@(pa.ActionColor)22;color:@pa.ActionColor;border:1px solid @(pa.ActionColor)44">@pa.Action</span></td>
-                                <td class="t2-r mono t2-pink">@(pa.RecQty > 0 ? T2Ui.Fmt(pa.RecQty) : "0")</td>
+                                <td class="t2-r mono t2-pink">@(pa.NoPlan ? "—" : pa.RecQty > 0 ? T2Ui.Fmt(pa.RecQty) : "0")</td>
                             </tr>
                         }
                         <tr class="tot">

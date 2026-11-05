@@ -53,6 +53,10 @@ namespace DecisionEngine.Tool1
         public string Decision { get; set; } = "";
         public string DecisionReason { get; set; } = "";
         public string ReqDate { get; set; } = "";
+        /// <summary>v1.1.6 S5: the buyer's "Why introduce this colour?" (single concept Watch List; saved as <c>colourReason</c>).</summary>
+        public string? ColourReason { get; set; }
+        /// <summary>v1.1.6 B1: the BOBs sibling colours (saved as <c>bobsSiblings</c>); null when not BOBs.</summary>
+        public List<Tool1BobsSiblingDto>? BobsSiblings { get; set; }
         /// <summary>The JS <c>result</c> object (field names / order as v1.1.4).</summary>
         public JsonObject Result { get; set; } = new();
     }
@@ -93,7 +97,43 @@ namespace DecisionEngine.Tool1
                 throw new EngineValidationException("Please fill all 4 fields.");
             var missing = Tool1Router.MissingRequired(data);
             if (missing.Count > 0) throw new EngineValidationException("Upload required files first: " + string.Join(", ", missing));
+            // v1.1.6 S6: an article that is not in the Article Master (or no Article Master) stops the request, single
+            // and multi concept; nothing is saved. The portal shows it in the "Article not in Article Master" box.
+            if (!InArticleMaster(data, gm)) throw new EngineValidationException(ArticleMasterMessage(data, gm));
             return (gm, colour, month, qty);
+        }
+
+        /// <summary>Title of the v1.1.6 message box for <see cref="ArticleMasterMessage"/>.</summary>
+        public const string ArticleMasterTitle = "Article not in Article Master";
+
+        /// <summary>The v1.1.6 <c>_amMsg</c> text (Article Master uploaded or not).</summary>
+        public static string ArticleMasterMessage(EngineData data, string gm) => data.ArtMaster != null
+            ? "Article " + gm + " is not in the Article Master. Ask the planning team to add it; this request cannot proceed. Nothing is saved."
+            : "The Article Master is not uploaded, so article " + gm + " cannot be checked. Ask the planning team to upload it; this request cannot proceed. Nothing is saved.";
+
+        /// <summary>Whether a text is one of the <see cref="ArticleMasterMessage"/> texts (the portal shows those in a message box).</summary>
+        public static bool IsArticleMasterMessage(string? text) =>
+            text != null && text.EndsWith("this request cannot proceed. Nothing is saved.", StringComparison.Ordinal) && text.Contains("Article Master", StringComparison.Ordinal);
+
+        /// <summary>
+        /// Port of the v1.1.6 <c>_inArticleMaster(code)</c>: the Generic Materials of the Article Master
+        /// (<c>trim().replace(/\.0$/,'')</c>); false when the Article Master is missing or empty.
+        /// </summary>
+        public static bool InArticleMaster(EngineData data, string? gm)
+        {
+            var src = data.ArtMaster;
+            if (src == null || src.Count == 0) return false;
+            var set = data.GetOrBuild("tool1.artMasterGms", d =>
+            {
+                var s = new HashSet<string>(StringComparer.Ordinal);
+                foreach (var r in d.ArtMaster!)
+                {
+                    var k = Tool1JsHelpers.StripDot0(r.Col("Generic Material", "generic material", "GENERIC MATERIAL", "GenMat"));
+                    if (k.Length > 0) s.Add(k);
+                }
+                return s;
+            });
+            return set.Contains(Tool1JsHelpers.StripDot0(gm));
         }
 
         /// <summary>
@@ -151,6 +191,9 @@ namespace DecisionEngine.Tool1
                 }
                 o.Result = Base("A", o.OptionType);
                 Assign(o.Result, Tool1Json.ToObject(eng)!);
+                // v1.1.6 B1: result.bobsSiblings = _bobsSibList(eng) (null when not BOBs)
+                o.BobsSiblings = BobsSiblingList(eng);
+                o.Result["bobsSiblings"] = Tool1Json.ToNode(o.BobsSiblings);
                 if (eng.Decision == Decisions.Allow && (eng.Quartile == "Q1" || eng.Quartile == "Q2"))
                     o.Result["strCaution"] = CautionJson(o.StrCaution);
                 o.Decision = eng.Decision; o.DecisionReason = eng.DecisionReason;
@@ -183,6 +226,40 @@ namespace DecisionEngine.Tool1
                 o.Decision = Decisions.ReduceRecommended;
                 o.Result["decision"] = o.Decision;
             }
+        }
+
+        private static readonly System.Text.RegularExpressions.Regex First3Week = new(@"first\s*3\s*week", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+        private static readonly System.Text.RegularExpressions.Regex ThruSell = new(@"(thru|through|st\s*%|sell)", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+
+        /// <summary>
+        /// Port of the v1.1.6 <c>_bobsSibList(eng)</c>: the BSR rows of a BOBs request's sibling colours (generic article,
+        /// colour, weeks on floor, rank, sell-through per day, first 3 weeks sale / sell-through, BSR season), ranked first
+        /// (Q1 … Q4, not ranked last), then most weeks on floor; at most 60. Null when not BOBs or no siblings. Display only.
+        /// </summary>
+        public static List<Tool1BobsSiblingDto>? BobsSiblingList(Tool1EngineAResult? eng)
+        {
+            if (eng == null || eng.OptionType != "BOBs" || eng.Siblings.Count == 0) return null;
+            string? RankOf(SheetRow r)
+            {
+                foreach (var s in eng.SibRanked) if (ReferenceEquals(s.Row, r)) return s.Q;
+                return null;
+            }
+            double? F3St(SheetRow r)
+            {
+                var k = Tool1JsHelpers.JsKeys(r).FirstOrDefault(h => First3Week.IsMatch(h) && ThruSell.IsMatch(h));
+                return k != null && Js.ToJsString(r[k]).Trim().Length > 0 ? Js.Num(r[k]) : null;
+            }
+            var outL = eng.Siblings.Select(r => new Tool1BobsSiblingDto
+            {
+                Gm = r.Col("Generic Material", "generic material", "GENERIC MATERIAL").Trim(),
+                Colour = r.Col("Color", "Colour", "COLOR", "COLOUR").Trim(),
+                Wof = BsrPeerRank.GetWof(r), Q = RankOf(r), Pdstr = BsrPeerRank.GetPdstr(r),
+                First3 = Js.Num(r.Col("First 3 Weeks Sale", "FIRST 3 WEEKS SALE")), First3St = F3St(r),
+                Season = r.Col("SEASON", "Season").Trim()
+            }).ToList();
+            static double Qo(string? q) => q switch { "Q1" => 0, "Q2" => 1, "Q3" => 2, "Q4" => 3, _ => 9 };
+            JsSort.StableSort(outL, (a, b) => Qo(a.Q) - Qo(b.Q) is var d && d != 0 ? d : b.Wof - a.Wof);
+            return outL.Take(60).ToList();
         }
 
         /// <summary>The stored <c>strCaution</c> object: the JS fields only (effT2, delMonth, items[{label, str, cs}]).</summary>

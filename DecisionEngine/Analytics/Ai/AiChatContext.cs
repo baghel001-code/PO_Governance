@@ -2,6 +2,7 @@ using System.Text.Json.Nodes;
 using System.Text.RegularExpressions;
 using DecisionEngine.Analytics.Common;
 using DecisionEngine.Common;
+using DecisionEngine.Model;
 
 namespace DecisionEngine.Analytics.Ai
 {
@@ -98,7 +99,7 @@ namespace DecisionEngine.Analytics.Ai
                 return (new JsonObject { ["note"] = "No Raised PO Assessment has been run yet this session." }, new JsonArray());
             var dec = new JsObjectMap<int>();
             foreach (var r in rows) { var k = Raw(r, "decision"); dec[k] = dec.Get(k) + 1; }
-            var flagged = rows.Where(r => AnalyticsJs.Get(r, "decision") is not ("Retain" or "Cannot Validate")).ToList();
+            var flagged = rows.Where(r => AnalyticsJs.Get(r, "decision") is not ("Retain" or "Cannot Validate" or Decisions.NoPlanReview)).ToList();
             var drivers = new JsObjectMap<int>();
             foreach (var r in flagged) { var b = DashboardMath.DriverBucketT2(AnalyticsJs.Get(r, "decisionReason")); drivers[b] = drivers.Get(b) + 1; }
             var mcMap = new JsObjectMap<int[]>();

@@ -1,16 +1,21 @@
 using System.Text.Json.Nodes;
 using DecisionEngine.Common;
 using DecisionEngine.Model;
+using DecisionEngine.Results.Recommendation;
 using DecisionEngine.Results.Tool1;
 
 namespace DecisionEngine.Tool1
 {
     /// <summary>
-    /// Port of index.html <c>runEngineB</c> (line 3847) — Tool 1 Single Concept MRP: colour mix gate,
+    /// Port of index.html <c>runEngineB</c> (line 3847) — Tool 1 Single Concept MRP: v1.1.6 "No Plan Available"
+    /// Hold (checked first), colour mix gate,
     /// forward stock chain to the delivery month, days of cover (STR) of the D-day window from Day 1 of
     /// the month after delivery vs T × (1 + buffer), Max Permissible Qty, previous-month pending carry-over
     /// and the same-day ledger of quantities approved today (all users).
     /// "Today" is the server date (v1.1.4 used the PC clock here and the server date for the ledger).
+    /// v1.1.6 (legacy/v1.1.6/patches 20, 22, 27): no F4 plan in the requirement window → Hold "No Plan Available";
+    /// the days left in the current month count today; plan but no F3 sale for the MC → Watch List; the pre-roll
+    /// months are kept (<c>preRoll</c>, display only) with the colour share used (<c>effMix</c>).
     /// </summary>
     public sealed class Tool1EngineB
     {
@@ -60,6 +65,55 @@ namespace DecisionEngine.Tool1
                 var cOk = !withColour || colourVal == rColour.ToLowerInvariant();
                 return mcOk && mrpOk && bOk && fOk && cOk;
             }
+
+            // ── F4: forecast — Brand × MC × MRP × Flag (read here, before F1: the v1.1.6 no-plan check reads F4 the same way) ──
+            var forecastByMon = new JsObjectMap<double>();
+            void AddFc(string k, double v) => forecastByMon[k] = (forecastByMon.TryGetValue(k, out var o) ? o : 0) + v;
+            if (data.F4 != null)
+            {
+                foreach (var r in data.F4)
+                {
+                    if (!MatchRow(r, false)) continue;
+                    foreach (var h in Tool1JsHelpers.JsKeys(r))
+                    {
+                        var hStr = h.Trim();
+                        if (MonthMath.IsMMYYYY(hStr))
+                        {
+                            var v = Js.Num(r[h]);
+                            if (v != 0 && !double.IsNaN(v)) AddFc(hStr, v);
+                            continue;
+                        }
+                        var mmyy = Tool1JsHelpers.DateToMMYYYY(h) ?? Tool1JsHelpers.DateToMMYYYY(r[h]);
+                        if (!string.IsNullOrEmpty(mmyy)) { var v = Js.Num(r[h]); if (v != 0 && !double.IsNaN(v)) AddFc(mmyy, v); }
+                    }
+                }
+                if (forecastByMon.Count == 0)
+                {
+                    foreach (var r in data.F4)
+                    {
+                        if (!MatchRow(r, false)) continue;
+                        foreach (var h in Tool1JsHelpers.JsKeys(r))
+                        {
+                            var n = Js.Num(h);
+                            if (n > 32874 && n < 109574)
+                            {
+                                var mmyy = Tool1JsHelpers.DateToMMYYYY(n);
+                                var v = Js.Num(r[h]);
+                                if (!string.IsNullOrEmpty(mmyy) && v != 0 && !double.IsNaN(v)) AddFc(mmyy, v);
+                            }
+                        }
+                    }
+                }
+            }
+
+            // v1.1.6 D1: no F4 plan in the requirement window → Hold "No Plan Available", checked first
+            var noPlan = NoPlan.Check(k => forecastByMon.Get(k), deliveryMonth, true, today, p.D);
+            if (noPlan != null)
+                return new Tool1EngineBResult
+                {
+                    Decision = Decisions.Hold, DecisionReason = NoPlan.Reason(info.Brand, info.McCd, info.Mrp, info.Flag, noPlan), NoPlan = true,
+                    MixPct = 0, OpStock = 0, MixFailed = false, RecQty = null, ArtSTR = null, MaxPermQty = 0
+                };
 
             // ── F1: Op Stock — sum every row of KEY-3 (colour level) ──
             double opStock = 0;
@@ -135,46 +189,6 @@ namespace DecisionEngine.Tool1
                     HasDailyF3 = hasDailyF3, ForecastByMon = new(), ExistingPO = new()
                 };
 
-            // ── F4: forecast — Brand × MC × MRP × Flag ──
-            var forecastByMon = new JsObjectMap<double>();
-            void AddFc(string k, double v) => forecastByMon[k] = (forecastByMon.TryGetValue(k, out var o) ? o : 0) + v;
-            if (data.F4 != null)
-            {
-                foreach (var r in data.F4)
-                {
-                    if (!MatchRow(r, false)) continue;
-                    foreach (var h in Tool1JsHelpers.JsKeys(r))
-                    {
-                        var hStr = h.Trim();
-                        if (MonthMath.IsMMYYYY(hStr))
-                        {
-                            var v = Js.Num(r[h]);
-                            if (v != 0 && !double.IsNaN(v)) AddFc(hStr, v);
-                            continue;
-                        }
-                        var mmyy = Tool1JsHelpers.DateToMMYYYY(h) ?? Tool1JsHelpers.DateToMMYYYY(r[h]);
-                        if (!string.IsNullOrEmpty(mmyy)) { var v = Js.Num(r[h]); if (v != 0 && !double.IsNaN(v)) AddFc(mmyy, v); }
-                    }
-                }
-                if (forecastByMon.Count == 0)
-                {
-                    foreach (var r in data.F4)
-                    {
-                        if (!MatchRow(r, false)) continue;
-                        foreach (var h in Tool1JsHelpers.JsKeys(r))
-                        {
-                            var n = Js.Num(h);
-                            if (n > 32874 && n < 109574)
-                            {
-                                var mmyy = Tool1JsHelpers.DateToMMYYYY(n);
-                                var v = Js.Num(r[h]);
-                                if (!string.IsNullOrEmpty(mmyy) && v != 0 && !double.IsNaN(v)) AddFc(mmyy, v);
-                            }
-                        }
-                    }
-                }
-            }
-
             // ── F2: existing pending PO for this colour ──
             var existingPO = new JsObjectMap<double>();
             void AddPo(string k, double v) => existingPO[k] = (existingPO.TryGetValue(k, out var o) ? o : 0) + v;
@@ -214,6 +228,7 @@ namespace DecisionEngine.Tool1
 
             // Pre-roll from today's month to the delivery month
             var runStock = opStock;
+            var preRoll = new List<PreRollMonthDto>();   // v1.1.6: the same months, kept for the side panel (display only)
             for (var i = 0; ; i++)
             {
                 var (cy, cm) = MonthMath.AddMonths(currY, currM, i);
@@ -223,9 +238,11 @@ namespace DecisionEngine.Tool1
                 var ePO = PrevMonthCarry.EPOWithCarry(existingPO, mkey, carry);
                 var fc = JsOps.Or(forecastByMon.Get(mkey), 0);
                 double totalDays = MonthMath.DaysInMonth(cy, cm);
-                var remainingDays = i == 0 ? totalDays - todayDate : totalDays;
+                var remainingDays = i == 0 ? MonthMath.DaysLeft(totalDays, todayDate) : totalDays;
                 var cp = effectiveMixPct != null ? fc * effectiveMixPct.Value * (remainingDays / totalDays) : 0;
+                var open = runStock;
                 runStock = JsMax0(runStock + ePO - cp);
+                preRoll.Add(new PreRollMonthDto { MKey = mkey, Y = cy, M = cm, Fc = fc, Days = totalDays, Counted = remainingDays, Po = ePO, Sale = cp, Open = open, Close = runStock });
             }
 
             // Forward chain from the delivery month (13 months)
@@ -238,7 +255,7 @@ namespace DecisionEngine.Tool1
                 var fc = JsOps.Or(forecastByMon.Get(mkey), 0);
                 double totalDays = MonthMath.DaysInMonth(cy, cm);
                 var isCurrMonth = mkey == currKey;
-                var demandDays = isCurrMonth ? totalDays - todayDate : totalDays;
+                var demandDays = isCurrMonth ? MonthMath.DaysLeft(totalDays, todayDate) : totalDays;
                 var colPlan = effectiveMixPct != null ? fc * effectiveMixPct.Value * (demandDays / totalDays) : 0;
                 var proposed = i == 0 ? proposedQty : 0;
                 var openStock = i == 0 ? runStock : JsOps.Or(chain[i - 1].CloseStock, 0);
@@ -267,18 +284,13 @@ namespace DecisionEngine.Tool1
             var forecastDict = forecastByMon.ToDictionary();
             if (windowDemand == 0)
             {
-                var f4Rows = data.F4?.Count ?? 0;
-                var f4Matched = data.F4?.Count(r => MatchRow(r, false)) ?? 0;
+                // v1.1.6 D3: the plan exists (D1 is checked first) but there is no F3 sale for this MC, so the colour
+                // share cannot be worked out → Watch List, same as a colour share under the minimum (was Auto Allow)
                 return new Tool1EngineBResult
                 {
-                    Decision = Decisions.AutoAllow,
-                    DecisionReason = "No forecast data found for MC CD " + rMC + " MRP " + rMRP + " in F4. " +
-                        "Cannot compute STR — treated as Auto Allow. " +
-                        "[DEBUG] forecastByMon keys: " + Tool1JsHelpers.JsonArray(forecastByMon.Keys) + " | " +
-                        "F4 rows total: " + f4Rows + " | " +
-                        "F4 matched rows: " + f4Matched + " | " +
-                        "effectiveMixPct: " + (effectiveMixPct != null ? Js.ToFixed(effectiveMixPct.Value * 100, 4) + "%" : "null") + " | " +
-                        "rFlag: " + rFlag + " | rMC: " + rMC + " | rMRP: " + rMRP,
+                    Decision = Decisions.WatchList,
+                    DecisionReason = "No sale in F3 for MC CD " + rMC + " MRP " + rMRP + " (last " + Js.NumberToString(JsOps.Or(p.MixWindowDays, 45)) +
+                        " days), so the colour share cannot be worked out. Treated like a colour share under " + Js.NumberToString(mixT) + "%.",
                     MixPct = mixPct, ColAvg = colAvg, McAvg = mcAvg, OpStock = opStock, Chain = chain, MixFailed = false, RecQty = null,
                     HasDailyF3 = hasDailyF3, ArtSTR = 0, WinStockStart = winStockStart, WindowDemand = 0, WindowDailyRate = 0, MaxPermQty = 0
                 };
@@ -348,7 +360,7 @@ namespace DecisionEngine.Tool1
                 MaxPermQty = maxPermQty, MixFailed = false, HasDailyF3 = hasDailyF3, ForecastByMon = forecastDict,
                 ExistingPO = existingPO.ToDictionary(), PrevMonthCarryNote = carryNote,
                 PrevMonthCarry = new Tool1CarryDto { Qty = carry.Qty, Cutoff = carry.Cutoff, PrevKey = carry.PrevKey, CurrKey = carry.CurrKey },
-                FutureRiskMonths = futureRisk, StockAtD1NoProp = stockAtD1NoProp, EffectiveT = effectiveT
+                FutureRiskMonths = futureRisk, PreRoll = preRoll, EffMix = effectiveMixPct, StockAtD1NoProp = stockAtD1NoProp, EffectiveT = effectiveT
             };
         }
 

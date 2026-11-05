@@ -137,7 +137,7 @@
                         var idx = rows[ri];
                         if (!Lines.TryGetValue(idx, out var r)) continue;
                         var open = _openLines.Contains(idx);
-                        var (dCol, _) = T2Ui.ReasonColors(r.Decision);
+                        var dCol = T2Ui.TreeColor(r.Decision);
                         <tr class="t2-po @(ri % 2 == 0 ? "even" : "odd") @(open ? "open" : "")" title="@r.Tooltip" id="trr-@idx" @onclick="() => ToggleLine(idx)">
                             <td class="mono" style="color:var(--ink3)">@(string.IsNullOrEmpty(r.PoNum) ? "—" : r.PoNum)</td>
                             <td class="mono" style="font-weight:600">@r.Gm</td>

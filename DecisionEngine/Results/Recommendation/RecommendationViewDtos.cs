@@ -1,4 +1,5 @@
 using System.Text.Json.Serialization;
+using DecisionEngine.Model;
 
 namespace DecisionEngine.Results.Recommendation
 {
@@ -89,6 +90,12 @@ namespace DecisionEngine.Results.Recommendation
 
         /// <summary>Texts and figures painted around the tables.</summary>
         [JsonPropertyName("paint")] public RecommendationPaintDto Paint { get; set; } = new();
+        /// <summary>
+        /// v1.1.6 S8: the parameters and server date the numbers were worked out with — the portal builds the
+        /// "How was this number worked out?" panel and Excel from them (DecisionEngine.Explain.SingleExplainBuilder).
+        /// </summary>
+        [JsonPropertyName("params")] public EngineParams? Params { get; set; }
+        [JsonPropertyName("today")] public string? Today { get; set; }
     }
 
     /// <summary>The texts / figures <c>_paintRec</c> builds around the tables.</summary>
@@ -104,6 +111,10 @@ namespace DecisionEngine.Results.Recommendation
         [JsonPropertyName("wof")] public double Wof { get; set; }
         /// <summary>Empty / error message shown instead of the body (".rec-empty"), null when there are rows.</summary>
         [JsonPropertyName("emptyMessage")] public string? EmptyMessage { get; set; }
+        /// <summary>v1.1.6 S8 (single concept): the "Download Excel (all lines)" button label, null otherwise.</summary>
+        [JsonPropertyName("allLinesLabel")] public string? AllLinesLabel { get; set; }
+        /// <summary>v1.1.6 S8 (single concept): "Click any quantity, Hold or Watch List to see how it was worked out."</summary>
+        [JsonPropertyName("headingHint")] public string? HeadingHint { get; set; }
         /// <summary>True when <see cref="EmptyMessage"/> is an error (red, "⚠ " prefix).</summary>
         [JsonPropertyName("emptyIsError")] public bool EmptyIsError { get; set; }
         /// <summary>Section heading of the Single Concept table / Step 1 / Step 2+3 (plain text).</summary>

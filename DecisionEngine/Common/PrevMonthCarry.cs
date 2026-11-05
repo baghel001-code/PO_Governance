@@ -39,6 +39,17 @@ namespace DecisionEngine.Common
                    ") pending PO, carried over — Day-of-month cut-off = " + Js.NumberToString(carry.Cutoff) + ".]";
         }
 
+        /// <summary>
+        /// v1.1.6 item 1 — port of <c>_lateCarryNote(carry)</c>: the PO Assessment note when last month's pending PO is
+        /// counted in the stock at the window start (window starts this month). '' when nothing was carried.
+        /// </summary>
+        public static string LateNote(CarryOver? carry)
+        {
+            if (carry == null || !(carry.Qty > 0)) return "";
+            return " [Includes " + Js.Fmt(carry.Qty) + " units of previous month's (" + carry.PrevKey + ") pending PO, counted in the stock at the window start (" +
+                   carry.CurrKey + ") — Day-of-month cut-off = " + Js.NumberToString(carry.Cutoff) + ".]";
+        }
+
         /// <summary>Port of <c>_ePOWithCarry(existingPOMap, mkey, carry)</c>.</summary>
         public static double EPOWithCarry(JsObjectMap<double>? existingPO, string mkey, CarryOver? carry)
         {

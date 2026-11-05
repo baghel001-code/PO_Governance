@@ -53,6 +53,11 @@ else if (_tab == "pending")
                         <span> · @r.Str("quartile_")@(r.Get("percentile") is JsonValue ? " (" + r.Str("percentile") + "th pct)" : "")</span>
                     }
                     <div style="margin-top:6px;padding:8px 10px;background:#FFFBEB;border-radius:7px;color:#92400E;font-size:12px"><strong>Why Watch List:</strong> @(r.Truthy("decisionReason") ? r.Str("decisionReason") : "—")</div>
+                    @if (r.Truthy("colourReason"))
+                    {
+                        @* v1.1.6 S5 (users.js): the buyer's reason for a single concept Watch List *@
+                        <div style="margin-top:6px;padding:8px 10px;background:#F4F7FD;border-radius:7px;color:#1A2B4A;font-size:12px;white-space:pre-wrap" data-testid="ap-colour-reason"><strong>Why introduce this colour? (buyer):</strong> @r.Str("colourReason")</div>
+                    }
                 </div>
                 <div style="min-width:250px">
                     <div class="pf-lbl">Approve quantity</div>

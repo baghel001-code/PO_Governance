@@ -125,6 +125,8 @@
     </div>
 
     <QtyConfirmModal @ref="_confirm" />
+    <ColourReasonModal @ref="_why" />
+    <MessageBoxModal @ref="_msg" />
 </div>
 
 @code {
@@ -148,6 +150,8 @@
 
     private TodaysRequestsTable? _today;
     private QtyConfirmModal _confirm = default!;
+    private ColourReasonModal _why = default!;
+    private MessageBoxModal _msg = default!;
     private CancellationTokenSource? _optCts;
     private int _optSeq;
 
@@ -224,7 +228,13 @@
                 Qty = ParseQty(_qty),
             };
             var v = await ApiMasterService.CallingAPI<ApiDataResponse<Tool1ResultDto>, Tool1RequestInputDto>(AllApiNames.PO_TOOL1_VALIDATE, input);
-            if (!v.IsSuccess || v.Data == null) { Toast(v.responseMessage, "Validation failed"); return; }
+            if (!v.IsSuccess || v.Data == null)
+            {
+                // v1.1.6 S6: "Article not in Article Master" is a message box, nothing is saved
+                if (Tool1Flow.IsArticleMasterMessage(v.responseMessage)) _msg.Show(Tool1Flow.ArticleMasterTitle, v.responseMessage!);
+                else Toast(v.responseMessage, "Validation failed");
+                return;
+            }
 
             var result = await SubmitAsync(input, v.Data);
             if (result == null) return;
@@ -271,6 +281,18 @@
                 if (ans.Declined) body.Declined = true;
                 else body.ConfirmedQty = ans.ConfirmedQty;
             }
+            if (current.NeedsColourReason)
+            {
+                // v1.1.6 S5: "Why introduce this colour?" — "Don't send" saves nothing
+                StateHasChanged();
+                var why = await _why.AskAsync(current.Card?.Gm ?? input.Gm ?? "", current.Card?.Colour ?? "", input.Month ?? "", input.Qty ?? 0, current.DecisionReason);
+                if (why == null)
+                {
+                    Snackbar.Add(current.NotSentMessage ?? "Not sent: nothing was saved.", Severity.Info);
+                    return null;
+                }
+                body.ColourReason = why;
+            }
 
             var s = await ApiMasterService.CallingAPI<ApiDataResponse<Tool1ResultDto>, Tool1SubmitInputDto>(AllApiNames.PO_TOOL1_SUBMIT, body);
             if (!s.IsSuccess || s.Data == null)
@@ -280,6 +302,7 @@
                 return null;
             }
             if (s.Data.Status == "needsConfirmation" && s.Data.NeedsConfirmation) { current = s.Data; continue; }
+            if (s.Data.Status == "needsColourReason") { current = s.Data; continue; }
             return s.Data;
         }
         Snackbar.Add("⚠ The quantity could not be confirmed — please validate again.", Severity.Warning);

@@ -356,7 +356,8 @@ namespace DecisionEngine.Tool2
         private static readonly Dictionary<string, (string Font, string Fill)> DecColors2 = new()
         {
             ["Retain"] = ("1E7B45", "E5F4EA"), ["Watch List"] = ("9A6700", "FFF3CD"), ["Reduce Qty"] = ("B45309", "FEF0DC"),
-            ["Cancel"] = ("B3261E", "FDE7E5"), ["Cannot Validate"] = ("555555", "EDEDED")
+            ["Cancel"] = ("B3261E", "FDE7E5"), ["Cannot Validate"] = ("555555", "EDEDED"),
+            [Decisions.NoPlanReview] = ("3B5B92", "E8EEF8")   // v1.1.6 D1
         };
 
         private static readonly Dictionary<string, (string Font, string Fill)> TypeColors = new()
@@ -380,7 +381,7 @@ namespace DecisionEngine.Tool2
             var flagged = exportRows.Where(IsAction).ToList();
             double qtyAtRisk = 0, valueAtRisk = 0;
             foreach (var r in flagged) { qtyAtRisk += r.CutQty; valueAtRisk += ValueAtRisk(r, r.CutQty); }
-            string[] decOrder2 = { "Retain", "Watch List", "Reduce Qty", "Cancel", "Cannot Validate" };
+            string[] decOrder2 = { "Retain", "Watch List", "Reduce Qty", "Cancel", "Cannot Validate", Decisions.NoPlanReview };
 
             var mcMap = new JsObjectMap<(int Total, int Retain, int Watch, int Cut, double Value)>();
             foreach (var r in exportRows)

@@ -1,6 +1,11 @@
 @* Single Concept part of the result card (renderResult, engine 'B'): mix banner, or KPI cards +
    the "Show Step-by-Step Computation" toggle with Steps 1–5. Every figure comes from Tool1CardBDto. *@
-@if (B.MixFailed)
+@if (B.NoPlan)
+{
+    @* v1.1.6 D1: nothing was worked out — the plan is missing *@
+    <div class="t1-noplan" data-testid="no-plan-note">@B.NoPlanNote</div>
+}
+else if (B.MixFailed)
 {
     <div class="t1-mixbanner" data-testid="mix-banner">@B.MixBanner</div>
 }
@@ -125,9 +130,9 @@ else
                 <div class="t1-step-h" style="background:#7C3AED"><span class="t1-step-n">STEP 4</span><span class="t1-step-t">@B.Step4.Title</span></div>
                 <div class="t1-step-b" style="padding:12px 14px;background:#FAF5FF">
                     <div class="t1-step-txt" style="margin-bottom:10px">
-                        From <strong>Day 1 of the Delivery Month</strong>, we look ahead <strong>D=@B.Step4.D days</strong> and compute
+                        From <strong>Day 1 of the month after delivery</strong> (the window start), we look ahead <strong>D=@B.Step4.D days</strong> and compute
                         total colour demand (F4 × Mix%) across those days. This gives us the Daily Rate.
-                        STR tells us how many days the opening stock of the Delivery Month will last at that daily rate.
+                        STR tells us how many days the stock at the window start will last at that daily rate.
                     </div>
                     @if (B.Step4.Rows.Count > 0)
                     {
@@ -202,6 +207,51 @@ else
                     </div>
                 </div>
             </div>
+
+            @if (B.Step6 is { } s6)
+            {
+                @* v1.1.6 S3 STEP 6: the later-PO caution working (information only) *@
+                <div class="t1-step6" data-testid="step6">
+                    <div class="t1-step-h" style="background:#B7791F"><span class="t1-step-n">STEP 6</span><span class="t1-step-t">@s6.Step6Title</span></div>
+                    <div class="t1-step-b" style="padding:12px 14px;background:#FFFBEF">
+                        <div style="overflow-x:auto">
+                            <table class="t1-tbl" style="min-width:520px">
+                                <thead>
+                                    <tr style="background:#B7791F22">
+                                        <th style="text-align:left;color:#7A4B00">1st of month</th>
+                                        <th class="r" style="color:#7A4B00">Stock on the 1st</th>
+                                        <th class="r" style="color:#7A4B00">@s6.LimitHeader</th>
+                                        <th class="r" style="color:#7A4B00">STR on the 1st</th>
+                                        <th class="r" style="color:#7A4B00">Too much</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    @foreach (var r in s6.Rows)
+                                    {
+                                        <tr style="background:@r.Background">
+                                            <td>@r.Label @if (r.WindowStart)
+                                                {
+                                                    <span class="t1-tag" style="color:#1A4FAF">← Window Start</span>
+                                                }</td>
+                                            <td class="r m">@r.Stock</td>
+                                            <td class="r m">@r.Limit</td>
+                                            <td class="r m" style="color:@r.StrColour;font-weight:700">@r.Str</td>
+                                            <td class="r m" style="color:#DC2626;font-weight:700">@r.Excess</td>
+                                        </tr>
+                                    }
+                                </tbody>
+                            </table>
+                        </div>
+                        <div class="t1-step6-work">
+                            @for (var i = 0; i < s6.Working.Count; i++)
+                            {
+                                <div>@s6.Working[i]</div>
+                            }
+                        </div>
+                        <div style="font-size:11px;color:var(--ink2);margin-top:8px">@s6.Footer</div>
+                    </div>
+                </div>
+            }
         </div>
     }
 }

@@ -1,0 +1,61 @@
+@* v1.1.6 B1 (legacy/v1.1.6/app/explain.js Explain.bobsHtml): "Show the sibling colours of this style" on a BOBs
+   result card — the BSR rows the BOBs rule looked at. Display only: the BOBs rule is unchanged. *@
+
+<details class="xp-bobs" data-testid="bobs-siblings">
+    <summary>@Summary()</summary>
+    <table class="xp-bobs-t">
+        <thead>
+            <tr>
+                <th style="text-align:left">Generic Article · colour</th>
+                <th>BSR season</th>
+                <th class="r">Weeks on floor</th>
+                <th>Rank</th>
+                <th class="r" title="AVG PERDAY SELL THRU% in the BSR (the value the ranking uses)">Sell-through / day</th>
+                @if (_has3)
+                {
+                    <th class="r">First 3 weeks sell-through / day</th>
+                }
+                <th class="r">First 3 weeks sale (pcs)</th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach (var s in List)
+            {
+                <tr>
+                    <td>@s.Gm · <b>@s.Colour</b></td>
+                    <td class="c">@(string.IsNullOrEmpty(s.Season) ? "—" : s.Season)</td>
+                    <td class="r">@Js.NumberToString(s.Wof)</td>
+                    <td class="c" style="font-weight:700;color:@RankColour(s.Q)">@(s.Q ?? "not ranked")</td>
+                    <td class="r">@Js.ToFixed(s.Pdstr * 100, 2)%</td>
+                    @if (_has3)
+                    {
+                        <td class="r">@(s.First3St is double f ? (f <= 1 ? Js.ToFixed(f * 100, 2) : Js.ToFixed(f, 2)) + "%" : "—")</td>
+                    }
+                    <td class="r">@Js.Fmt(s.First3)</td>
+                </tr>
+            }
+        </tbody>
+    </table>
+    <div class="xp-bobs-n">Ranked in the same MC / MRP peer group as today. “not ranked” = under the weeks-on-floor gate. The BOBs rule looks at every BSR row of the sibling colours, so a colour sold in two seasons shows twice.</div>
+</details>
+
+@code {
+    [Parameter, EditorRequired] public List<Tool1BobsSiblingDto> List { get; set; } = new();
+
+    private bool _has3;
+
+    protected override void OnParametersSet() => _has3 = List.Any(s => s.First3St != null);
+
+    private static string RankColour(string? q) => q switch { "Q1" or "Q2" => "#0B6B2E", "Q3" => "#8A5A00", "Q4" => "#B42318", _ => "#6B7280" };
+
+    // "Show the sibling colours of this style: 3 colours, 4 BSR rows (one per season) (1 Q1, 2 Q3, 1 not ranked)"
+    private string Summary()
+    {
+        var cnt = new Dictionary<string, int>();
+        foreach (var s in List) { var k = s.Q ?? "not ranked"; cnt[k] = cnt.GetValueOrDefault(k) + 1; }
+        var sum = string.Join(", ", new[] { "Q1", "Q2", "Q3", "Q4", "not ranked" }.Where(cnt.ContainsKey).Select(k => cnt[k] + " " + k));
+        var ncol = List.Select(s => s.Gm + "|" + s.Colour).Distinct().Count();
+        return "Show the sibling colours of this style: " + ncol + " colour" + (ncol == 1 ? "" : "s") +
+               (List.Count != ncol ? ", " + List.Count + " BSR rows (one per season)" : "") + " (" + sum + ")";
+    }
+}

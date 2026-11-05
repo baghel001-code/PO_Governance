@@ -61,6 +61,16 @@ namespace Application.Services.V1.Tool1
             return ToResult(o, data.Params, today, seq, o.NeedsConfirmation ? "needsConfirmation" : "decided", null);
         }
 
+        /// <summary>v1.1.6 S5 <c>_needsColourReason(r)</c>: a single concept Watch List needs the buyer's reason before it is sent.</summary>
+        public static bool NeedsColourReason(Tool1Outcome o) => o.Engine == "B" && o.Decision == Decisions.WatchList;
+
+        /// <summary>The reason as the v1.1.6 dialog keeps it: trimmed, at most 1,000 characters; null when empty.</summary>
+        public static string? CleanColourReason(string? s)
+        {
+            var t = (s ?? "").Trim();
+            return t.Length == 0 ? null : t.Length > 1000 ? t[..1000] : t;
+        }
+
         private Tool1Outcome Decide(EngineData data, IReadOnlyList<JsonObject> reqs, string today, int id,
                                     string gm, string colour, string month, double qty, Tool1Confirmation? confirmation) =>
             EngineErrors.Run(() => _engine.Decide(data, reqs, today, id, gm, colour, month, qty, confirmation, _settings.ReducedLabel));
@@ -85,6 +95,15 @@ namespace Application.Services.V1.Tool1
                 // approved for this colour since then is caught by the save's 409 check, as in v1.1.4.
                 var seen = reqs.Where(r => Tool1Requests.SeqOf(r) <= seenSeq).ToList();
                 o = Decide(data, seen, today, Tool1Requests.NextId(seen), gm, colour, month, qty, new Tool1Confirmation(input.ConfirmedQty, input.Declined));
+            }
+
+            // v1.1.6 S5: a single concept Watch List is sent to the Category Head only with the buyer's reason
+            if (NeedsColourReason(o))
+            {
+                var why = CleanColourReason(input.ColourReason);
+                if (why == null) return ToResult(o, data.Params, today, seenSeq, "needsColourReason", null);
+                o.ColourReason = why;
+                o.Result["colourReason"] = why;
             }
 
             var toasts = new List<string>();
@@ -194,6 +213,8 @@ namespace Application.Services.V1.Tool1
             var res = new Tool1ResultDto
             {
                 Status = status, NeedsConfirmation = o.NeedsConfirmation, SeenSeq = seq, Engine = o.Engine, OptionType = o.OptionType,
+                NeedsColourReason = NeedsColourReason(o) && string.IsNullOrEmpty(o.ColourReason),
+                NotSentMessage = NeedsColourReason(o) ? "Not sent: nothing was saved for " + o.Gm + " " + o.Colour + "." : null,
                 Decision = o.Decision, DecisionReason = o.DecisionReason, FinalApprovedQty = o.FinalApprovedQty,
                 ApprovedQty = LedgerHelpers.ApprovedQtyFor(o.Result), Card = _engine.BuildCard(o, p, today),
                 Request = request ?? Tool1Requests.Slim(o.Result)

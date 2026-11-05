@@ -16,5 +16,7 @@ namespace DecisionEngine.Model
         public const string Retain = "Retain";
         public const string ReduceQty = "Reduce Qty";
         public const string Cancel = "Cancel";
+        /// <summary>v1.1.6 D1: no F4 plan in the requirement window — no quantity suggested, the planner decides (en dash).</summary>
+        public const string NoPlanReview = "No Plan – Review";
     }
 }

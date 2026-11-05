@@ -1,0 +1,45 @@
+@* v1.1.6 _v116Msg (legacy/v1.1.6/patches/23_article.py): a simple message box (title + plain text) closed with OK,
+   the backdrop or Esc. Used for "Article not in Article Master". *@
+
+@if (_visible)
+{
+    <div class="t1-qc-overlay" @onclick="Close" @onkeydown="OnKey" tabindex="-1" data-testid="message-box">
+        <div class="t1-qc t1-msg" role="dialog" aria-modal="true" aria-labelledby="t1-msg-title" @onclick:stopPropagation="true">
+            <div class="t1-why-title" id="t1-msg-title">@_title</div>
+            <div class="t1-msg-text">@_text</div>
+            <div style="text-align:right;margin-top:18px">
+                <button class="t1-btn-pri" @onclick="Close" @ref="_ok" data-testid="message-ok">OK</button>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    private bool _visible, _focus;
+    private string _title = "", _text = "";
+    private ElementReference _ok;
+
+    public void Show(string title, string text)
+    {
+        (_title, _text) = (title, text);
+        _visible = true;
+        _focus = true;
+        StateHasChanged();
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (_focus && _visible)
+        {
+            _focus = false;
+            try { await _ok.FocusAsync(); } catch { /* element gone */ }
+        }
+    }
+
+    private void OnKey(KeyboardEventArgs e)
+    {
+        if (e.Key == "Escape") Close();
+    }
+
+    private void Close() => _visible = false;
+}

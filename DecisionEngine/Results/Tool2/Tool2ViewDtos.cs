@@ -166,6 +166,8 @@ namespace DecisionEngine.Results.Tool2
         /// <summary>"Retain", "Cancel" or "Reduce Qty".</summary>
         [JsonPropertyName("action")] public string Action { get; set; } = "";
         [JsonPropertyName("recQty")] public double RecQty { get; set; }
+        /// <summary>v1.1.6 D1: the colour group is "No Plan – Review" — no quantity is suggested (Rec Qty "—").</summary>
+        [JsonPropertyName("noPlan")] public bool NoPlan { get; set; }
         [JsonPropertyName("actionColor")] public string ActionColor { get; set; } = "";
     }
 

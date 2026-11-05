@@ -141,6 +141,8 @@ namespace POGovernance.Tests.Recommendation
             string? Str(string k) => html[k]?.GetValue<string>();
             Assert.Equal(Str("summary"), p.Summary);
             Assert.Equal(Str("heading"), p.Heading);
+            Assert.Equal(Str("headingHint"), p.HeadingHint);
+            Assert.Equal(Str("allLinesButton"), p.AllLinesLabel);
             Assert.Equal(Str("step2Heading"), p.Step2Heading);
             var empty = p.EmptyMessage != null ? (p.EmptyIsError ? "⚠ " : "") + p.EmptyMessage : p.NoRecsMessage;
             Assert.Equal(Str("empty"), empty);
@@ -148,6 +150,8 @@ namespace POGovernance.Tests.Recommendation
             {
                 JsonParity.Check(html["tips"], view.B.Rows.SelectMany(r => r.MData).Where(m => m.Tip != null).Select(m => m.Tip).ToList(), name + ".tips");
                 JsonParity.Check(html["watchTips"], view.B.Rows.SelectMany(r => r.MData.Where(m => m.Action == "Watch List").Select(_ => r.WatchReason)).ToList(), name + ".watchTips");
+                // v1.1.6 S8: every colour × month cell opens "How was this number worked out?" (data-xs="row|month")
+                JsonParity.Check(html["clickable"], view.B.Rows.SelectMany((r, i) => r.MData.Select((_, j) => i + "|" + j)).ToList(), name + ".clickable");
             }
             if (view.RenderEngine == "A" && view.A?.Recs != null && view.A.Recs.Count > 0)
             {

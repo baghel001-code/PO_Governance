@@ -51,12 +51,12 @@ namespace DecisionEngine.Tool2
 
         public static string DecColor(string d) => d switch
         {
-            "Retain" => "#00873E", "Reduce Qty" => "#D97706", "Cancel" => "#DC2626", "Watch List" => "#D97706", "Cannot Validate" => "#6B7280", _ => "#6B7280"
+            "Retain" => "#00873E", "Reduce Qty" => "#D97706", "Cancel" => "#DC2626", "Watch List" => "#D97706", "Cannot Validate" => "#6B7280", Decisions.NoPlanReview => "#3B5B92", _ => "#6B7280"
         };
 
         public static string DecBg(string d) => d switch
         {
-            "Retain" => "#DCFCE7", "Reduce Qty" => "#FFFBEB", "Cancel" => "#FEF2F2", "Watch List" => "#FFFBEB", "Cannot Validate" => "#F5F5F5", _ => "#F5F5F5"
+            "Retain" => "#DCFCE7", "Reduce Qty" => "#FFFBEB", "Cancel" => "#FEF2F2", "Watch List" => "#FFFBEB", "Cannot Validate" => "#F5F5F5", Decisions.NoPlanReview => "#E8EEF8", _ => "#F5F5F5"
         };
 
         public string StrText(double? artStr) => artStr != null ? N(Js.Round(artStr.Value)) + "d" : "—";

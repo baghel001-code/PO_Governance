@@ -83,14 +83,29 @@ namespace DecisionEngine.Results.Tool1
         public int SeenSeq { get; set; }
         /// <summary>Skip the stale-headroom check (shared.js second POST after a 409).</summary>
         public bool Force { get; set; }
+        /// <summary>
+        /// v1.1.6 S5: the buyer's answer to "Why introduce this colour?" — required for a single concept Watch List
+        /// (trimmed, at most 1,000 characters). Without it the request is not saved (status "needsColourReason").
+        /// </summary>
+        public string? ColourReason { get; set; }
     }
 
     /// <summary>Outcome of Validate / Submit.</summary>
     public sealed class Tool1ResultDto
     {
-        /// <summary>"needsConfirmation" (show the pop-up, then Submit), "decided" (Validate: call Submit to save), "saved", "notSaved".</summary>
+        /// <summary>
+        /// "needsConfirmation" (show the pop-up, then Submit), "decided" (Validate: call Submit to save), "saved", "notSaved",
+        /// "needsColourReason" (v1.1.6: a single concept Watch List was submitted without the buyer's reason — nothing saved).
+        /// </summary>
         public string Status { get; set; } = "";
         public bool NeedsConfirmation { get; set; }
+        /// <summary>
+        /// v1.1.6 S5: a single concept Watch List — the buyer must type "Why introduce this colour?" before Submit
+        /// (<see cref="Tool1SubmitInputDto.ColourReason"/>); "Don't send" saves nothing (toast <see cref="NotSentMessage"/>).
+        /// </summary>
+        public bool NeedsColourReason { get; set; }
+        /// <summary>v1.1.6 S5: "Not sent: nothing was saved for {gm} {colour}." (shown on "Don't send").</summary>
+        public string? NotSentMessage { get; set; }
         /// <summary>Pop-up figures (when <see cref="NeedsConfirmation"/>): "You proposed" and "Max Permissible" (also the input's max and default).</summary>
         public double? ProposedQty { get; set; }
         public double? MaxPermissibleQty { get; set; }
@@ -126,6 +141,10 @@ namespace DecisionEngine.Results.Tool1
         /// <summary>reqId, else id.</summary>
         public string RequestId { get; set; } = "";
         public string Gm { get; set; } = "";
+        /// <summary>v1.1.6 S7: Generic Article description (grey line under the code), null when unknown.</summary>
+        public string? ArtDesc { get; set; }
+        /// <summary>v1.1.6 S7: hover title of the code cell: "{description} · Vendor: {vendor}" ("" when neither is known).</summary>
+        public string ArtTitle { get; set; } = "";
         public string Colour { get; set; } = "";
         public string McDesc { get; set; } = "—";
         /// <summary>"₹399" / "₹—".</summary>

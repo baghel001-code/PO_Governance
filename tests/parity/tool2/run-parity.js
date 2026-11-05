@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // Tool 2 ("📋 PO Assessment") parity harness.
 //
-// Runs the ORIGINAL v1.1.4 code — the whole Tool 2 block of legacy/python-app/app/index.html
+// Runs the ORIGINAL v1.1.6 code — the whole Tool 2 block of legacy/v1.1.6/app/index.html
 // (from "let batchResults" to the role/tab navigation, verbatim), the recommendation-engine
 // <script>, the first-script helpers it calls (extracted by name) and packResults / runSummary
 // from shared.js — in a vm sandbox with stubs for S, document, setTimeout (chunks run
@@ -18,8 +18,8 @@ const path = require('path');
 const vm = require('vm');
 
 const ROOT = path.resolve(__dirname, '../../..');
-const HTML = fs.readFileSync(path.join(ROOT, 'legacy/python-app/app/index.html'), 'utf8');
-const SHARED = fs.readFileSync(path.join(ROOT, 'legacy/python-app/app/shared.js'), 'utf8');
+const HTML = fs.readFileSync(path.join(ROOT, 'legacy/v1.1.6/app/index.html'), 'utf8');
+const SHARED = fs.readFileSync(path.join(ROOT, 'legacy/v1.1.6/app/shared.js'), 'utf8');
 const FIX = path.join(ROOT, 'tests/POGovernance.Tests/Tool2/Fixtures');
 const dataset = JSON.parse(fs.readFileSync(path.join(FIX, 'dataset.json'), 'utf8'));
 
@@ -74,7 +74,7 @@ const helperSrc = [
   extractLine('const isDayCol = k =>'),
   'const _idx={};',
   ...['col', '_buildUMIndex', '_buildBSRIndex', '_buildResolveIndex', 'dateToMMYYYY', 'addMonths', 'daysInMonth', 'monLabel', 'mmyyyy',
-    '_prevMonthCarry', '_prevMonthCarryNote', '_ePOWithCarry', '_todayStr', '_approvedQtyFor', 'ymKey',
+    '_prevMonthCarry', '_prevMonthCarryNote', '_lateCarryNote', '_ePOWithCarry', '_todayStr', '_daysLeft', '_windowMonths', '_noPlanReason', '_paNoPlan', '_approvedQtyFor', 'ymKey',
     'getWOF', 'getPDSTR', 'quartile', 'pctRank', 'getBSRRows', 'absBlock', 'runEngineA', 'resolveGM', '_aiDriverBucketT2', 'toggleAssReason'].map(extractFunction),
   'function renderPlannerDashboard(){}',
   'function $g(id){ return document.getElementById(id); }'
@@ -318,7 +318,7 @@ const scenarios = [
 ];
 
 (async () => {
-  const expected = { generatedBy: 'tests/parity/tool2/run-parity.js', source: 'legacy/python-app/app/index.html + shared.js (v1.1.4)', scenarios: [] };
+  const expected = { generatedBy: 'tests/parity/tool2/run-parity.js', source: 'legacy/v1.1.6/app/index.html + shared.js (v1.1.6)', scenarios: [] };
   for (const sc of scenarios) {
     const res = await runScenario(sc);
     expected.scenarios.push(Object.assign({ name: sc.name, today: sc.today, params: sc.params || {}, drop: sc.drop || [],

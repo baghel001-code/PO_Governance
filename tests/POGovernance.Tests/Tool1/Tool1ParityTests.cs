@@ -10,8 +10,8 @@ using POGovernance.Tests.Recommendation;
 namespace POGovernance.Tests.Tool1
 {
     /// <summary>
-    /// Runs the C# Tool 1 service on the parity fixture and compares it with the original v1.1.4 code
-    /// (index.html formSubmit / runEngineB / runEngineA / renderResult / renderCatHistory + shared.js
+    /// Runs the C# Tool 1 service on the parity fixture and compares it with the original v1.1.6 code
+    /// (legacy/v1.1.6/app/index.html formSubmit / runEngineB / runEngineA / renderResult / renderCatHistory + shared.js
     /// saveRequest, run by tests/parity/tool1/run-parity.js): the stored request field by field, the
     /// confirm pop-up, toasts, the 409 re-check, the result card texts and the Today's Requests rows.
     /// The README relabel (Tool1Settings.ReducedLabel) is off here — the shipped JS does not apply it.
@@ -90,6 +90,19 @@ namespace POGovernance.Tests.Tool1
                 Month = a["month"]!.GetValue<string>(), Qty = qtyTxt.Length == 0 ? null : double.Parse(qtyTxt, System.Globalization.CultureInfo.InvariantCulture)
             };
             var toasts = exp["toasts"]!.AsArray().Select(x => x!.GetValue<string>()).ToList();
+            var why = exp["whyAsked"] as JsonObject;
+            if (why != null && a["why"]?.GetValue<string>() == "dont")
+            {
+                // v1.1.6 S5 "Don't send": the reason was asked and nothing was saved
+                var vv = await svc.ValidateAsync(input, User);
+                Assert.True(vv.NeedsColourReason);
+                Assert.Equal(toasts.Single(), vv.NotSentMessage);
+                var noReason = await svc.SubmitAsync(new Tool1SubmitInputDto { Gm = input.Gm, Colour = input.Colour, ColourText = input.ColourText, Month = input.Month, Qty = input.Qty, SeenSeq = vv.SeenSeq }, User);
+                Assert.Equal("needsColourReason", noReason.Status);
+                Assert.Empty(ledger.Posts);
+                Assert.Null(exp["saved"]);
+                return;
+            }
             if (exp["saved"] == null && exp["card"] == null)
             {
                 var ex = await Assert.ThrowsAsync<AppValidationException>(() => svc.ValidateAsync(input, User));
@@ -101,6 +114,8 @@ namespace POGovernance.Tests.Tool1
             var asked = exp["asked"] as JsonObject;
             Assert.Equal(asked != null, v.NeedsConfirmation);
             var submit = new Tool1SubmitInputDto { Gm = input.Gm, Colour = input.Colour, ColourText = input.ColourText, Month = input.Month, Qty = input.Qty, SeenSeq = v.SeenSeq };
+            // v1.1.6 S5: the reason the buyer typed (the harness answers with the case's text or a default)
+            if (why != null) submit.ColourReason = a["why"]?.GetValue<string>() ?? "Launch colour for the festive range";
             if (asked != null)
             {
                 Assert.Equal(asked["proposed"]!.GetValue<double>(), v.ProposedQty);
@@ -127,7 +142,7 @@ namespace POGovernance.Tests.Tool1
             if (exp["history"] is JsonArray hist && exp["parallel"] == null)
             {
                 var today = await svc.GetTodayAsync(User, false);
-                var rows = today.Rows.Select(r => new[] { r.RequestId, r.Gm, r.Colour, r.McDesc, r.Mrp, r.Month, r.Qty, r.EngineTag, r.OptionType,
+                var rows = today.Rows.Select(r => new[] { r.RequestId, r.ArtDesc != null ? r.Gm + " " + r.ArtDesc : r.Gm, r.Colour, r.McDesc, r.Mrp, r.Month, r.Qty, r.EngineTag, r.OptionType,
                     r.Decision + (r.ApprovalBadge?.Text ?? ""), r.ApprovedQty, r.By }).ToList();
                 Assert.Equal(hist.Count, rows.Count);
                 for (var i = 0; i < rows.Count; i++)
@@ -146,6 +161,23 @@ namespace POGovernance.Tests.Tool1
             if (c.OptionTypeChip != null) title.Add(c.OptionTypeChip);
             Assert.Equal(Strs(e["titleSpans"]), title);
             Assert.Equal(e["sub"]!.GetValue<string>(), c.SubLine);
+            // v1.1.6
+            if (e["art"] is JsonArray art)
+                Assert.Equal(Strs(art), new List<string> { c.ArtLine!.Title, c.ArtLine.Description + (c.ArtLine.Vendor != null ? " · " + c.ArtLine.Vendor : "") });
+            else Assert.Null(c.ArtLine);
+            Assert.Equal(e["noPlanNote"]?.GetValue<string>(), c.B?.NoPlanNote);
+            Assert.Equal(e["colourReason"]?.GetValue<string>(), c.ColourReason == null ? null : System.Text.RegularExpressions.Regex.Replace(c.ColourReason, @"\s+", " ").Trim());
+            if (e["laterCaution"] is JsonArray lc)
+            {
+                Assert.Equal(Strs(lc), new List<string> { "Caution " + c.LaterCaution!.Text, c.LaterCaution.Note });
+                Assert.Equal(e["step6Title"]!.GetValue<string>(), c.B!.Step6!.Step6Title);
+                Assert.Equal(Strs(e["step6Head"]), new List<string> { "1st of month", "Stock on the 1st", c.B.Step6.LimitHeader, "STR on the 1st", "Too much" });
+                Assert.Equal(Rows(e["step6"]).Where(r => r.Count > 1).ToList(),
+                    c.B.Step6.Rows.Select(r => new List<string> { r.Background, r.Label + (r.WindowStart ? " ← Window Start" : ""), r.Stock, r.Limit, r.Str, r.Excess }).ToList());
+                Assert.Equal(Strs(e["step6Working"]), c.B.Step6.Working);
+                Assert.Equal(e["step6Foot"]!.GetValue<string>(), c.B.Step6.Footer);
+            }
+            else { Assert.Null(c.LaterCaution); Assert.Null(e["step6Title"]); }
             Assert.Equal(Rows(e["chips"]), c.Chips.Select(x => new List<string> { x.Key, x.Value }).ToList());
             Assert.Equal(e["mixBanner"]?.GetValue<string>(), c.B?.MixBanner);
             Assert.Equal(Rows(e["kpis"]), (c.B?.Kpis ?? new()).Select(x => new List<string> { x.Key, x.Value, x.Colour! }).ToList());
@@ -157,6 +189,7 @@ namespace POGovernance.Tests.Tool1
                 Assert.Equal(Strs(e["step2"]), new List<string> { b.Step2.ColAvg, b.Step2.McAvg, b.Step2.MixPct, b.Step2.Threshold });
                 Assert.Equal(Strs(e["step2Labels"]), new List<string> { "Colour Avg Sales/" + b.Step2.Per, "MC Total Avg Sales/" + b.Step2.Per });
                 Assert.Equal(e["step2Basis"]!.GetValue<string>(), b.Step2.Basis);
+                Assert.Equal(e["step4Title"]!.GetValue<string>(), b.Step4.Title);
                 Assert.Equal(e["step3Proposed"]!.GetValue<string>(), b.Step3.ProposedQty);
                 Assert.Equal(e["step3Empty"]!.GetValue<bool>(), b.Step3.Rows.Count == 0 && saved["chain"] is JsonArray { Count: 0 });
                 var s3 = Rows(e["step3"]).Where(r => r.Count > 1).ToList();
@@ -189,7 +222,8 @@ namespace POGovernance.Tests.Tool1
             else Assert.Null(c.A?.Step4);
             Assert.Equal(e["absNote"]?.GetValue<string>(), c.A?.AbsoluteBlockNote);
             Assert.Equal(e["reasonTitle"]!.GetValue<string>(), c.ReasonTitle);
-            Assert.Equal(saved["decisionReason"]!.GetValue<string>(), c.Reason);
+            // v1.1.6: the Heads-up sentence is not repeated on the card when the later-PO caution names it
+            Assert.Equal(c.LaterCaution != null ? Tool1LaterPoCaution.ReasonWithoutHeadsUp(saved["decisionReason"]!.GetValue<string>()) : saved["decisionReason"]!.GetValue<string>(), c.Reason);
             if (!c.Reason.Contains('<')) Assert.Equal(e["reason"]!.GetValue<string>(), System.Text.RegularExpressions.Regex.Replace(c.Reason, @"\s+", " ").Trim());
             Assert.Equal(e["footer"]!.GetValue<string>(), c.FooterHint);
             Assert.Equal(Strs(e["caution"]), (c.StrCaution?.Items ?? new()).Select(i => i.Text).ToList());

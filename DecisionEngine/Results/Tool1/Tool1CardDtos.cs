@@ -1,3 +1,5 @@
+using System.Text.Json.Serialization;
+using DecisionEngine.Results.Explain;
 using DecisionEngine.Results.Recommendation;
 
 namespace DecisionEngine.Results.Tool1
@@ -29,6 +31,11 @@ namespace DecisionEngine.Results.Tool1
         public string EngineColour { get; set; } = "";
         /// <summary>Option-type chip (True Repeat / BOBs / New Option); null for Single Concept.</summary>
         public string? OptionTypeChip { get; set; }
+        /// <summary>
+        /// v1.1.6 S7 (<c>_artLine</c>): the Generic Article description (grey) and vendor under the code; null when the
+        /// Article Master gives neither.
+        /// </summary>
+        public Tool1ArtLineDto? ArtLine { get; set; }
         /// <summary>"NON-PL · MENS · M-TSHIRT RN · ₹399 · NON-BOGO" ("" when the GM is unresolved).</summary>
         public string SubLine { get; set; } = "";
         public string Decision { get; set; } = "";
@@ -45,11 +52,115 @@ namespace DecisionEngine.Results.Tool1
         public string Reason { get; set; } = "";
         /// <summary>Amber STR caution box (separate from the reason), null when none.</summary>
         public StrCautionDto? StrCaution { get; set; }
+        /// <summary>
+        /// v1.1.6 S3: the later-PO caution under the reason (single concept, Auto Allow, 1,000 pcs or more too much on a
+        /// later 1st) — information only; its working is Step 6 of the step-by-step panel. Null when there is none.
+        /// </summary>
+        public Tool1LaterCautionDto? LaterCaution { get; set; }
+        /// <summary>v1.1.6 S5: the buyer's "Why introduce this colour?" (single concept Watch List), null when none.</summary>
+        public string? ColourReason { get; set; }
+        /// <summary>v1.1.6 B1: the sibling colours the BOBs rule looked at (BOBs only, display only), null otherwise.</summary>
+        public List<Tool1BobsSiblingDto>? BobsSiblings { get; set; }
+        /// <summary>v1.1.6 S8: "How was this number worked out?" (single concept with a month-by-month roll), null otherwise.</summary>
+        public SingleExplainDto? Explain { get; set; }
         /// <summary>Footer hint left of the "📊 View Recommendation" button.</summary>
         public string FooterHint { get; set; } = "";
         /// <summary>Engine and bucket the View Recommendation button opens.</summary>
         public string RecEngine { get; set; } = "";
         public Tool1RecInfoDto RecInfo { get; set; } = new();
+    }
+
+    /// <summary>v1.1.6 <c>_artLine(r)</c>: "{description or —} · {vendor}" with the hover title.</summary>
+    public sealed class Tool1ArtLineDto
+    {
+        /// <summary>Description, "—" when only the vendor is known.</summary>
+        public string Description { get; set; } = "";
+        /// <summary>Vendor name, null when unknown.</summary>
+        public string? Vendor { get; set; }
+        /// <summary>Hover text: "{description} · Vendor: {vendor}".</summary>
+        public string Title { get; set; } = "";
+    }
+
+    /// <summary>A piece of a card text; <see cref="Bold"/> parts were &lt;strong&gt; in the page.</summary>
+    public sealed record Tool1TextSegmentDto(string Text, bool Bold = false);
+
+    /// <summary>v1.1.6 <c>_laterPOCaution(r)</c> result with its card texts and Step 6 table.</summary>
+    public sealed class Tool1LaterCautionDto
+    {
+        /// <summary>The later month whose 1st is above the limit ("MM.YYYY", year, month).</summary>
+        public string MKey { get; set; } = "";
+        public int Y { get; set; }
+        public int M { get; set; }
+        /// <summary>Stock on that 1st (with this request), the limit (rounded down) and the STR there.</summary>
+        public double Stock { get; set; }
+        public double Limit { get; set; }
+        public double Str { get; set; }
+        /// <summary>T1 × (1 + buffer %).</summary>
+        public double EffT { get; set; }
+        /// <summary>Pcs too much on that 1st (≥ 1,000).</summary>
+        public double Excess { get; set; }
+        /// <summary>The POs named, latest first.</summary>
+        public List<Tool1LaterCautionItemDto> Items { get; set; } = new();
+        /// <summary>"With this request, the Jan 2027 PO 9,000 will be 3,445 too much on 1 Feb 2027 (135d vs 79d limit). Consider reducing it to 5,555."</summary>
+        public string Text { get; set; } = "";
+        /// <summary><see cref="Text"/> in pieces (the bold ones as the page showed them).</summary>
+        public List<Tool1TextSegmentDto> Segments { get; set; } = new();
+        /// <summary>The small line under the caution.</summary>
+        public string Note { get; set; } = "Information only · does not change the decision · working in Step 6 of the step-by-step computation";
+        /// <summary>Step 6: heading, limit column header, rows (window start … the month above the limit), working lines, footer.</summary>
+        public string Step6Title { get; set; } = "Caution check (information only) — stock on every 1st after the window start, with this request";
+        public string LimitHeader { get; set; } = "";
+        public List<Tool1Step6RowDto> Rows { get; set; } = new();
+        public List<string> Working { get; set; } = new();
+        public string Footer { get; set; } = "";
+    }
+
+    public sealed class Tool1LaterCautionItemDto
+    {
+        public string MKey { get; set; } = "";
+        public int Y { get; set; }
+        public int M { get; set; }
+        /// <summary>The PO quantity landing that month, of which <see cref="Requests"/> are tool requests (always 0 in v1.1.6).</summary>
+        public double Qty { get; set; }
+        public double Requests { get; set; }
+        /// <summary>Too much named to this PO, and what is left (<c>keep = qty − cut</c>).</summary>
+        public double Cut { get; set; }
+        public double Keep { get; set; }
+    }
+
+    /// <summary>One row of Step 6 (cells as painted).</summary>
+    public sealed class Tool1Step6RowDto
+    {
+        /// <summary>"1 Nov 2026".</summary>
+        public string Label { get; set; } = "";
+        /// <summary>The first row (window start, "← Window Start").</summary>
+        public bool WindowStart { get; set; }
+        /// <summary>The month above the limit (red row).</summary>
+        public bool Bad { get; set; }
+        public string Background { get; set; } = "";
+        public string Stock { get; set; } = "";
+        public string Limit { get; set; } = "";
+        public string Str { get; set; } = "";
+        public string StrColour { get; set; } = "";
+        /// <summary>"3,445" on the bad row, else "—".</summary>
+        public string Excess { get; set; } = "";
+    }
+
+    /// <summary>
+    /// v1.1.6 B1 <c>_bobsSibList</c>: one BSR row of a BOBs request's sibling colours (saved with the request as
+    /// <c>bobsSiblings</c>; at most 60, ranked first, then most weeks on floor).
+    /// </summary>
+    public sealed class Tool1BobsSiblingDto
+    {
+        [JsonPropertyName("gm")] public string Gm { get; set; } = "";
+        [JsonPropertyName("colour")] public string Colour { get; set; } = "";
+        [JsonPropertyName("wof")] public double Wof { get; set; }
+        /// <summary>"Q1" … "Q4", null = under the weeks-on-floor gate (not ranked).</summary>
+        [JsonPropertyName("q")] public string? Q { get; set; }
+        [JsonPropertyName("pdstr")] public double Pdstr { get; set; }
+        [JsonPropertyName("first3")] public double First3 { get; set; }
+        [JsonPropertyName("first3st")] public double? First3St { get; set; }
+        [JsonPropertyName("season")] public string Season { get; set; } = "";
     }
 
     public sealed class Tool1RecInfoDto
@@ -65,6 +176,9 @@ namespace DecisionEngine.Results.Tool1
     /// <summary>Single Concept part of the card.</summary>
     public sealed class Tool1CardBDto
     {
+        /// <summary>v1.1.6 D1: no F4 plan — only <see cref="NoPlanNote"/> is shown (no KPIs, no steps).</summary>
+        public bool NoPlan { get; set; }
+        public string? NoPlanNote { get; set; }
         /// <summary>Mix gate failed: only the amber banner is shown (no KPIs, no steps).</summary>
         public bool MixFailed { get; set; }
         /// <summary>"⚠ Colour Mix % = 1.2% — below 2% threshold. Broken / cut size likely."</summary>
@@ -79,6 +193,8 @@ namespace DecisionEngine.Results.Tool1
         public Tool1Step3Dto Step3 { get; set; } = new();
         public Tool1Step4Dto Step4 { get; set; } = new();
         public Tool1Step5Dto Step5 { get; set; } = new();
+        /// <summary>v1.1.6 S3: Step 6 = the later-PO caution working (same object as the card's caution), null when none.</summary>
+        public Tool1LaterCautionDto? Step6 { get; set; }
     }
 
     public sealed class Tool1Step1Dto
@@ -155,7 +271,8 @@ namespace DecisionEngine.Results.Tool1
 
     public sealed class Tool1Step4Dto
     {
-        public string Title { get; set; } = "STR Calculation — 60-Day Window from Day 1 of Delivery Month";
+        /// <summary>v1.1.6 S4: "STR Calculation — {D}-Day Window from Day 1 of the Month after Delivery".</summary>
+        public string Title { get; set; } = "";
         /// <summary>D (days) shown in the description and the TOTAL row.</summary>
         public string D { get; set; } = "";
         /// <summary>Window rows (only when the chain has more than one month).</summary>

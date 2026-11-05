@@ -11,6 +11,9 @@ namespace DecisionEngine.Tool2
     /// <see cref="ResolveIndex.RouteRequest"/>), <c>_rowKey4</c> / <c>_rowColour</c> / <c>_infoKey4</c> (5585)
     /// and <c>runEngineB2Fast</c> (5602). <c>runEngineB2</c> (5090) has no call site in v1.1.4 (the README
     /// / its own comment say so) and is not ported.
+    /// v1.1.6 (legacy/v1.1.6/patches 10, 20, 22): no F4 plan in the requirement window → "No Plan – Review" (checked
+    /// first, no quantity); the days left in the current month count today; a late PO of last month (until the cut-off
+    /// day) is counted in the stock at the window start when the window starts this month.
     /// </summary>
     public static class Tool2Engine
     {
@@ -270,6 +273,7 @@ namespace DecisionEngine.Tool2
             public double? WindowDailyRate;
             public double? WinStockStart;
             public List<Tool2ChainStep>? Chain;
+            public bool NoPlan;
         }
 
         private static BResult RunEngineB2Fast(RecommendationContext ctx, string colour, string deliveryMonth, double releasedQty, GmInfo? info, Indexes idx)
@@ -285,6 +289,16 @@ namespace DecisionEngine.Tool2
             var mk4 = InfoKey4(info);
             var colKey = mk4 + "-" + colour.Trim().ToLowerInvariant();
             var opStock = idx.F1Col.TryGetValue(colKey, out var os) ? os : 0;
+            // v1.1.6 D1: no F4 plan in the requirement window → "No Plan – Review" (no quantity suggested), checked first.
+            // A PO two or more months late is checked from last month (today = the server date).
+            var f4Plan = idx.F4.TryGetValue(mk4, out var f4p) ? f4p : new JsObjectMap<double>();
+            var noPlan = NoPlan.Check(k => f4Plan.Get(k), deliveryMonth, false, ctx.Today, p.D);
+            if (noPlan != null)
+                return new BResult
+                {
+                    Decision = Decisions.NoPlanReview, NoPlan = true, MixPct = 0, OpStock = opStock,
+                    Reason = NoPlan.Reason(info.Brand, info.McCd, info.Mrp, info.Flag, noPlan) + " The planner decides on this PO."
+                };
             var colEntry = idx.F3Col.TryGetValue(colKey, out var ce) ? ce : new SalesEntry();
             var mcEntry = idx.F3Mc.TryGetValue(mk4, out var me) ? me : new SalesEntry();
             double colAvg, mcAvg, mixPct;
@@ -338,7 +352,7 @@ namespace DecisionEngine.Tool2
                 var ePO = PrevMonthCarry.EPOWithCarry(existingPO, mkey, carry);
                 var fc = JsOps.Or(forecastByMon.Get(mkey), 0);
                 double totalDays = MonthMath.DaysInMonth(cy, cm);
-                var remainingDays = i == 0 ? totalDays - todayDate : totalDays;
+                var remainingDays = i == 0 ? MonthMath.DaysLeft(totalDays, todayDate) : totalDays;   // v1.1.6 D2: today counts
                 var cp = effectiveMixPct != null ? fc * effectiveMixPct.Value * (remainingDays / totalDays) : 0;
                 runStock = Math.Max(runStock + ePO - cp, 0);
             }
@@ -349,13 +363,15 @@ namespace DecisionEngine.Tool2
             {
                 var (cy, cm) = MonthMath.AddMonths(winY, winM, i);
                 var mkey = MonthMath.Mmyyyy(cy, cm);
-                var ePO = PrevMonthCarry.EPOWithCarry(existingPO, mkey, carry);
+                // v1.1.6 item 1: the window starts this month (a late PO of last month) → the carried qty is stock at the window start
+                var lateHere = i == 0 && carry.Qty > 0 && mkey == carry.CurrKey;
+                var ePO = lateHere ? JsOps.Or(existingPO.Get(mkey), 0) : PrevMonthCarry.EPOWithCarry(existingPO, mkey, carry);
                 var fc = JsOps.Or(forecastByMon.Get(mkey), 0);
                 double totalDays = MonthMath.DaysInMonth(cy, cm);
                 var isCurr = mkey == currKey2;
-                var demandDays = isCurr ? totalDays - todayDate : totalDays;
+                var demandDays = isCurr ? MonthMath.DaysLeft(totalDays, todayDate) : totalDays;
                 var colPlan = effectiveMixPct != null ? fc * effectiveMixPct.Value * (demandDays / totalDays) : 0;
-                var openStock = i == 0 ? runStock : JsOps.Or(chain[i - 1].CloseStock, 0);
+                var openStock = i == 0 ? runStock + (lateHere ? carry.Qty : 0) : JsOps.Or(chain[i - 1].CloseStock, 0);
                 var closeStock = Math.Max(openStock + ePO - colPlan, 0);
                 chain.Add(new Tool2ChainStep
                 {
@@ -433,7 +449,7 @@ namespace DecisionEngine.Tool2
                     reason = "STR = " + strR + "d > " + effR + "d (T=" + tS + "d + " + bufS + "% buffer). Stock w/o PO (" + Js.Fmt(Math.Max(0, Js.Round(stockNoPO))) + " units) already exceeds " + effR + "d cover. Cancel full PO.";
                 }
             }
-            reason += carryNote;
+            reason += carry.Qty > 0 && winKey == carry.CurrKey ? PrevMonthCarry.LateNote(carry) : carryNote;
             return new BResult
             {
                 Decision = decision, Reason = reason, ArtStr = artStr, RecQty = recQty, MaxRetainQty = maxRetain, MixPct = mixPct, OpStock = opStock,

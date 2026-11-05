@@ -93,6 +93,28 @@ for (const m of ['10.2026', '11.2026', '12.2026', '01.2027', '02.2027']) f4b6[m]
 f4b6['2027-03-01'] = String(ri(3000, 9000));
 files.f4.push(f4b6);
 
+// ── v1.1.6 ──
+// Late PO (item 1): last month's pending PO of a Single Concept colour (counted at the window start until the cut-off day)
+files.f2.push({ 'PO Number': '4500009201', 'Generic Material': '1101000101', 'Color': 'BLK', 'Brand Type': 'NON-PL', 'MC CD': '1101',
+  'MRP': '399', 'Flag': 'NON-BOGO', 'Delivery Month': '09.2026', 'Pending Qty': '8,400', 'Vendor Name': 'Raymond Ltd', 'PO Value': '1764000' });
+files.f2.push({ 'PO Number': '4500009202', 'Generic Material': '1101000102', 'Color': 'WHT', 'Brand Type': 'NON-PL', 'MC CD': '1101',
+  'MRP': '399', 'Flag': 'NON-BOGO', 'Delivery Month': '11.2026', 'Pending Qty': '600', 'Vendor Name': 'Raymond Ltd' });
+// No F4 plan (D1): a Single Concept bucket without any F4 row, a PO two months late, and a bucket whose plan ends early
+const B7 = { 'Brand Type': 'NON-PL', 'MC CD': '8810', 'MRP': '149', 'Flag': 'NON-BOGO' };
+files.um.push(Object.assign({ 'Generic Material': '8810000701', 'Division': 'MENS', 'MC DESC': 'M-SOCKS' }, B7));
+for (const [c, dm, q] of [['BLK', '12.2026', '700'], ['WHT', '08.2026', '450']]) {
+  files.f1.push(Object.assign({ 'Generic Material': '8810000701', 'Color': c, 'OP STK': '1200' }, B7));
+  files.f2.push(Object.assign({ 'PO Number': '45000093' + c.length + q, 'Generic Material': '8810000701', 'Color': c, 'Delivery Month': dm,
+    'Pending Qty': q, 'Vendor Name': 'Sock Co', 'PO Value': String(Number(q) * 90) }, B7));
+}
+const B8 = { 'Brand Type': 'NON-PL', 'MC CD': '8811', 'MRP': '179', 'Flag': 'NON-BOGO' };
+files.um.push(Object.assign({ 'Generic Material': '8811000801', 'Division': 'MENS', 'MC DESC': 'M-CAPS' }, B8));
+files.f1.push(Object.assign({ 'Generic Material': '8811000801', 'Color': 'RED', 'OP STK': '500' }, B8));
+files.f4.push(Object.assign({}, B8, { '10.2026': '2,000', '11.2026': '2,000' }));
+for (const dm of ['10.2026', '01.2027'])
+  files.f2.push(Object.assign({ 'PO Number': '450000940' + dm.slice(0, 2), 'Generic Material': '8811000801', 'Color': 'RED', 'Delivery Month': dm,
+    'Pending Qty': '900', 'Vendor Name': 'Cap Co' }, B8));
+
 const out = { files, requests: src.requests };
 const dest = path.join(ROOT, 'tests/POGovernance.Tests/Tool2/Fixtures/dataset.json');
 fs.writeFileSync(dest, JSON.stringify(out, null, 1));

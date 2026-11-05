@@ -91,7 +91,7 @@ namespace POGovernance.Tests.Tool2
             Assert.Equal("RUN-0001", res.RunNo);
             Assert.Null(res.View.SaveError);
             var (gz, meta) = archive.Runs[res.RunId!];
-            Assert.Equal(87, meta["lines"]!.GetValue<int>());
+            Assert.Equal(93, meta["lines"]!.GetValue<int>());
             Assert.Equal(Tool2Fixture.Result(Sc)["summary"]!["atRisk"]!.GetValue<double>(), meta["atRisk"]!.GetValue<double>());
             Assert.Equal("v-f2", meta["dataVersions"]!["f2"]!.GetValue<string>());
             Assert.Null(meta["dataVersions"]!["grc"]); // only files with data are recorded
@@ -106,7 +106,7 @@ namespace POGovernance.Tests.Tool2
             Assert.True(view.IsHistory);
             Assert.Equal("RUN-0001", view.RunNo);
             Assert.Equal("Planner One", view.By);
-            Assert.Equal("📜 Saved run — 87 lines", view.StatusText);
+            Assert.Equal("📜 Saved run — 93 lines", view.StatusText);
             Assert.Equal(new[] { "Colour Master" }, view.MissingFiles);
             Assert.Equal("v-bsr", cache2.AskedVersions!["bsr"]);
             Assert.Equal(System.Text.Json.JsonSerializer.Serialize(res.View.Lines.Select(l => l.Tooltip)), System.Text.Json.JsonSerializer.Serialize(view.Lines.Select(l => l.Tooltip)));
@@ -126,7 +126,7 @@ namespace POGovernance.Tests.Tool2
             var opt = await svc.GetOptionsAsync(res.RunId);
             Assert.Equal(Tool2Fixture.Result(Sc)["catHeads"]!.AsArray().Select(n => n!.GetValue<string>()), opt.CatHeads);
             var cur = await svc.GetOptionsAsync(null);
-            Assert.Equal(87, cur.AssessableLines);
+            Assert.Equal(93, cur.AssessableLines);
 
             var csv = await svc.ExportAsync(new Tool2ExportRequestDto { RunId = res.RunId!, Format = "csv" });
             Assert.Equal("VMM_RaisedPO_Assessment_2026-10-03.csv", csv.FileName);
@@ -140,7 +140,7 @@ namespace POGovernance.Tests.Tool2
                 Assert.All(wb.Worksheets, w => Assert.False(w.ShowGridLines));
                 var s = wb.Worksheet("Summary Dashboard");
                 Assert.Equal("VMM RAISED PO ASSESSMENT — SUMMARY DASHBOARD", s.Cell("A1").GetString());
-                Assert.Equal(87, s.Cell("A6").GetDouble());
+                Assert.Equal(93, s.Cell("A6").GetDouble());
                 Assert.Equal("#,##0", s.Cell("F6").Style.NumberFormat.Format);
                 var detail = wb.Worksheets.First(w => w.Name.EndsWith("RC-SC"));
                 Assert.True(detail.Cell("A1").HasHyperlink);
@@ -166,7 +166,7 @@ namespace POGovernance.Tests.Tool2
             archive.Fail = true;
             var res = await svc.RunAsync(Planner);
             Assert.StartsWith("⚠ Run finished but was not saved to History: store down", res.View.SaveError);
-            Assert.Equal("Assessment complete — 87 lines processed", res.View.Toast);
+            Assert.Equal("Assessment complete — 93 lines processed", res.View.Toast);
             Assert.NotEmpty((await svc.GetDetailAsync(res.RunId!, new Tool2DetailFilterDto())).Months!);
         }
 

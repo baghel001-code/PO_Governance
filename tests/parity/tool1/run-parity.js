@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // Tool 1 ("✏️ New Request") parity harness.
 //
-// Runs the ORIGINAL v1.1.4 code — the Category form functions of legacy/python-app/app/index.html
+// Runs the ORIGINAL v1.1.6 code (legacy/v1.1.6/app/index.html = the v1.1.4 page + the v1.1.6 patches) — the Category form functions of legacy/python-app/app/index.html
 // (formGMInput, formPopulateColours, populateMonths, formSubmit, runEngineB, runEngineA, renderResult,
 // renderCatHistory, _confirmFinalQty / qcConfirm / qcDecline … extracted verbatim by name, plus the
 // recommendation script for _strCaution / _cautionBoxHtml) together with the REAL shared.js (refreshRequests,
@@ -12,14 +12,16 @@
 //
 //   node tests/parity/tool1/make-fixture.js
 //   LANG=en_IN.UTF-8 node tests/parity/tool1/run-parity.js
+// v1.1.6 pop-ups are answered by the case: "Why introduce this colour?" (case.why, 'dont' = Don't send) and the
+// "Article not in Article Master" message box (its text is recorded as a toast).
 'use strict';
 const fs = require('fs');
 const path = require('path');
 const vm = require('vm');
 
 const ROOT = path.resolve(__dirname, '../../..');
-const HTML = fs.readFileSync(path.join(ROOT, 'legacy/python-app/app/index.html'), 'utf8');
-const SHARED = fs.readFileSync(path.join(ROOT, 'legacy/python-app/app/shared.js'), 'utf8');
+const HTML = fs.readFileSync(path.join(ROOT, 'legacy/v1.1.6/app/index.html'), 'utf8');
+const SHARED = fs.readFileSync(path.join(ROOT, 'legacy/v1.1.6/app/shared.js'), 'utf8');
 const FIX = path.join(ROOT, 'tests/POGovernance.Tests/Tool1/Fixtures');
 const dataset = JSON.parse(fs.readFileSync(path.join(FIX, 'dataset.json'), 'utf8'));
 
@@ -71,9 +73,12 @@ const pageSrc = [
   extractLine('const isDayCol = k =>'),
   'const _idx={};',
   extractLine('let _qtyConfirmResolve='),
+  extractLine('var LATER_PO_CAUTION_MIN ='),
   extractBlock('var FMAP = {', /^};\s*$/),
   ...['col', '_buildUMIndex', '_buildBSRIndex', '_buildResolveIndex', 'dateToMMYYYY', 'addMonths', 'daysInMonth', 'monLabel', 'mmyyyy',
-    '_prevMonthCarry', '_prevMonthCarryNote', '_ePOWithCarry', '_todayStr', '_confirmFinalQty', 'qcClamp', 'qcConfirm', 'qcDecline',
+    '_prevMonthCarry', '_prevMonthCarryNote', '_lateCarryNote', '_ePOWithCarry', '_todayStr', '_daysLeft',
+    '_windowMonths', '_noPlanReason', '_paNoPlan', '_v116Msg', '_inArticleMaster', '_artLine', '_laterPOCaution', '_laterPOName', '_laterPOText',
+    '_laterPOCautionHtml', '_laterPOStep6Html', '_askColourReason', '_needsColourReason', '_colourReasonHtml', '_bobsSibList', '_confirmFinalQty', 'qcClamp', 'qcConfirm', 'qcDecline',
     '_approvedQtyFor', 'ymKey', 'resolveGM', 'buildKey2', 'buildKey3', 'routeRequest', 'runEngineB', 'getWOF', 'getPDSTR', 'quartile',
     'pctRank', 'getBSRRows', 'absBlock', 'runEngineA', 'dpill', 'renderResult', '$g', 'formGMInput', 'formPopulateColours',
     'formColChange', 'formGetColour', 'formClear', 'formSubmit', 'renderCatHistory', 'populateMonths'].map(extractFunction),
@@ -105,7 +110,9 @@ const driverSrc = String.raw`
     const c = {};
     c.decision = norm((/white-space:nowrap">(.*?)<\/div>\s*<\/div>\s*<div class="res-body">/s.exec(html) || [])[1] || '');
     c.num = norm((/<div class="rh-num">(.*?)<\/div>/.exec(html) || [])[1] || '');
-    const title = /<div class="rh-title"[^>]*>([\s\S]*?)<\/div>\s*<div class="rh-sub">/.exec(html);
+    const title = /<div class="rh-title"[^>]*>([\s\S]*?)<\/div>\s*(?:<div class="rh-art"[\s\S]*?<\/div>)?<div class="rh-sub">/.exec(html);
+    const art = /<div class="rh-art" title="([^"]*)"[^>]*>([\s\S]*?)<\/div><div class="rh-sub">/.exec(html);
+    if (art) c.art = [strip(art[1]), norm(art[2])];
     c.titleSpans = title ? all(/<span[^>]*>(.*?)<\/span>/g, title[1]).map(m => norm(m[1])) : [];
     c.sub = norm((/<div class="rh-sub">(.*?)<\/div>/.exec(html) || [])[1] || '');
     c.chips = all(/<span style="font-size:9px;font-weight:700;color:var\(--ink3\);text-transform:uppercase;letter-spacing:\.06em">(.*?)<\/span>\s*<span style="font-size:12px;font-weight:600;color:([^"]*)">(.*?)<\/span>/g, html).map(m => [m[1], norm(m[3])]);
@@ -147,11 +154,26 @@ const driverSrc = String.raw`
     c.reason = norm((/— Reason<\/strong><br>\s*<span style="color:var\(--ink2\)">([\s\S]*?)<\/span>\s*<\/div>/.exec(html) || [])[1] || '');
     c.footer = norm((/<span style="font-size:10px;color:var\(--ink3\)">(.*?)<\/span>\s*<button class="rec-btn"/.exec(html) || [])[1] || '');
     c.caution = all(/<span>(.*? above Tool 2 threshold of .*?)<\/span>/g, html).map(m => norm(m[1]));
+    // v1.1.6
+    const np = /(No F4 plan for this group[^<]*)/.exec(html); if (np) c.noPlanNote = norm(np[1]);
+    const lc = /<div class="later-po-caution"[^>]*>([\s\S]*?)<div style="font-size:10.5px;color:#6B5320;margin-top:4px">([\s\S]*?)<\/div><\/div>/.exec(html);
+    if (lc) c.laterCaution = [norm(lc[1]), norm(lc[2])];
+    const cr = /Why introduce this colour\? \(buyer\)<\/strong><br>([\s\S]*?)<\/div>/.exec(html); if (cr) c.colourReason = norm(cr[1]);
+    const s4t = /STR Calculation — ([^<]*)<\/span>/.exec(html); if (s4t) c.step4Title = norm('STR Calculation — ' + s4t[1]);
+    const s6 = seg(html, '>STEP 6</span>', 'end detail panel');
+    if (s6) {
+      c.step6Title = norm((/<span style="font-size:11px;font-weight:700;color:#fff">([^<]*)<\/span>/.exec(s6) || [])[1] || '');
+      c.step6Head = all(/<th[^>]*>([\s\S]*?)<\/th>/g, s6).map(m => norm(m[1]));
+      c.step6 = rows(s6).map(r => [r.bg].concat(r.cells));
+      const w6 = /<div style="font-family:var\(--mono\);font-size:11.5px;line-height:1.9[^>]*>([\s\S]*?)<\/div>/.exec(s6);
+      c.step6Working = w6 ? strip(w6[1]).split('\n').map(x => x.replace(/\s+/g, ' ').trim()).filter(Boolean) : [];
+      c.step6Foot = norm((/<div style="font-size:11px;color:var\(--ink2\);margin-top:8px">([\s\S]*?)<\/div>/.exec(s6) || [])[1] || '');
+    }
     return c;
   }
   function historyRows() {
     const tb = document.getElementById('cat-hist-tbody').innerHTML;
-    return all(/<tr>([\s\S]*?)<\/tr>/g, tb).map(m => all(/<td[^>]*>([\s\S]*?)<\/td>/g, m[1]).map(c => norm(c[1])));
+    return all(/<tr>([\s\S]*?)<\/tr>/g, tb).map(m => all(/<td[^>]*>([\s\S]*?)<\/td>/g, m[1]).map((c, i) => norm(i === 1 ? c[1].replace(/<div[^>]*>/g, ' ') : c[1])));   // v1.1.6: the code cell has the description under it
   }
   const idOf = r => r ? String(r['Generic Material']) + '|' + String(r['Color']) : null;
   const out = [];
@@ -171,7 +193,7 @@ const driverSrc = String.raw`
           manual: document.getElementById('c-col-txt').style.display || ''
         };
       } else {
-        __toasts.length = 0; __pending.length = 0; __modal.asked = null; __modal.c = c;
+        __toasts.length = 0; __pending.length = 0; __modal.asked = null; __modal.c = c; __modal.why = null;
         __server.posts = [];
         document.getElementById('c-gm').value = c.gm;
         document.getElementById('c-col').value = c.colour || '';
@@ -186,7 +208,7 @@ const driverSrc = String.raw`
         const last = S.requests[S.requests.length - 1];
         const html = area.children[0] ? area.children[0].innerHTML : null;
         result = {
-          toasts: __toasts.slice(), asked: __modal.asked, parallel: __modal.parallel || null,
+          toasts: __toasts.slice(), asked: __modal.asked, parallel: __modal.parallel || null, whyAsked: __modal.why,
           seqBefore,
           posts: __server.posts,
           saved: __server.lastSaved ? JSON.parse(JSON.stringify(__server.lastSaved)) : null,
@@ -271,7 +293,7 @@ function runScenario(sc) {
     return reply(404, { error: 'not found' });
   }
   const ctx = vm.createContext({
-    S, document, Date: FakeDate, Math, JSON, Object, Array, String, Number, Map, Set, Promise, Proxy, parseFloat, parseInt, isFinite, isNaN, encodeURIComponent,
+    S, document, Date: FakeDate, Math, JSON, CSS: { escape: s => String(s) }, Object, Array, String, Number, Map, Set, Promise, Proxy, parseFloat, parseInt, isFinite, isNaN, encodeURIComponent,
     console, toast: m => toasts.push(m), alert: m => toasts.push('alert: ' + m),
     setTimeout: (f) => { const r = f(); if (r && r.then) pending.push(r); return 0; }, clearTimeout() { }, setInterval() { return 0; },
     fetch: fetchStub, localStorage: { getItem() { return null; }, setItem() { } }, sessionStorage: { getItem() { return null; }, setItem() { } },
@@ -298,6 +320,14 @@ function runScenario(sc) {
       else { if (c.confirm !== 'max') inp.value = c.confirm; qcConfirm(); }
       return pr;
     };`, ctx);
+  // v1.1.6 pop-ups: "Why introduce this colour?" answered by the case, the message box recorded as a toast
+  vm.runInContext(`
+    _askColourReason = function(r){
+      const c = __modal.c;
+      __modal.why = { gm: r.gm, colour: r.colour, decision: r.decision };
+      return Promise.resolve(c.why === 'dont' ? null : String(c.why || 'Launch colour for the festive range').trim().slice(0, 1000));   // the dialog trims and keeps 1,000 characters
+    };
+    _v116Msg = function(title, text){ __toasts.push(text); __modal.msgTitle = title; };`, ctx);
   ctx.__serverSaveOther = x => JSON.parse(JSON.stringify(serverSave(x, { name: 'Other Buyer', email: 'other@vmm.test' })));
   ctx.Shared.online = true;
   ctx.Shared.user = ME;
@@ -344,6 +374,14 @@ function casesFor(sc) {
   // other single concept paths
   sub('B-nomc', '1101NOMC', 'BLK', m[1], 100);
   sub('B-noforecast', '8800000001', 'BLK', m[1], 100);
+  // v1.1.6
+  sub('B-nosale-D3', '8800000002', 'WHT', m[1], 300);
+  sub('B-nosale-D3-dont', '8800000002', 'WHT', m[2], 300, { why: 'dont' });
+  for (const [mi, qty] of [[0, 100], [1, 100], [1, 2500], [2, 100], [3, 100]])
+    sub('B-caution-' + mi + '-' + qty, '8800000003', 'BLU', m[mi], qty, { confirm: 'max' });
+  sub('B-caution-GRY', '8800000003', 'GRY', m[1], 200, { confirm: 'max' });
+  sub('B1-GRY-why-dont', '1101000101', 'GRY', m[3], 100, { why: 'dont' });
+  sub('B1-GRY-why', '1101000101', 'GRY', m[3], 100, { why: '  Customer asked for it <b>again</b>  ' });
   sub('B6-legacy-RED', '6600000001', 'RED', m[1], 1000, { confirm: 'max' });
   sub('B6-legacy-YEL', '6600000001', 'YEL', m[2], 1000, { confirm: '10' });
   sub('B6-cyavg-GRN', '6600000002', 'GRN', m[1], 10, { confirm: 'max' });
@@ -366,9 +404,10 @@ const scenarios = [
   { name: 'S1-early-month', today: '2026-10-03' },
   { name: 'S2-params', today: '2026-10-14', params: { T1: 60, strBuffer: 0, mix: 0.5, D: 45, peer: 3, wof: 3, borderTolerance: 25, seasonCurrent: ['SS26'], seasonFallback: ['AW26'], prevMonthPendingCutoffDay: 15, N: 3 } },
   { name: 'S3-year-end', today: '2026-12-02', params: { strBuffer: 12.5, seasonCurrent: ['AW26', 'SS26'], seasonFallback: [], wof: 6, mixWindowDays: 30, borderTolerance: 0 } },
-  { name: 'S4-no-artmaster', today: '2026-10-14', params: { mix: 8, peer: 20, seasonCurrent: ['XX'], seasonFallback: ['SS26'] }, drop: ['artmaster', 'attrrel'] },
+  { name: 'S4-no-attrrel', today: '2026-10-14', params: { mix: 8, peer: 20, seasonCurrent: ['XX'], seasonFallback: ['SS26'] }, drop: ['attrrel'] },
   { name: 'S5-no-colmaster', today: '2026-11-01', params: { prevMonthPendingCutoffDay: 0, T1: 120, D: 30 }, drop: ['colmaster'] },
-  { name: 'S6-missing-bsr', today: '2026-10-14', drop: ['bsr'], small: true }
+  { name: 'S6-missing-bsr', today: '2026-10-14', drop: ['bsr'], small: true },
+  { name: 'S7-no-artmaster', today: '2026-11-04', drop: ['artmaster'], small: true }   // v1.1.6: every New PO request stops
 ];
 
 const expected = { generatedBy: 'tests/parity/tool1/run-parity.js', source: 'legacy/python-app/app/index.html + shared.js (v1.1.4)', me: ME, savedAt: SAVED_AT, scenarios: [] };

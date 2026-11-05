@@ -1,5 +1,6 @@
 using System.Text.Json.Serialization;
 using DecisionEngine.Model;
+using DecisionEngine.Results.Recommendation;
 
 namespace DecisionEngine.Results.Tool1
 {
@@ -71,6 +72,8 @@ namespace DecisionEngine.Results.Tool1
     {
         [JsonPropertyName("decision")] public string Decision { get; set; } = "";
         [JsonPropertyName("decisionReason")] public string DecisionReason { get; set; } = "";
+        /// <summary>v1.1.6 D1: true on the "No Plan Available" Hold (no F4 plan in the requirement window).</summary>
+        [JsonPropertyName("noPlan"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] public bool? NoPlan { get; set; }
         [JsonPropertyName("mixPct")] public double MixPct { get; set; }
         [JsonPropertyName("colAvg"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] public double? ColAvg { get; set; }
         [JsonPropertyName("mcAvg"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] public double? McAvg { get; set; }
@@ -95,6 +98,10 @@ namespace DecisionEngine.Results.Tool1
         [JsonPropertyName("prevMonthCarryNote"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] public string? PrevMonthCarryNote { get; set; }
         [JsonPropertyName("prevMonthCarry"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] public Tool1CarryDto? PrevMonthCarry { get; set; }
         [JsonPropertyName("futureRiskMonths"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] public List<Tool1FutureRiskDto>? FutureRiskMonths { get; set; }
+        /// <summary>v1.1.6: the pre-roll months (display only, the side panel and its Excel).</summary>
+        [JsonPropertyName("preRoll"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] public List<PreRollMonthDto>? PreRoll { get; set; }
+        /// <summary>v1.1.6: the colour share the roll used (<c>effectiveMixPct</c>; null = no MC sale).</summary>
+        [JsonPropertyName("effMix"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] public double? EffMix { get; set; }
 
         /// <summary>
         /// Not a JS field: the engine's stock at the window start before this PO

@@ -104,6 +104,10 @@ namespace DecisionEngine.Results.Recommendation
         [JsonPropertyName("wof")] public double Wof { get; set; }
         /// <summary>Empty / error message shown instead of the body (".rec-empty"), null when there are rows.</summary>
         [JsonPropertyName("emptyMessage")] public string? EmptyMessage { get; set; }
+        /// <summary>v1.1.6 S8 (single concept): the "Download Excel (all lines)" button label, null otherwise.</summary>
+        [JsonPropertyName("allLinesLabel")] public string? AllLinesLabel { get; set; }
+        /// <summary>v1.1.6 S8 (single concept): "Click any quantity, Hold or Watch List to see how it was worked out."</summary>
+        [JsonPropertyName("headingHint")] public string? HeadingHint { get; set; }
         /// <summary>True when <see cref="EmptyMessage"/> is an error (red, "⚠ " prefix).</summary>
         [JsonPropertyName("emptyIsError")] public bool EmptyIsError { get; set; }
         /// <summary>Section heading of the Single Concept table / Step 1 / Step 2+3 (plain text).</summary>

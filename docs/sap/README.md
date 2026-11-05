@@ -144,10 +144,10 @@ up to Max Permissible).
 | Tool decision (engine path) | SAP verdict | reason_code | rule_id |
 |---|---|---|---|
 | Auto Allow — cover within T + buffer (Single Concept) | ALLOW | COVER_WITHIN_NORM | COVER-00 |
-| Auto Allow — no plan for the MC-MRP-Flag | ALLOW | NO_PLAN_DATA | PLAN-00 |
+| Hold — "No Plan Available": no F4 plan for the MC-MRP-Flag in the requirement window (v1.1.6 D1, checked first; was Auto Allow / ALLOW) | HOLD | NO_PLAN_DATA | PLAN-00 |
 | Hold, quantity above Max Permissible, Max Permissible > 0 | **REDUCE** + `max_qty` | COVER_ABOVE_NORM | COVER-01 |
 | Hold — Don't Raise, Max Permissible 0 | HOLD | COVER_NO_HEADROOM | COVER-02 |
-| Watch List — colour mix below the minimum | WATCH (route CATHEAD) | MIX_BELOW_MIN | MIX-01 |
+| Watch List — colour mix below the minimum, or no F3 sale for the MC (v1.1.6 D3) | WATCH (route CATHEAD) | MIX_BELOW_MIN | MIX-01 |
 | Allow — ranks Q1 / Q2 (Multi Concept) | ALLOW | PEER_Q1 / PEER_Q2 | PEER-Q1 / PEER-Q2 |
 | Allow — Q3 at / near the peer average (border zone) | ALLOW | PEER_Q3 | PEER-Q3-OK |
 | Watch List — Q3 beyond the border zone | WATCH | PEER_Q3 | PEER-Q3-GAP |

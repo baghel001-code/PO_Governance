@@ -62,10 +62,13 @@ namespace DecisionEngine.Tool1
                 var decision = Js.ToJsString(G("decision"));
                 var mcDesc = info != null ? LedgerHelpers.Get(info, "mcDesc") : null;
                 var mrp = info != null ? LedgerHelpers.Get(info, "mrp") : null;
+                var artDesc = info != null ? Js.ToJsString(LedgerHelpers.Get(info, "artDesc") ?? "") : "";
+                var vendor = info != null ? Js.ToJsString(LedgerHelpers.Get(info, "vendorName") ?? "") : "";
                 rows.Add(new Tool1HistoryRowDto
                 {
                     RequestId = Js.ToJsString(Js.Truthy(G("reqId")) ? G("reqId") : G("id")),
                     Gm = Tpl(r, "gm"), Colour = Tpl(r, "colour"),
+                    ArtDesc = artDesc.Length > 0 ? artDesc : null, ArtTitle = artDesc + (vendor.Length > 0 ? " · Vendor: " + vendor : ""),
                     McDesc = Js.Truthy(mcDesc) ? Js.ToJsString(mcDesc) : "—",
                     Mrp = "₹" + (Js.Truthy(mrp) ? Js.ToJsString(mrp) : "—"),
                     Month = Tpl(r, "month"), Qty = Js.Fmt(LedgerHelpers.ToNumber(G("qty"))),

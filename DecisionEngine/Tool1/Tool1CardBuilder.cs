@@ -1,4 +1,5 @@
 using DecisionEngine.Common;
+using DecisionEngine.Explain;
 using DecisionEngine.Model;
 using DecisionEngine.Results.Tool1;
 
@@ -8,6 +9,9 @@ namespace DecisionEngine.Tool1
     /// Port of index.html <c>renderResult(r)</c> (line 4543) as data: produces every figure and text
     /// the Tool 1 result card paints. Step 5's formula follows v1.1.4 README item 2 (exact effective
     /// threshold and the engine's own stock before this PO); everything else is as the JS painted it.
+    /// v1.1.6 (legacy/v1.1.6/patches 23, 24, 28, 29): Generic Article description and vendor under the code, the
+    /// "No Plan Available" note, Step 4 heading with D, the later-PO caution + Step 6, the buyer's colour reason,
+    /// the BOBs sibling colours and the "How was this number worked out?" steps.
     /// </summary>
     public static class Tool1CardBuilder
     {
@@ -51,6 +55,7 @@ namespace DecisionEngine.Tool1
                 OptionTypeChip = !string.IsNullOrEmpty(r.OptionType) && r.OptionType != "—" ? r.OptionType : null
             };
             var i = r.Info;
+            card.ArtLine = ArtLine(i);
             card.SubLine = i != null ? Or(i.Brand, "NON-PL") + " · " + Or(i.Div, "—") + " · " + Or(i.McDesc, "—") + " · ₹" + Or(i.Mrp, "—") + " · " + Or(i.Flag, "—") : "";
             card.Chips.Add(new() { Key = "Brand Type", Value = Or(i?.Brand, "—") });
             card.Chips.Add(new() { Key = "Division", Value = Or(i?.Div, "—") });
@@ -65,8 +70,14 @@ namespace DecisionEngine.Tool1
             if (r.Engine == "A" && r.A != null) card.A = BuildA(r.A, p, dc, r.Decision);
 
             card.ReasonTitle = r.Decision + " — Reason";
-            card.Reason = Or(r.DecisionReason, "—");
+            card.LaterCaution = Tool1LaterPoCaution.Compute(r.Engine, r.Decision, r.B, p);
+            if (card.B != null) card.B.Step6 = card.LaterCaution;
+            // the Heads-up sentence is not repeated on the card when the caution names it
+            card.Reason = Or(card.LaterCaution != null ? Tool1LaterPoCaution.ReasonWithoutHeadsUp(r.DecisionReason) : r.DecisionReason, "—");
             card.StrCaution = r.StrCaution;
+            card.ColourReason = string.IsNullOrEmpty(r.ColourReason) ? null : r.ColourReason;
+            card.BobsSiblings = r.BobsSiblings is { Count: > 0 } ? r.BobsSiblings : null;
+            card.Explain = r.Engine == "B" ? SingleExplainBuilder.ForRequest(r, p, today) : null;
             card.RecEngine = r.Engine;
             card.FooterHint = r.Engine == "B" ? "📦 Colour-level STR · monthly qty recommendation" : "🎯 Attribute → Colour → GM recommendation";
             card.RecInfo = new Tool1RecInfoDto
@@ -76,9 +87,25 @@ namespace DecisionEngine.Tool1
             return card;
         }
 
+        /// <summary>Port of the v1.1.6 <c>_artLine(r)</c> (description, vendor, hover title); null when neither is known.</summary>
+        public static Tool1ArtLineDto? ArtLine(Tool1InfoDto? i)
+        {
+            var d = i?.ArtDesc ?? "";
+            var v = i?.VendorName ?? "";
+            if (d.Length == 0 && v.Length == 0) return null;
+            return new Tool1ArtLineDto { Description = d.Length > 0 ? d : "—", Vendor = v.Length > 0 ? v : null, Title = d + (v.Length > 0 ? " · Vendor: " + v : "") };
+        }
+
         private static Tool1CardBDto BuildB(Tool1Outcome r, Tool1EngineBResult b, EngineParams p, string today)
         {
             var dto = new Tool1CardBDto();
+            if (b.NoPlan == true)
+            {
+                // v1.1.6 D1: nothing was worked out — the plan is missing
+                dto.NoPlan = true;
+                dto.NoPlanNote = "No F4 plan for this group in the requirement window, so no stock, colour mix or STR was worked out.";
+                return dto;
+            }
             if (b.MixFailed)
             {
                 dto.MixFailed = true;
@@ -133,7 +160,7 @@ namespace DecisionEngine.Tool1
                     if (mkey == r.Month) break;
                     if (k > 24) break;
                     double totalD = MonthMath.DaysInMonth(cy, cm);
-                    var remD = k == 0 ? totalD - tD : totalD;
+                    var remD = k == 0 ? MonthMath.DaysLeft(totalD, tD) : totalD;   // v1.1.6 D2: today counts
                     var isCurr = k == 0;
                     var fcVal = fbm != null && fbm.TryGetValue(mkey, out var fv) ? JsOps.Or(fv, 0) : 0;
                     var ePO = PrevMonthCarry.EPOWithCarry(epo, mkey, carry);
@@ -169,6 +196,7 @@ namespace DecisionEngine.Tool1
             // Step 4
             var D = p.D;
             dto.Step4.D = N(D);
+            dto.Step4.Title = "STR Calculation — " + N(D) + "-Day Window from Day 1 of the Month after Delivery";
             if (b.Chain.Count > 1)
             {
                 double budget2 = D, totalDem = 0;

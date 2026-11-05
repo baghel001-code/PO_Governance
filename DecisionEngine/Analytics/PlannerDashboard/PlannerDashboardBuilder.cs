@@ -1,6 +1,7 @@
 using System.Text.Json.Nodes;
 using DecisionEngine.Analytics.Common;
 using DecisionEngine.Common;
+using DecisionEngine.Model;
 using DecisionEngine.Results.Analytics.Common;
 using DecisionEngine.Results.Analytics.PlannerDashboard;
 
@@ -13,10 +14,11 @@ namespace DecisionEngine.Analytics.PlannerDashboard
     /// </summary>
     public sealed class PlannerDashboardBuilder
     {
-        public static readonly string[] DecisionOrder = { "Retain", "Watch List", "Reduce Qty", "Cancel", "Cannot Validate" };
+        public static readonly string[] DecisionOrder = { "Retain", "Watch List", "Reduce Qty", "Cancel", "Cannot Validate", Decisions.NoPlanReview };
         public static readonly IReadOnlyDictionary<string, string> DecisionColors = new Dictionary<string, string>
         {
-            ["Retain"] = "#00873E", ["Watch List"] = "#B45309", ["Reduce Qty"] = "#D97706", ["Cancel"] = "#DC2626", ["Cannot Validate"] = "#6B7280"
+            ["Retain"] = "#00873E", ["Watch List"] = "#B45309", ["Reduce Qty"] = "#D97706", ["Cancel"] = "#DC2626", ["Cannot Validate"] = "#6B7280",
+            [Decisions.NoPlanReview] = "#3B5B92"   // v1.1.6 D1
         };
         public static readonly List<OptionDto> EngineOptions = new() { new("", "All Engines"), new("B", "Single Concept MRP"), new("A", "Multi Concept MRP") };
         public static readonly List<OptionDto> DecisionOptions = new()
@@ -100,7 +102,7 @@ namespace DecisionEngine.Analytics.PlannerDashboard
             var decCounts = new JsObjectMap<int>();
             foreach (var r in rows) { var k = AnalyticsJs.Concat(r, "decision"); decCounts[k] = decCounts.Get(k) + 1; }
             int C(string d) => decCounts.Get(d);
-            var flagged = rows.Where(r => Str(r, "decision") is not ("Retain" or "Cannot Validate")).ToList();
+            var flagged = rows.Where(r => Str(r, "decision") is not ("Retain" or "Cannot Validate" or Decisions.NoPlanReview)).ToList();
             double qtyAtRisk = 0, valueAtRisk = 0;
             foreach (var r in flagged) qtyAtRisk += CutQty(r);
             foreach (var r in flagged) valueAtRisk += ValueOf(r, CutQty(r));

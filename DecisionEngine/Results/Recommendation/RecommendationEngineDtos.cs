@@ -20,7 +20,36 @@ namespace DecisionEngine.Results.Recommendation
         [JsonPropertyName("poIn")] public double PoIn { get; set; }
         [JsonPropertyName("colPlan")] public double ColPlan { get; set; }
         [JsonPropertyName("closeStock")] public double CloseStock { get; set; }
+        /// <summary>v1.1.6 (display only): F4 plan of the month, days counted (this month: days left, today included when counted) and days in month.</summary>
+        [JsonPropertyName("fc")] public double Fc { get; set; }
+        [JsonPropertyName("demandDays")] public double DemandDays { get; set; }
+        [JsonPropertyName("totalDays")] public double TotalDays { get; set; }
     }
+
+    /// <summary>
+    /// v1.1.6: one pre-roll month (today's month up to the month before delivery / the anchor) as runEngineB and
+    /// <c>_coreColourSTRFast</c> rolled it —
+    /// <c>{mkey, y, m, fc, days, counted, po, sale, open, close}</c>. Display only ("How was this number worked out?").
+    /// </summary>
+    public sealed class PreRollMonthDto
+    {
+        [JsonPropertyName("mkey")] public string MKey { get; set; } = "";
+        [JsonPropertyName("y")] public int Y { get; set; }
+        [JsonPropertyName("m")] public int M { get; set; }
+        /// <summary>F4 plan of the group for the month.</summary>
+        [JsonPropertyName("fc")] public double Fc { get; set; }
+        /// <summary>Days in the month.</summary>
+        [JsonPropertyName("days")] public double Days { get; set; }
+        /// <summary>Days counted (this month: the days left, today included).</summary>
+        [JsonPropertyName("counted")] public double Counted { get; set; }
+        /// <summary>POs landing in the month (F2 + approved today + carry).</summary>
+        [JsonPropertyName("po")] public double Po { get; set; }
+        /// <summary>Plan sale of the colour (F4 × share × counted ÷ days).</summary>
+        [JsonPropertyName("sale")] public double Sale { get; set; }
+        [JsonPropertyName("open")] public double Open { get; set; }
+        [JsonPropertyName("close")] public double Close { get; set; }
+    }
+
 
     /// <summary>
     /// Result of <c>_coreColourSTRFast</c> (index.html line 10329): rolling-window STR (days) and Max
@@ -49,6 +78,8 @@ namespace DecisionEngine.Results.Recommendation
         [JsonPropertyName("winDays")] public double WinDays { get; set; }
         /// <summary>Index of the window-start month in <see cref="Chain"/> (always 1).</summary>
         [JsonPropertyName("d1Idx")] public int D1Idx { get; set; }
+        /// <summary>v1.1.6: the pre-roll months from today's month to the anchor (display only).</summary>
+        [JsonPropertyName("pre")] public List<PreRollMonthDto> Pre { get; set; } = new();
     }
 
     /// <summary>Result of <c>_recQty</c> (index.html line 10178) — simple month STR / rec qty.</summary>
@@ -88,6 +119,8 @@ namespace DecisionEngine.Results.Recommendation
         [JsonPropertyName("strRos")] public double? StrRos { get; set; }
         [JsonPropertyName("watchList")] public bool WatchList { get; set; }
         [JsonPropertyName("watchReason")] public string? WatchReason { get; set; }
+        /// <summary>v1.1.6: the colour's share of the last-45-day sale (0..1, unrounded; display only).</summary>
+        [JsonPropertyName("mixRatio")] public double MixRatio { get; set; }
         [JsonPropertyName("mdata")] public List<RecBMonthDto> MData { get; set; } = new();
     }
 
@@ -105,6 +138,9 @@ namespace DecisionEngine.Results.Recommendation
         [JsonPropertyName("eff")] public double? Eff { get; set; }
         /// <summary>"Raise", "Hold", "No data" or "Watch List".</summary>
         [JsonPropertyName("action")] public string Action { get; set; } = "";
+        /// <summary>v1.1.6 (display only): the month-by-month roll behind the quantity (<c>cs</c>) and the share it used; null for Watch List / no data.</summary>
+        [JsonPropertyName("cs"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] public CoreStrResultDto? Cs { get; set; }
+        [JsonPropertyName("mixUsed"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] public double? MixUsed { get; set; }
         /// <summary>
         /// Display only (not in the JS object): the Max Permissible cell's tooltip,
         /// "Based on threshold STR of {eff}d, the max permissible qty is {rec}" (null for Watch List —

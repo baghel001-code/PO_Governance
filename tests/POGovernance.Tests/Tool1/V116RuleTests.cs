@@ -41,12 +41,12 @@ namespace POGovernance.Tests.Tool1
             var plan = new Dictionary<string, double> { ["11.2026"] = 0, ["02.2027"] = 500 };
             double F(string k) => plan.TryGetValue(k, out var v) ? v : 0;
             var ks = NoPlan.Check(F, "10.2026", true, "2026-11-04", 75);
-            Assert.Equal(new[] { "11.2026", "12.2026", "01.2027" }, ks);
+            Assert.Equal(new[] { "11.2026", "12.2026", "01.2027" }, ks!);
             Assert.Null(NoPlan.Check(F, "11.2026", true, "2026-11-04", 75));     // Dec – Feb has a plan
             // PO Assessment: a PO two or more months late is checked from last month (Oct → Nov – Jan, no plan)
-            Assert.Equal(new[] { "11.2026", "12.2026", "01.2027" }, NoPlan.Check(F, "07.2026", false, "2026-11-04", 75));
+            Assert.Equal(new[] { "11.2026", "12.2026", "01.2027" }, NoPlan.Check(F, "07.2026", false, "2026-11-04", 75)!);
             // … the New PO request does not shift (Aug – Oct: no plan either, but other months)
-            Assert.Equal(new[] { "08.2026", "09.2026", "10.2026" }, NoPlan.Check(F, "07.2026", true, "2026-11-04", 75));
+            Assert.Equal(new[] { "08.2026", "09.2026", "10.2026" }, NoPlan.Check(F, "07.2026", true, "2026-11-04", 75)!);
             Assert.Equal("No Plan Available: there is no F4 plan for NON-PL · MC 1101 · ₹399 · NON-BOGO in the requirement window (Nov 2026 – Jan 2027). " +
                          "Nothing else was checked. Ask the planning team to add the plan.", NoPlan.Reason("NON-PL", "1101", "399", "NON-BOGO", ks!));
         }

@@ -60,6 +60,9 @@ namespace Application.Services.V1.Platform
         {
             if (!me.Has(Roles.Buyer, Roles.CatHead, Roles.Planner, Roles.Admin)) throw new ForbiddenException("Not allowed");
             if (r == null) throw new AppValidationException("Missing request");
+            // v1.1.7 switch 1 "Tool requests use capacity" OFF: check only, nothing is saved
+            if (!Sap.MraService.Read(await _store.GetDocAsync(DocNames.Params, ct) as JsonObject).ToolReqCapacity)
+                throw new ConflictException("Tool requests are switched off: raise the request in SAP. Checks in the tool are for information only.", new { switchedOff = true });
             var date = _clock.Today;   // server date, not the PC clock
             r["reqDate"] = date;
             // Buyers / category heads may only raise requests on the Brand x MC x MRP mapped to them

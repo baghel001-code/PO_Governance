@@ -49,7 +49,6 @@ namespace POGovernance.Tests.Mra
         private static MraFeedEvent Ev(int seq, string kind, string json)
         {
             var raw = JsonNode.Parse(json);
-            if (kind == "mra" && raw is JsonObject o && !o.ContainsKey("action_by")) o["action_by"] = "HT_1000600";   // required (6 Nov 2026)
             var e = new MraFeedEvent { Seq = seq, Kind = kind, At = new DateTimeOffset(2026, 11, 5, 10, seq, 0, TimeSpan.FromHours(5.5)), Raw = json };
             if (kind == "mra") { var (m, err) = MraMessage.Parse(raw); e.Mra = m; e.Error = err; }
             else { var (m, err) = PoMessage.Parse(raw); e.Po = m; e.Error = err; }
@@ -91,25 +90,24 @@ namespace POGovernance.Tests.Mra
         }
 
         [Fact]
-        public void Action_by_is_required_and_kept_in_the_history()
+        public void Action_by_and_remark_are_optional_and_kept_in_the_history()
         {
             var (none, err) = MraMessage.Parse(JsonNode.Parse("""{"mra_no":"100","level":"7"}"""));
-            Assert.Null(none);
-            Assert.Equal("action_by missing", err);
-            var (blank, err2) = MraMessage.Parse(JsonNode.Parse("""{"mra_no":"100","level":"7","action_by":"  "}"""));
-            Assert.Equal((null, "action_by missing"), (blank, err2));
-            var (alias, _) = MraMessage.Parse(JsonNode.Parse("""{"mra_no":"100","level":"7","Changed By":"HT_1001609"}"""));
-            Assert.Equal("HT_1001609", alias!.ActionBy);
+            Assert.Null(err);
+            Assert.Equal((null, null), (none!.ActionBy, none.Remark));
+            var (alias, _) = MraMessage.Parse(JsonNode.Parse("""{"mra_no":"100","level":"7","Changed By":"HT_1001609","Remarks":"  size set broken  "}"""));
+            Assert.Equal(("HT_1001609", "size set broken"), (alias!.ActionBy, alias.Remark));
 
             var st = MraReplay.Run(Snap(), new[]
             {
-                Ev(1, "mra", """{"mra_no":"100","level":"2","action_by":"Shishirjeet Balhara"}"""),
-                Ev(2, "mra", """{"mra_no":"100","level":"7","action_by":"HT_1000600"}"""),
+                Ev(1, "mra", """{"mra_no":"100","level":"2","action_by":"Shishirjeet Balhara","remark":"approved for Diwali"}"""),
+                Ev(2, "mra", """{"mra_no":"100","level":"7"}"""),
             });
-            Assert.Equal(new[] { "Shishirjeet Balhara", "HT_1000600" }, st.Mras["100"].History.Select(h => h.By));
-            Assert.Equal("HT_1000600", st.Mras["100"].ActionBy);
-            var raw = new MraFeedEvent { Seq = 3, Kind = "mra", Error = err };
-            Assert.Equal("parked", MraReplay.Run(Snap(), new[] { raw }).Results.Single().Outcome);
+            var h = st.Mras["100"].History;
+            Assert.Equal(new[] { "Shishirjeet Balhara", null }, h.Select(x => x.By));
+            Assert.Equal(new[] { "approved for Diwali", null }, h.Select(x => x.Remark));
+            Assert.Equal(("Shishirjeet Balhara", "approved for Diwali"), (st.Mras["100"].ActionBy, st.Mras["100"].Remark));   // kept until another is sent
+            Assert.Equal(new[] { "applied", "applied" }, st.Results.Select(r => r.Outcome));
         }
 
         [Fact]

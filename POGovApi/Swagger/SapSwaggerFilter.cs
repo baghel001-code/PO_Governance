@@ -59,7 +59,7 @@ namespace POGovApi.Swagger
 
         private const string MraBatch = """
             { "messages": [
-                { "mra_no": "900201", "level": "7", "action_by": "HT_1001609", "msg_id": "SAP-77890", "occurred_at": "2026-11-05T11:02:00+05:30" },
+                { "mra_no": "900201", "level": "7", "action_by": "HT_1001609", "remark": "size set broken", "msg_id": "SAP-77890", "occurred_at": "2026-11-05T11:02:00+05:30" },
                 { "mra_no": "900202", "level": "final", "po_no": "4500099001", "po_status": "Released", "action_by": "COMM01", "msg_id": "SAP-77891" },
                 { "mra_no": "900203", "level": "1", "action_by": "HT_1000600", "decision": "Auto Allow", "decision_reason": "Within Max Permissible",
                   "decision_id": "D-20261105-000089", "max_permissible": 6200, "msg_id": "SAP-77892" } ] }
@@ -90,8 +90,8 @@ namespace POGovApi.Swagger
                     ("mrn", "MRN of a PO", DocumentExample));
             else if (path.EndsWith("/mra-events", StringComparison.OrdinalIgnoreCase))
                 operation.RequestBody = Body(context, typeof(object),
-                    "One MRA change or {\"messages\": [...]} (max 5,000). Required: mra_no, level (1-9, X or the description), action_by; a new MRA also " +
-                    "generic_article, colour, qty, delivery_date. Optional: po_no, po_status, occurred_at, msg_id, decision fields.",
+                    "One MRA change or {\"messages\": [...]} (max 5,000). Required: mra_no, level (1-9, X or the description); a new MRA also " +
+                    "generic_article, colour, qty, delivery_date. Optional: action_by, remark, po_no, po_status, occurred_at, msg_id, decision fields.",
                     ("new", "A new MRA (first level)", MraNew), ("batch", "Self reject, final with released PO, decision", MraBatch));
             else if (path.EndsWith("/po-events", StringComparison.OrdinalIgnoreCase))
                 operation.RequestBody = Body(context, typeof(object),

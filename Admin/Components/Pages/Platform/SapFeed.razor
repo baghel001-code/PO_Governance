@@ -138,7 +138,7 @@ else
 
     private void Example() => _json = _kind == "po"
         ? """{"po_no":"4500099001","po_status":"Released","mra_no":"900201","qty":3000,"msg_id":"TEST-PO-1"}"""
-        : """{"mra_no":"900201","level":"First Level","generic_article":"000000001112045675","colour":"LGY","qty":3000,"delivery_date":"2026-12-20","action_by":"HT_1000600","msg_id":"TEST-1"}""";
+        : """{"mra_no":"900201","level":"First Level","generic_article":"000000001112045675","colour":"LGY","qty":3000,"delivery_date":"2026-12-20","action_by":"HT_1000600","remark":"test","msg_id":"TEST-1"}""";
 
     private async Task SetAsync(bool? toolReq, bool? livePo)
     {

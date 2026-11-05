@@ -238,8 +238,10 @@ namespace DecisionEngine.Mra
         public string? PoNo { get; set; }
         public string? PoStatus { get; set; }
         public string? OccurredAt { get; set; }
-        /// <summary>Who made the change in SAP (user ID / name) — required on every MRA message.</summary>
+        /// <summary>Who made the change in SAP (user ID / name), optional.</summary>
         public string? ActionBy { get; set; }
+        /// <summary>Free text sent with the change (e.g. why it was rejected), optional.</summary>
+        public string? Remark { get; set; }
         public string? MsgId { get; set; }
         public MraDecisionInfo? DecisionInfo { get; set; }
 
@@ -254,8 +256,12 @@ namespace DecisionEngine.Mra
             if (level == null) return (null, $"level not recognised: {Repr(rawLevel)}");
             if (!MraNorm.ValidNo(mra)) return (null, $"MRA number not valid: {Repr(Cut(mra, 40))}");
             var actionBy = (T("action_by", "changed_by", "action_user") ?? "").Trim();
-            if (actionBy.Length == 0) return (null, "action_by missing");
-            var o = new MraMessage { Mra = MraNorm.NoZeros(mra), Level = level, RawLevel = Cut(rawLevel ?? "", 40), ActionBy = Cut(actionBy, 80) };
+            var remark = (T("remark", "remarks", "comment") ?? "").Trim();
+            var o = new MraMessage
+            {
+                Mra = MraNorm.NoZeros(mra), Level = level, RawLevel = Cut(rawLevel ?? "", 40),
+                ActionBy = actionBy.Length > 0 ? Cut(actionBy, 80) : null, Remark = remark.Length > 0 ? Cut(remark, 500) : null
+            };
             var ga = MraNorm.Ga(T("generic_article", "generic_material", "generic", "ga"));
             if (ga.Length > 0) o.Ga = ga;
             var col = MraNorm.Colour(T("colour", "color"));
@@ -396,6 +402,8 @@ namespace DecisionEngine.Mra
     {
         /// <summary>Who made the change in SAP (action_by of the MRA message).</summary>
         public string? By { get; set; }
+        /// <summary>Remark sent with the change.</summary>
+        public string? Remark { get; set; }
         public DateTimeOffset At { get; set; }
         public string? From { get; set; }
         public string To { get; set; } = "";
@@ -427,8 +435,10 @@ namespace DecisionEngine.Mra
         /// <summary>PO status sent WITH the MRA change (decides whether a live level 5 counts).</summary>
         public string? MraPoStatus { get; set; }
         public DateTimeOffset? ChangedAt { get; set; }
-        /// <summary>Who made the last live change in SAP (action_by).</summary>
+        /// <summary>Who made the last live change in SAP (action_by; kept until a message sends another).</summary>
         public string? ActionBy { get; set; }
+        /// <summary>Remark of the last live change that had one.</summary>
+        public string? Remark { get; set; }
         public string? OccurredAt { get; set; }
         public List<MraFilePo> Pos { get; set; } = new();
         public string? CreatedBy { get; set; }
@@ -566,8 +576,9 @@ namespace DecisionEngine.Mra
             if (m.OccurredAt != null) cur.OccurredAt = m.OccurredAt;
             cur.Decision.MergeFrom(m.DecisionInfo);
             var after = (cur.Level, cur.Qty, cur.Ga, cur.Colour, cur.Dd, cur.MraPoStatus, cur.Decision.Decision, cur.Decision.DecisionId);
-            cur.ActionBy = m.ActionBy;
-            cur.History.Add(new MraHistoryStep { At = ev.At, From = prev, To = m.Level, Qty = cur.Qty, Seq = ev.Seq, By = m.ActionBy });
+            if (m.ActionBy != null) cur.ActionBy = m.ActionBy;
+            if (m.Remark != null) cur.Remark = m.Remark;
+            cur.History.Add(new MraHistoryStep { At = ev.At, From = prev, To = m.Level, Qty = cur.Qty, Seq = ev.Seq, By = m.ActionBy, Remark = m.Remark });
             res.Results.Add(new MraFeedResult
             {
                 Seq = ev.Seq, Outcome = after != before ? MraFeedOutcomes.Applied : MraFeedOutcomes.NoChange, Mra = m.Mra, From = prev, To = m.Level

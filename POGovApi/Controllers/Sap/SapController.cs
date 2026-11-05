@@ -78,7 +78,7 @@ namespace POGovApi.Controllers.Sap
         public async Task<IActionResult> Documents(CancellationToken ct) => Answer(await _documents.ReceiveAsync(await BodyAsync(ct), Caller, ct));
 
         /// <summary>
-        /// Live MRA changes (v1.1.7): one message or {"messages": [...]} (max 5,000). Required per message mra_no and level; a new MRA
+        /// Live MRA changes (v1.1.7): one message or {"messages": [...]} (max 5,000). Required per message mra_no, level and action_by; a new MRA
         /// also needs generic_article, colour, qty, delivery_date. Every message is stored; one result per message
         /// (applied / no change / duplicate / older / parked).
         /// </summary>

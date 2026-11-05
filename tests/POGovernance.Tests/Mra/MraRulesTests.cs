@@ -49,6 +49,7 @@ namespace POGovernance.Tests.Mra
         private static MraFeedEvent Ev(int seq, string kind, string json)
         {
             var raw = JsonNode.Parse(json);
+            if (kind == "mra" && raw is JsonObject o && !o.ContainsKey("action_by")) o["action_by"] = "HT_1000600";   // required (6 Nov 2026)
             var e = new MraFeedEvent { Seq = seq, Kind = kind, At = new DateTimeOffset(2026, 11, 5, 10, seq, 0, TimeSpan.FromHours(5.5)), Raw = json };
             if (kind == "mra") { var (m, err) = MraMessage.Parse(raw); e.Mra = m; e.Error = err; }
             else { var (m, err) = PoMessage.Parse(raw); e.Po = m; e.Error = err; }
@@ -87,6 +88,28 @@ namespace POGovernance.Tests.Mra
             Assert.Equal(5500, m["200"].Qty);
             Assert.True(st.Pos["5900000099"].Status == "3" && st.Pos["5900000099"].Mra == "200");
             Assert.Equal(new[] { "1", "2", "4", "5", "2" }, m["200"].History.Select(h => h.To));
+        }
+
+        [Fact]
+        public void Action_by_is_required_and_kept_in_the_history()
+        {
+            var (none, err) = MraMessage.Parse(JsonNode.Parse("""{"mra_no":"100","level":"7"}"""));
+            Assert.Null(none);
+            Assert.Equal("action_by missing", err);
+            var (blank, err2) = MraMessage.Parse(JsonNode.Parse("""{"mra_no":"100","level":"7","action_by":"  "}"""));
+            Assert.Equal((null, "action_by missing"), (blank, err2));
+            var (alias, _) = MraMessage.Parse(JsonNode.Parse("""{"mra_no":"100","level":"7","Changed By":"HT_1001609"}"""));
+            Assert.Equal("HT_1001609", alias!.ActionBy);
+
+            var st = MraReplay.Run(Snap(), new[]
+            {
+                Ev(1, "mra", """{"mra_no":"100","level":"2","action_by":"Shishirjeet Balhara"}"""),
+                Ev(2, "mra", """{"mra_no":"100","level":"7","action_by":"HT_1000600"}"""),
+            });
+            Assert.Equal(new[] { "Shishirjeet Balhara", "HT_1000600" }, st.Mras["100"].History.Select(h => h.By));
+            Assert.Equal("HT_1000600", st.Mras["100"].ActionBy);
+            var raw = new MraFeedEvent { Seq = 3, Kind = "mra", Error = err };
+            Assert.Equal("parked", MraReplay.Run(Snap(), new[] { raw }).Results.Single().Outcome);
         }
 
         [Fact]
@@ -137,7 +160,7 @@ namespace POGovernance.Tests.Mra
         [Fact]
         public void Decision_fields_are_kept_and_unsafe_urls_dropped()
         {
-            var (o, _) = MraMessage.Parse(JsonNode.Parse("""{"mra_no":"5","level":"1","verdict":"Hold — Don't Raise","reason":"Max 0","decision_id":"D-9","max_permissible":"1,200","decision_url":"javascript:alert(1)","working":{"a":1}}"""));
+            var (o, _) = MraMessage.Parse(JsonNode.Parse("""{"mra_no":"5","level":"1","verdict":"Hold — Don't Raise","reason":"Max 0","decision_id":"D-9","max_permissible":"1,200","decision_url":"javascript:alert(1)","working":{"a":1},"action_by":"HT_1"}"""));
             var d = o!.DecisionInfo!;
             Assert.StartsWith("Hold", d.Decision);
             Assert.Equal(("Max 0", "D-9", 1200L), (d.DecisionReason, d.DecisionId, d.DecisionMaxPerm!.Value));

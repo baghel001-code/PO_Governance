@@ -737,7 +737,7 @@ message with status 3 for the same MRA makes it count.
 | `no change` | Same as already known | – |
 | `duplicate` | The same `msg_id` was received before | – |
 | `older` | Older than the change already applied | – |
-| `parked` | Not understood (reason given), or a new MRA without `generic_article` / `colour` / `qty` / `delivery_date` | Correct and send again with a new `msg_id` |
+| `parked` | Not understood (reason given), `action_by` missing, or a new MRA without `generic_article` / `colour` / `qty` / `delivery_date` | Correct and send again with a new `msg_id` |
 | `stored` | PO message stored (it moves capacity only when the admin switch "Live PO changes" is ON) | – |
 
 ### 8a. `POST /mra-events` — MRA message
@@ -745,6 +745,7 @@ message with status 3 for the same MRA makes it count.
 | Field | Req. | Meaning |
 |---|---|---|
 | `mra_no` | **yes** | MRA number (also `mra`, `mra_number`, `document_number`, `doc_no`) |
+| `action_by` | **yes** | Who made the change in SAP (user ID or name, max 80), e.g. `HT_1000600` — also `changed_by`, `action_user`. Shown in the MRA's level history. Without it the message is `parked` ("action_by missing") |
 | `level` | **yes** | Code `1`–`9`, `X`, or the short description (`First Level`, `Second Level`, `Third Level`, `Fourth Level`, `final`, `Discarded`, `Self Reject`, `Forced Approved`, `Draft`, `Reject`) — also `level_code`, `level_desc`, `short_description` |
 | `generic_article` | for a **new** MRA | 18 or 10 digits (the tool keeps the last 10) — also `generic_material`, `ga` |
 | `colour` | for a new MRA | also `color` |
@@ -760,14 +761,15 @@ Examples:
 
 ```json
 { "mra_no": "0000900201", "level": "First Level", "generic_article": "000000001112045675", "colour": "LGY",
-  "qty": 3000, "delivery_date": "2026-12-20", "msg_id": "SAP-77812", "occurred_at": "2026-11-05T10:12:00+05:30" }
+  "qty": 3000, "delivery_date": "2026-12-20", "action_by": "HT_1000600", "msg_id": "SAP-77812",
+  "occurred_at": "2026-11-05T10:12:00+05:30" }
 ```
 
 ```json
 { "messages": [
-  { "mra_no": "900201", "level": "7", "msg_id": "SAP-77890", "occurred_at": "2026-11-05T11:02:00+05:30" },
-  { "mra_no": "900202", "level": "final", "po_no": "4500099001", "po_status": "Released", "msg_id": "SAP-77891" },
-  { "mra_no": "900203", "level": "1", "decision": "Auto Allow", "decision_reason": "Within Max Permissible",
+  { "mra_no": "900201", "level": "7", "action_by": "HT_1001609", "msg_id": "SAP-77890", "occurred_at": "2026-11-05T11:02:00+05:30" },
+  { "mra_no": "900202", "level": "final", "po_no": "4500099001", "po_status": "Released", "action_by": "COMM01", "msg_id": "SAP-77891" },
+  { "mra_no": "900203", "level": "1", "action_by": "HT_1000600", "decision": "Auto Allow", "decision_reason": "Within Max Permissible",
     "decision_id": "D-20261105-000089", "max_permissible": 6200, "msg_id": "SAP-77892" } ] }
 ```
 
@@ -831,6 +833,7 @@ A PO message:
 | Not JSON | 400 | `{"error_code":"INVALID_JSON","message":"Invalid JSON: Expected depth to be zero at the end of the JSON payload. …","trace_id":"T-a6a951"}` |
 | More than 5,000 messages | 413 | `{"error_code":"BATCH_TOO_LARGE","message":"5001 messages in one call - at most 5000","trace_id":"T-62086f"}` |
 | A PO status that is not known | 200 | `results[0]`: `"outcome": "parked", "reason": "PO status not recognised: 'open'"` |
+| An MRA message without `action_by` | 200 | `results[0]`: `"outcome": "parked", "reason": "action_by missing"` |
 
 `401` for credentials, `503` for a temporary problem (retry; resending with the same `msg_id` is safe).
 

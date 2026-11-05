@@ -318,7 +318,7 @@ else
             </td>
             <td style="max-width:240px"><span class="mq-c @(c.Counted ? "y" : c.SetAside || c.DdPassed ? "w" : "n")">@(c.Counted ? "Counted" : "Not counted")</span><div class="mq-sub">@c.Why</div></td>
             <td>@if (!string.IsNullOrEmpty(m.PoNo)) { <span>@m.PoNo</span><div class="mq-sub">@PoStatusText(m.PoStatus)@(m.PoSrc == "live" ? " · live" : "")</div> } else { <span class="mq-sub">—</span> }</td>
-            <td class="mq-sub">@(m.ChangedAt != null ? Time(m.ChangedAt) : "morning file")</td>
+            <td class="mq-sub">@(m.ChangedAt != null ? Time(m.ChangedAt) : "morning file")@if (!string.IsNullOrEmpty(m.ActionBy)) { <div>by @m.ActionBy</div> }</td>
         </tr>
     };
 
@@ -368,6 +368,7 @@ else
                 @if (!string.IsNullOrEmpty(m.CreatedBy) || !string.IsNullOrEmpty(m.CreatedById)) { <tr><td>Created by</td><td>@string.Join(" · ", new[] { m.CreatedBy, m.CreatedById }.Where(s => !string.IsNullOrEmpty(s)))</td></tr> }
                 @if (!string.IsNullOrEmpty(m.Inspiration)) { <tr><td>Inspiration</td><td>@m.Inspiration</td></tr> }
                 @if (m.Lines > 0) { <tr><td>Item lines</td><td>@m.Lines</td></tr> }
+                @if (!string.IsNullOrEmpty(m.ActionBy)) { <tr><td>Last change by (SAP)</td><td>@m.ActionBy</td></tr> }
             </table>
             <div class="mq-ph">Level changes since the morning file</div>
             @if (m.History.Count == 0)
@@ -376,10 +377,10 @@ else
             }
             else
             {
-                <table class="mq-tbl"><thead><tr><th>Time</th><th>Change</th><th class="n">Qty</th></tr></thead><tbody>
+                <table class="mq-tbl"><thead><tr><th>Time</th><th>Change</th><th class="n">Qty</th><th>By (SAP)</th></tr></thead><tbody>
                     @foreach (var h in m.History)
                     {
-                        <tr><td>@Time(h.At)</td><td>@(h.From != null ? "Level " + h.From + " → " : "created at ")Level @h.To @Lvl(h.To)</td><td class="n">@Nf(h.Qty)</td></tr>
+                        <tr><td>@Time(h.At)</td><td>@(h.From != null ? "Level " + h.From + " → " : "created at ")Level @h.To @Lvl(h.To)</td><td class="n">@Nf(h.Qty)</td><td>@(h.By ?? "—")</td></tr>
                     }
                 </tbody></table>
             }
@@ -453,7 +454,7 @@ else
             <td>
                 @if (r.Error != null) { <span class="mq-sub">@((r.Raw ?? "").Length > 120 ? r.Raw![..120] : r.Raw)</span> }
                 else if (r.Kind == "po") { <span>status → @(r.Po!.Status == "C" ? "closed" : r.Po.Status)@(r.Po.Qty != null ? " · " + Nf(r.Po.Qty) + " pcs" : "")</span> }
-                else { <span>level → <span class="mq-lv">@r.Mra!.Level</span> @Lvl(r.Mra.Level)@(r.Mra.Qty != null ? " · " + Nf(r.Mra.Qty) + " pcs" : "")@(r.Mra.PoNo != null ? " · PO " + r.Mra.PoNo : "")</span> }
+                else { <span>level → <span class="mq-lv">@r.Mra!.Level</span> @Lvl(r.Mra.Level)@(r.Mra.Qty != null ? " · " + Nf(r.Mra.Qty) + " pcs" : "")@(r.Mra.PoNo != null ? " · PO " + r.Mra.PoNo : "")@(r.Mra.ActionBy != null ? " · by " + r.Mra.ActionBy : "")</span> }
             </td>
             <td><span class="mq-eff @r.EffectCls">@r.EffectText</span></td>
             <td>@r.Outcome@if (r.Reason != null) { <div class="mq-sub">@r.Reason</div> }</td>

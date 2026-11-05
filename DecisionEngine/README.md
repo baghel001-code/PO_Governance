@@ -83,7 +83,7 @@ Every class keeps an XML doc comment naming the original function in `legacy/pyt
 | Folder / namespace | Ports |
 |---|---|
 | `Model/` | `S.files` + `S.params` (`EngineData`, `EngineParams`), the stored data-file payload (`DatasetPayload`), dataset keys, decision labels, uploaded-file rows (`SheetRow`, the JS `col(row, …)`) |
-| `Common/` | JS semantics (`Js`: `parseFloat`, `num`, `Math.round`, `toFixed`, `toLocaleString('en-IN')` …), JS object key order (`JsObjectMap`), stable sort (`JsSort`), month math, `_prevMonthCarry`, ledger field access, `_idx.resolveMap` / `resolveGM` / `routeRequest`, `getWOF` / `getPDSTR` / `quartile` / `pctRank` (`BsrPeerRank`), engine exceptions |
+| `Common/` | JS semantics (`Js`: `parseFloat`, `num`, `Math.round`, `toFixed`, `toLocaleString('en-IN')` …), JS object key order (`JsObjectMap`), stable sort (`JsSort`), month math (v1.1.6 `_daysLeft`), `_prevMonthCarry` (+ v1.1.6 `_lateCarryNote`), v1.1.6 `_windowMonths` / `_noPlanReason` / `_paNoPlan` (`NoPlan`), ledger field access, `_idx.resolveMap` / `resolveGM` / `routeRequest`, `getWOF` / `getPDSTR` / `quartile` / `pctRank` (`BsrPeerRank`), engine exceptions |
 | `Tool1/` | `formSubmit` flow, `routeRequest`, `runEngineB` (line 3847), `runEngineA` + `absBlock` (lines 4257–4270), `qcConfirm` / `qcDecline`, `renderResult` card, `formPopulate*`, `renderCatHistory`, shared.js `colourKey` / `slimRequest` / `approvalBadge` |
 | `Tool2/` | `runTool2Batch`, `runEngineB2Fast`, Engine A mapping (`Tool2EngineA` → the shared `Tool1EngineA`), Tool 2 views / filters / roll-ups / exports (`Tool2Workspace`), shared.js `runSummary` |
 | `Recommendation/` | Second `<script>` (lines 9369–11512): `_runB`, `_runA`, `_strCaution`, `_coreColourSTRFast`, `_bsrQ`, `_recQty`, `_paintRec`, `_exportEngineARecs`, `_openRec` / `_render` |
@@ -94,6 +94,7 @@ Every class keeps an XML doc comment naming the original function in `legacy/pyt
 | `Analytics/Ai/` | `sendAIChat` + `_aiBuildContext*` (lines 8859–9046), `_aiBuildSummary` … `renderAIInsights` (lines 11516–11732) |
 | `Analytics/Help/` | `renderEngineBHelp` / `computeFor` (lines 1948–1985) |
 | `Analytics/Common/` | Shared analytics helpers (`AnalyticsJs`, dashboard math) |
+| `Explain/` | v1.1.6 `legacy/v1.1.6/app/explain.js` (single concept part): "How was this number worked out?" steps and the workbook model with formulas (`SingleExplainBuilder`); the portal writes the .xlsx (`Infrastructure/Services/V1/Excel/ExplainExcelWriter`) |
 | `Sap/` | Not a port: the SAP R/3 verdict layer over Tool 1 (`SapVerdictMap` = the owner-approved tool → SAP mapping table, `SapInputNormalizer`, `SapDecisionEngine`) — see `docs/sap/README.md` |
 | `Results/<Area>/` | The result models the engines return (and the request / query models they take); JSON names match the v1.1.4 objects |
 
@@ -103,8 +104,9 @@ Tool 2's line model. Both tools' parity suites pass on the single implementation
 
 ## How parity is proven
 
-`tests/parity/<area>/` holds Node harnesses that load the original functions from `legacy/python-app/app/index.html`,
-run them on fixture datasets and write the expected results (`expected.json`). The xUnit tests in
+`tests/parity/<area>/` holds Node harnesses that load the original functions from `legacy/python-app/app/index.html`
+(Tool 1, Tool 2 and Recommendation: the v1.1.6 page `legacy/v1.1.6/app/index.html`, built from the v1.1.4 page and the
+v1.1.6 patches by `legacy/v1.1.6/build.py`), run them on fixture datasets and write the expected results (`expected.json`). The xUnit tests in
 `tests/POGovernance.Tests/<Area>/` run these engines on the same fixtures and assert the same decisions, quantities,
 reasons, texts and Excel output (1330+ assertions-heavy tests). After a deliberate rule change, re-run the harness
 (the command is in each harness's header comment) and commit the new expected results.

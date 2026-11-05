@@ -9,6 +9,14 @@ integration API** (`/api/sap/v1`, SAP API specification v1.4) — see `docs/sap/
 The main change from v1.1.4: **the decision rules now run on the server**, not in each user's browser.
 They were ported function by function, and the C# results are checked against the original JavaScript (see Testing).
 
+**v1.1.6 (4–5 Nov 2026)** is ported too (source of truth: `legacy/v1.1.6` — the v1.1.6 page patches, the built page,
+`explain.js` and `RELEASE-NOTES-v1.1.6.txt`). Single concept only: "No Plan Available" (New PO request Hold, PO Assessment
+"No Plan – Review"), days left in the month count today, no F3 sale → Watch List, late PO at the window start, Article Master
+required for a New PO request, "Why introduce this colour?" for a single concept Watch List, the later-PO caution (Step 6),
+Generic Article description / vendor, "How was this number worked out?" (steps + Excel with formulas), the BOBs sibling list,
+"Late PO counts until day" (1–28) in the Parameters panel, and Attribute Analysis / AI Insights removed from the Planner tabs.
+Multi concept is unchanged.
+
 ## Solution layout
 
 | Project | What it holds |
@@ -28,8 +36,8 @@ They were ported function by function, and the C# results are checked against th
 | Planner | 📂 Data Setup (uploads, parameters, season selection) | `/planner/data` |
 | Planner | 📋 PO Assessment (Tool 2) | `/planner/assessment` |
 | Planner | 📈 GRC Back Testing | `/planner/grc` |
-| Planner | 🔎 Attribute Analysis | `/planner/attributes` |
-| Planner | 🤖 AI Insights + Planner dashboard | `/planner/ai-insights`, `/planner/dashboard` |
+| Planner | 🔎 Attribute Analysis (v1.1.6: no tab — the screen stays, not reachable from the planner tabs) | `/planner/attributes` |
+| Planner | 🤖 AI Insights + Planner dashboard (v1.1.6: no tab, as above) | `/planner/ai-insights`, `/planner/dashboard` |
 | Category | ✏️ New Request (Tool 1) + 📊 Recommendation | `/category/request` |
 | Category | 📄 Today's requests, 📊 Insights, 🎬 Video, ❓ How it works | `/category/requests`, `/category/insights`, `/category/video`, `/category/how-it-works` |
 | Both | ✅ Approvals, 🗂 History | `/approvals`, `/history` |
@@ -162,7 +170,8 @@ POGOV_SQLSERVER_TEST="Server=localhost,1433;User Id=sa;Password=…;TrustServerC
 ```
 
 Most tests are **parity tests**: a Node script in `tests/parity/<area>/` runs the original functions extracted
-from `legacy/python-app/app/index.html` on a fixture dataset and writes the expected results; the xUnit tests check that the C# port
+from `legacy/python-app/app/index.html` (Tool 1, Tool 2 and Recommendation: from the v1.1.6 page `legacy/v1.1.6/app/index.html`)
+on a fixture dataset and writes the expected results; the xUnit tests check that the C# port
 (the `DecisionEngine` layer) returns the same decisions, quantities, reasons, texts and Excel output. To regenerate the expected results after a deliberate rule change, run the
 harness again (each harness has the command in its header comment). `tests/POGovernance.Tests/Architecture` checks that
 `DecisionEngine` stays dependency-free. `tests/POGovernance.Tests/Sap` covers the SAP interface: the verdict mapping (every engine

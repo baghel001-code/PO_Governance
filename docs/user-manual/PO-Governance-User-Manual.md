@@ -122,7 +122,7 @@ Brand / MC / MRP is not mapped to you in the SCR products file. Ask the administ
 | ❓ How it works · 🎬 How-to Video · 💬 Feedback | ✓ | ✓ | ✓ | ✓ |
 | 📂 Data Setup | – | – | ✓ | ✓ |
 | 📋 PO Assessment | – | – | ✓ | ✓ |
-| 📈 GRC Back Testing · 🔎 Attribute Analysis · 🤖 AI Insights | – | – | ✓ | ✓ |
+| 📈 GRC Back Testing | – | – | ✓ | ✓ |
 | 👥 Users · Audit log · Backups · All feedback · 🔌 SAP Interface | – | – | – | ✓ |
 
 After signing in, buyers and category heads land on **New Request**; planners and admins on **Data Setup**.
@@ -334,7 +334,7 @@ In the Data Setup sidebar:
 | STR Buffer % (Single Concept) | 5 | tolerance on T (75 d + 5 % = 79 d) |
 | Border Zone % (Multi Concept) | 10 | tolerance around the peer average |
 | Mix Window (days) | 45 | days of F3 used for the colour mix |
-| Prev-month PO cut-off (day) | 5 | until this day of the month, POs still pending from last month are counted in the current month |
+| Late PO counts until day (Single Concept MRP) | 5 | whole days 1–28: from the 1st to this day of the month, a pending PO of last month still counts (PO Assessment: as stock at the window start) |
 
 **Season Selection** — click season pills to set the **Current Season(s)** and **Fallback Season(s)** (seasons come
 from the Article Master). By default the latest season is current and the previous one is the fallback.
@@ -367,12 +367,16 @@ Q1 = best, Q4 + Absolute Block = "wrong buy".
 
 ### 5.5 Attribute Analysis
 
+v1.1.6: this tab is no longer in the Planner view (the screen is kept but not reachable from the tabs).
+
 ![Attribute Analysis](img/12-attribute-analysis.png)
 
 Drill down Brand → MC → MRP × Flag → attribute / colour: stock, sales (45 days), sales mix %, stock mix %, deviation and
 STR (No Sales, Fast < 30, Healthy < 75, Slow < 120, Very Slow). Filter by brand, MC and minimum stock.
 
 ### 5.6 AI Insights and Planner Dashboard
+
+v1.1.6: this tab is no longer in the Planner view (the screen is kept but not reachable from the tabs).
 
 Tab **🤖 AI Insights** (after a PO Assessment run): choose a **Focus** and click **✨ Generate Insights** for
 cross-cutting findings and the first actions. **📊 Planner Dashboard** shows the decision mix, the drivers of Reduce /

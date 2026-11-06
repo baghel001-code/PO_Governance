@@ -5,6 +5,7 @@
 @using Application.DTOs.Platform
 @using Domain.Entities.Store
 @using Admin.Components.Shared.DataSetup
+@using Admin.Services.Platform
 @implements IDisposable
 @inject ServerStatusService Status
 @inject ISnackbar Snackbar
@@ -92,6 +93,31 @@
             {
                 @FileSlot(s)
             }
+            @* v1.1.7 (app/index.html sl-mra): the morning MRA workbook, under the SCR products file *@
+            <UploadSlot Id="mra" Name="MRA – SAP Merchandise Requests" State="_mra" Accept=".xlsx,.xls,.xlsb" Disabled="_busy" OnFiles="OnMra"
+                        Style="border-color:#1A4FAF55"
+                        Description="One workbook, two sheets: the item lines (DOC.NO, Generic Article, Color, TOTAL PO QTY, DEL. DATE, LEVEL) and the header report (Document Number, Purchase order, Status). Upload the full file every morning: levels 1, 2 and 4 count against the colour capacity; replaces the previous MRA list." />
+            @if (_mraResult != null)
+            {
+                var ok = _mraResult.Ok;
+                <div id="mra-upload-result" data-testid="mra-upload-result"
+                     style="border:1px solid @(ok ? "#BFE3CC" : "#FECACA");background:@(ok ? "#F0FAF3" : "#FEF2F2");border-radius:10px;padding:9px 12px;font-size:11px;line-height:1.55;color:#1A2B4A;margin-top:-4px;margin-bottom:10px">
+                    @if (ok)
+                    {
+                        <b>✓ MRA file loaded: @_mraResult.Mras.ToString("N0") MRAs</b>
+                        <span>(@string.Join(" · ", _mraResult.ByLevel.Select(kv => "L" + kv.Key + ": " + kv.Value.ToString("N0")))) from sheets “@_mraResult.ItemSheet” and “@_mraResult.HeaderSheet”.</span><br />
+                        <span>Counted against capacity now: <b>@_mraResult.CountedMras.ToString("N0") MRAs · @_mraResult.CountedQty.ToString("N0") pcs</b> (levels 1, 2, 4, delivery date not passed, single concept, in Article Master). This replaces the previous MRA list.</span>
+                        @if (_mraResult.Warnings.Count > 0)
+                        {
+                            <div style="margin-top:6px;color:#8A5A00">@foreach (var w in _mraResult.Warnings) { <div>⚠ @w</div> }</div>
+                        }
+                    }
+                    else
+                    {
+                        <b>✗ MRA file not loaded.</b> @_mraResult.Error
+                    }
+                </div>
+            }
         </div>
 
         <ParametersPanel />
@@ -125,7 +151,6 @@
             <DataStatusPanel Datasets="_datasets" />
         </div>
 
-        <MraFilePanel />
 
         <div class="ds-card">
             <div class="ds-card-hdr">Required File Formats</div>
@@ -197,6 +222,57 @@
     {
         Status.Changed += OnStatusChanged;
         await LoadStatusAsync();
+        await LoadMraStatusAsync();
+    }
+
+    // ── v1.1.7 MRA file (sidebar slot; PO_MRA_UPLOAD / PO_MRA_STATE) ──
+    private readonly SlotState _mra = new() { Status = "Click to upload" };
+    private DecisionEngine.Results.Mra.MraUploadResponse? _mraResult;
+
+    private async Task LoadMraStatusAsync()
+    {
+        var res = await ApiMasterService.MraStateAsync();
+        if (!res.IsSuccess || res.Data == null) return;
+        var st = res.Data;
+        if (!st.Available) { _mra.Reset("Not available: " + st.UnavailableReason); return; }
+        if (st.Snapshot is { } snap)
+        {
+            var counted = st.Rows.Where(r => r.C.Counted).ToList();
+            _mra.Ok($"✓ {snap.MraCount:N0} MRAs · {counted.Count:N0} counted ({counted.Sum(r => r.M.Qty):N0} pcs) · " +
+                    DataSetupText.FmtTime(snap.UploadedAt.ToString("o")),
+                    $"{snap.FileName} · {snap.By} · live changes since: {st.Log.Count:N0}");
+        }
+    }
+
+    private async Task OnMra(InputFileChangeEventArgs e)
+    {
+        var f = e.File;
+        _busy = true;
+        _mraResult = null;
+        _mra.Busy = true; _mra.Status = "Reading " + f.Name + "…"; _mra.StatusClass = "";
+        StateHasChanged();
+        try
+        {
+            await using var stream = f.OpenReadStream(DataSetupText.MaxUploadBytes);
+            var res = await ApiMasterService.MraUploadAsync(new ApiUploadFile(f.Name, stream, string.IsNullOrEmpty(f.ContentType) ? "application/octet-stream" : f.ContentType));
+            if (!res.IsSuccess || res.Data == null) { _mra.Fail("✗ " + res.responseMessage); Snackbar.Warn(res.responseMessage); return; }
+            _mraResult = res.Data;
+            if (_mraResult.Ok)
+            {
+                Snackbar.Toast($"MRA file loaded — {_mraResult.Mras:N0} MRAs, {_mraResult.CountedMras:N0} counted");
+                await LoadMraStatusAsync();
+            }
+            else _mra.Fail("✗ Not loaded — see below");
+        }
+        catch (IOException ex)
+        {
+            _mra.Fail("✗ " + ex.Message);
+        }
+        finally
+        {
+            _mra.Busy = false; _mra.InputKey++;
+            _busy = false;
+        }
     }
 
     // ── server status → slot texts and dots (shared.js syncFromServer / markSlot) ──

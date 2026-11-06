@@ -189,7 +189,7 @@ The stored versions stay in `dataset_versions`, so the file can be made current 
 
 ### 4.9 MRA file (morning file + SAP during the day)
 
-A card on 📂 Data Setup, separate from the eleven datasets: MRAs are stored as **table rows**, not as a gzipped
+A slot in the 📂 Data Setup sidebar under SCR Products / Cat Head Mapping (as in the Python v1.1.7 page), separate from the eleven datasets: MRAs are stored as **table rows**, not as a gzipped
 version, because SAP changes single MRAs all day. SQL Server only. Rules of v1.1.7 (Python tool): open MRAs
 (levels 1, 2, 4; level 5 reached live today) take capacity from their colour and delivery month in the single
 concept Max Permissible, like a released PO.
@@ -199,7 +199,7 @@ concept Max Permissible, like a released PO.
 | Morning: ⬆ Upload MRA file (.xlsx / .xlsb) | – (read in the API) | One workbook, two sheets found by their headers: item lines (DOC.NO, ARTICLE CODE, Color, Generic Article, TOTAL PO QTY, DEL. DATE, LEVEL) and the header report (Document Number, Purchase order, Status). TOTAL PO QTY added up per MRA (all sites); Generic Article = last 10 digits; rows that cannot be read are skipped and counted |
 | | `PRO_SAP_MRA UPLOAD` | One transaction: **replaces** `SAP_MRA_FILE` (one row per MRA), one `SAP_MRA_FILE_UPLOADS` row with the counts. A decision SAP sent live earlier is kept when the file has none |
 | During the day: SAP `POST /api/sap/v1/mra-events`, `/po-events` | `PRO_SAP_MRA FEED_ADD` | Every message stored in arrival order (`SAP_MRA_FEED`), also a bad one |
-| Every New PO request / SAP decision / single concept Recommendation, MRA Queues, SAP Feed | `PRO_SAP_MRA STAMP` (→ `STATE` when something changed) | The last file + the messages received since its upload day, replayed in the API (applied / duplicate / older / parked) and classified (counted or not, and why) |
+| Every New PO request / SAP decision / single concept Recommendation, the MRA slot's status line, MRA Queues, SAP Feed | `PRO_SAP_MRA STAMP` (→ `STATE` when something changed) | The last file + the messages received since its upload day, replayed in the API (applied / duplicate / older / parked) and classified (counted or not, and why) |
 
 Full SAP contract: `docs/sap/SAP-API-Reference.md` §8.
 

@@ -412,10 +412,11 @@ the **single concept** Max Permissible, like a released PO (multi concept MRAs a
 | Level 1 (with Division Head), Level 2 (with Category Head), Level 4 (with Commercial) | Level 3, 6 Discarded, 7 Self Reject, 8 Forced Approved (exception), 9 Draft, X Reject |
 | Level 5 (final) **only** when it became final by a live change today and its PO is not unreleased — until the next morning's files | Delivery date passed (expired), not in the Article Master, multi concept |
 
-1. **Every morning: 📂 Data Setup → MRA – SAP Merchandise Requests → ⬆ Upload MRA file.** One workbook, two sheets (any
+1. **Every morning: 📂 Data Setup → left sidebar → slot "MRA – SAP Merchandise Requests"** (under SCR Products / Cat Head
+   Mapping) → click and pick the file. One workbook, two sheets (any
    names): the item lines (DOC.NO, ARTICLE CODE, Color, Generic Article, TOTAL PO QTY, DEL. DATE, LEVEL) and the header
    report (Document Number, Purchase order, Status). Upload the **full** file (all levels): it replaces yesterday's list.
-   The card says how many MRAs were read per level, how many count now, and what was skipped.
+   The box under the slot says how many MRAs were read per level, how many count now, and what was skipped.
 2. **During the day** SAP sends every change (new MRA, approval, self reject, reject, final) — it counts at once.
 3. **📦 MRA Queues** (everyone; buyers and category heads see their own MCs): tiles per queue (open, exception, today,
    closed), the decision SAP sent, filters, **Waiting with me**, group by, **⬇ Excel**. Click an MRA for where it is,

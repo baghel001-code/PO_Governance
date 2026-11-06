@@ -298,7 +298,7 @@ namespace Application.Services.V1.Platform
             var rl = (roles ?? Enumerable.Empty<string>()).Where(r => Roles.All.Contains(r)).ToList();
             if (rl.Count == 0) throw new AppValidationException("Pick at least one role");
             if (_cfg.HrmsLogin)
-                throw new AppValidationException("Users sign in with their Employee ID and HRMS password: add them by Employee ID (fetched from HRMS), not by email.");
+                throw new AppValidationException("Users sign in with their Employee ID and password: add them by Employee ID (fetched from the employee master), not by email.");
             AppUser created;
             using (await LockAsync(ct))
             {
@@ -374,7 +374,7 @@ namespace Application.Services.V1.Platform
                 await ReloadUsersLockedAsync(ct);
                 if (!_users.TryGetValue(email, out var u)) throw new NotFoundException("No such user");
                 if (u.IsEmployee)
-                    throw new AppValidationException($"{email} signs in with Employee ID {u.EmpCode} and the HRMS password — it is changed or unlocked in MyVishal (HRMS), not here.");
+                    throw new AppValidationException($"{email} signs in with Employee ID {u.EmpCode} and the company password — it is changed or unlocked in the company portal, not here.");
                 u.Pw = _hasher.Hash(DefaultPassword);
                 u.MustChange = true;
                 u.Failed = 0;
@@ -421,7 +421,7 @@ namespace Application.Services.V1.Platform
             {
                 await ReloadUsersLockedAsync(ct);
                 if (_users.TryGetValue(email, out var emp) && emp.IsEmployee)
-                    return "You sign in with your HRMS password: change it in MyVishal (HRMS).";
+                    return "You sign in with your company password: change it in the company portal.";
                 if (!_users.TryGetValue(email, out var u) || !_hasher.Verify(oldPassword, u.Pw))
                     return "Current password is incorrect";
                 var err = ValidateNewPassword(email, newPassword);
@@ -467,8 +467,8 @@ namespace Application.Services.V1.Platform
                 if (_cfg.AllowAdminLocalLogin && email == NormEmail(_cfg.AdminEmailOrDefault)
                     && await GetUserAsync(email, ct) is { IsEmployee: false })
                     return await LocalLoginAsync(email, password, ip, ct);
-                await _audit.AppendAsync(email.Length > 0 ? email : "?", "login-fail", $"email sign-in refused (HRMS sign-in) ip={ip}", ct);
-                return LoginResult.Fail("Sign in with your Employee ID and HRMS password.");
+                await _audit.AppendAsync(email.Length > 0 ? email : "?", "login-fail", $"email sign-in refused (Employee ID sign-in) ip={ip}", ct);
+                return LoginResult.Fail("Sign in with your Employee ID and password.");
             }
             return await EmployeeLoginAsync(NormEmpCode(login), password, ip, ct);
         }
@@ -494,18 +494,18 @@ namespace Application.Services.V1.Platform
             if (lockedText != null || email == null) return LoginResult.Fail(lockedText ?? BadEmployeeLogin);
 
             var r = await _hrms.VerifyPasswordAsync(code, password, ct);
-            if (r.Status == HrmsStatus.Ok && !SameCode(r.Employee?.EmpCode, code)) r = r with { Status = HrmsStatus.Invalid, Message = "HRMS answered for another employee code" };
+            if (r.Status == HrmsStatus.Ok && !SameCode(r.Employee?.EmpCode, code)) r = r with { Status = HrmsStatus.Invalid, Message = "The employee service answered for another employee code" };
             switch (r.Status)
             {
                 case HrmsStatus.Unavailable:
-                    await _audit.AppendAsync(email, "login-error", $"HRMS unavailable: {PlatformCore.Trunc(r.Message ?? "", 200)} ip={ip}", ct);
-                    return LoginResult.Fail("Sign-in is temporarily unavailable (HRMS did not answer). Please try again in a few minutes.");
+                    await _audit.AppendAsync(email, "login-error", $"employee service unavailable: {PlatformCore.Trunc(r.Message ?? "", 200)} ip={ip}", ct);
+                    return LoginResult.Fail("Sign-in is temporarily unavailable. Please try again in a few minutes.");
                 case HrmsStatus.LockedInHrms:
-                    await _audit.AppendAsync(email, "login-fail", $"locked in HRMS ip={ip}", ct);
-                    return LoginResult.Fail("Your HRMS account is locked after too many wrong passwords. Unlock it in MyVishal (My Page → Unlock User) or try again in about 30 minutes.");
+                    await _audit.AppendAsync(email, "login-fail", $"account locked ip={ip}", ct);
+                    return LoginResult.Fail("Your account is locked after too many wrong passwords. Unlock it in the company portal or try again in about 30 minutes.");
                 case HrmsStatus.Ok when !r.Employee!.IsWorking:
-                    await _audit.AppendAsync(email, "login-fail", $"HRMS: employee {code} resigned / inactive ip={ip}", ct);
-                    return LoginResult.Fail("Your HRMS record is not active. Contact the administrator.");
+                    await _audit.AppendAsync(email, "login-fail", $"employee {code} resigned / inactive ip={ip}", ct);
+                    return LoginResult.Fail("Your employee record is not active. Contact the administrator.");
             }
 
             var audits = new List<(string, string, string)>();
@@ -624,8 +624,8 @@ namespace Application.Services.V1.Platform
             var emp = r.Status switch
             {
                 HrmsStatus.Ok when SameCode(r.Employee?.EmpCode, code) => r.Employee!,
-                HrmsStatus.Unavailable => throw new AppException(503, "HRMS did not answer: " + (r.Message ?? "try again in a few minutes")),
-                _ => throw new AppValidationException($"Employee ID {code} was not found in HRMS")
+                HrmsStatus.Unavailable => throw new AppException(503, "The employee service did not answer: " + (r.Message ?? "try again in a few minutes")),
+                _ => throw new AppValidationException($"Employee ID {code} was not found in the employee master")
             };
             await MaybeReloadAsync(ct);
             using (await LockAsync(ct)) return (emp, FindByEmpCodeLocked(code)?.Clone());
@@ -645,11 +645,11 @@ namespace Application.Services.V1.Platform
             var (emp, registered) = await LookupEmployeeAsync(empCode, ct);
             var code = NormEmpCode(emp.EmpCode);
             if (registered != null) throw new AppValidationException($"Employee ID {code} is already registered ({registered.Email})");
-            if (!emp.IsWorking) throw new AppValidationException($"Employee ID {code} is {(emp.IsResign ? "resigned" : "not active")} in HRMS");
+            if (!emp.IsWorking) throw new AppValidationException($"Employee ID {code} is {(emp.IsResign ? "resigned" : "not active")} in the employee master");
             var key = NormEmail(emp.EmpMailId);
             if (!EmailFull.IsMatch(key)) key = NormEmail(email);
             if (!EmailFull.IsMatch(key))
-                throw new AppValidationException($"HRMS has no email for {code}: enter the company email of the employee");
+                throw new AppValidationException($"The employee master has no email for {code}: enter the company email of the employee");
             AppUser result;
             bool linked;
             using (await LockAsync(ct))
@@ -691,7 +691,7 @@ namespace Application.Services.V1.Platform
             if (registered != null && registered.Email != email)
                 throw new AppValidationException($"Employee ID {code} is already registered ({registered.Email})");
             if (!emp.IsWorking && !current.IsEmployee)
-                throw new AppValidationException($"Employee ID {code} is {(emp.IsResign ? "resigned" : "not active")} in HRMS");
+                throw new AppValidationException($"Employee ID {code} is {(emp.IsResign ? "resigned" : "not active")} in the employee master");
             AppUser result;
             using (await LockAsync(ct))
             {
@@ -706,7 +706,7 @@ namespace Application.Services.V1.Platform
                 result = u.Clone();
             }
             await _audit.AppendAsync(by, current.IsEmployee && SameCode(current.EmpCode, code) ? "user-hrms-refresh" : "user-link-hrms",
-                                     $"{email} emp={code}{(emp.IsWorking ? "" : " (not active in HRMS)")}", ct);
+                                     $"{email} emp={code}{(emp.IsWorking ? "" : " (not active in the employee master)")}", ct);
             return result;
         }
 
@@ -1000,8 +1000,8 @@ namespace Application.Services.V1.Platform
     {
         public static readonly NoHrms Instance = new();
         public Task<HrmsResult> VerifyPasswordAsync(string empCode, string password, CancellationToken ct = default) =>
-            Task.FromResult(HrmsResult.Unavailable("No HRMS client configured"));
+            Task.FromResult(HrmsResult.Unavailable("No employee service configured"));
         public Task<HrmsResult> GetEmployeeAsync(string empCode, CancellationToken ct = default) =>
-            Task.FromResult(HrmsResult.Unavailable("No HRMS client configured"));
+            Task.FromResult(HrmsResult.Unavailable("No employee service configured"));
     }
 }

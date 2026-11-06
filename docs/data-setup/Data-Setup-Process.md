@@ -197,8 +197,8 @@ concept Max Permissible, like a released PO.
 | Step | Procedure (@Cmd) | What |
 |---|---|---|
 | Morning: ⬆ Upload MRA file (.xlsx / .xlsb) | – (read in the API) | One workbook, two sheets found by their headers: item lines (DOC.NO, ARTICLE CODE, Color, Generic Article, TOTAL PO QTY, DEL. DATE, LEVEL) and the header report (Document Number, Purchase order, Status). TOTAL PO QTY added up per MRA (all sites); Generic Article = last 10 digits; rows that cannot be read are skipped and counted |
-| | `PRO_SAP_MRA UPLOAD` | One transaction: **replaces** `SAP_MRA_FILE` (one row per MRA), one `SAP_MRA_FILE_UPLOADS` row with the counts. A decision SAP sent live earlier is kept when the file has none |
-| During the day: SAP `POST /api/sap/v1/mra-events`, `/po-events` | `PRO_SAP_MRA FEED_ADD` | Every message stored in arrival order (`SAP_MRA_FEED`), also a bad one |
+| | `PRO_SAP_MRA UPLOAD` | One transaction: **replaces** `SAP_MRA_FILE` (one row per MRA), one `SAP_MRA_FILE_UPLOADS` row with the counts; moves the pending SAP changes into `SAP_MRA_FEED` (arrival order, new data version = the upload ID), empties `SAP_MRA_FEED_PENDING`, sets `Is_Daily_Data_Upload` = 1. A decision SAP sent live earlier is kept when the file has none |
+| During the day: SAP `POST /api/sap/v1/mra-events`, `/po-events` | `PRO_SAP_MRA FEED_ADD` | Every message stored in arrival order, also a bad one: in `SAP_MRA_FEED` with the current data version when today's file is uploaded (`SAP_MRA_CONTROL.Is_Daily_Data_Upload`), else in the temporary table `SAP_MRA_FEED_PENDING` (answer `pending`) |
 | Every New PO request / SAP decision / single concept Recommendation, the MRA slot's status line, MRA Queues, SAP Feed | `PRO_SAP_MRA STAMP` (→ `STATE` when something changed) | The last file + the messages received since its upload day, replayed in the API (applied / duplicate / older / parked) and classified (counted or not, and why) |
 
 Full SAP contract: `docs/sap/SAP-API-Reference.md` §8.

@@ -116,7 +116,7 @@ namespace POGovernance.Tests.Platform
             k.Hrms.Calls.Clear();
             var (tok, err) = await k.Login("ravi.kumar@x.com", "Hrms#1");
             Assert.Null(tok);
-            Assert.Equal("Sign in with your Employee ID and HRMS password.", err);
+            Assert.Equal("Sign in with your Employee ID and password.", err);
             Assert.Empty(k.Hrms.Calls);
         }
 
@@ -142,7 +142,7 @@ namespace POGovernance.Tests.Platform
             await k.Accounts.AddEmployeeAsync("102345", new[] { "buyer" }, AdminEmail);
 
             k.Hrms.LockedCode104 = true;
-            Assert.Contains("Unlock it in MyVishal", (await k.Login("102345", "Hrms#1")).Error);
+            Assert.Contains("Unlock it in the company portal", (await k.Login("102345", "Hrms#1")).Error);
             k.Hrms.LockedCode104 = false;
 
             k.Hrms.Down = true;
@@ -155,7 +155,7 @@ namespace POGovernance.Tests.Platform
             k.Hrms.AnswerForCode = null;
 
             k.Hrms.Add("102345", "Ravi Kumar", "ravi.kumar@x.com", "Hrms#1", active: true, resigned: true);
-            Assert.Equal("Your HRMS record is not active. Contact the administrator.", (await k.Login("102345", "Hrms#1")).Error);
+            Assert.Equal("Your employee record is not active. Contact the administrator.", (await k.Login("102345", "Hrms#1")).Error);
         }
 
         [Fact]
@@ -183,7 +183,7 @@ namespace POGovernance.Tests.Platform
 
             // no email in HRMS: the admin's email is used
             var noMail = await Assert.ThrowsAsync<AppValidationException>(() => k.Accounts.AddEmployeeAsync("400004", new[] { "buyer" }, AdminEmail));
-            Assert.Contains("HRMS has no email", noMail.Message);
+            Assert.Contains("The employee master has no email", noMail.Message);
             var u = await k.Accounts.AddEmployeeAsync("400004", new[] { "buyer" }, AdminEmail, "no.mail@x.com");
             Assert.Equal("no.mail@x.com", u.Email);
 
@@ -213,7 +213,7 @@ namespace POGovernance.Tests.Platform
             var scr = (await k.Accounts.GetUserAsync("ravi.kumar@x.com"))!;
             Assert.True(k.Accounts.Public(scr).NeedsEmpCode);
             Assert.Equal(AccountsService.BadEmployeeLogin, (await k.Login("102345", "Hrms#1")).Error);   // not linked yet
-            Assert.Equal("Sign in with your Employee ID and HRMS password.", (await k.Login("ravi.kumar@x.com", "1234")).Error);
+            Assert.Equal("Sign in with your Employee ID and password.", (await k.Login("ravi.kumar@x.com", "1234")).Error);
 
             // registering the employee links the SCR login and keeps its roles
             var u = await k.Accounts.AddEmployeeAsync("102345", new[] { "planner" }, AdminEmail);
@@ -234,7 +234,7 @@ namespace POGovernance.Tests.Platform
             var k = new Kit();
             await k.Accounts.AddEmployeeAsync("102345", new[] { "buyer" }, AdminEmail);
             await Assert.ThrowsAsync<AppValidationException>(() => k.Accounts.ResetPasswordAsync("ravi.kumar@x.com", AdminEmail));
-            Assert.Contains("MyVishal", await k.Accounts.ChangePasswordAsync("ravi.kumar@x.com", "x", "Newpass123"));
+            Assert.Contains("company portal", await k.Accounts.ChangePasswordAsync("ravi.kumar@x.com", "x", "Newpass123"));
             // the empty stored password never matches, not even through a local sign-in path
             k.Cfg.LoginMode = LoginModes.Local;
             Assert.Equal("Email or password is incorrect", (await k.Login("ravi.kumar@x.com", "")).Error);
@@ -248,7 +248,7 @@ namespace POGovernance.Tests.Platform
             Assert.False(k.Accounts.Public((await k.Accounts.GetUserAsync(AdminEmail))!).NeedsEmpCode);
 
             var off = new Kit(c => c.AllowAdminLocalLogin = false);
-            Assert.Equal("Sign in with your Employee ID and HRMS password.", (await off.Login(AdminEmail, "1234")).Error);
+            Assert.Equal("Sign in with your Employee ID and password.", (await off.Login(AdminEmail, "1234")).Error);
         }
 
         [Fact]
@@ -259,7 +259,7 @@ namespace POGovernance.Tests.Platform
             var admin = (await k.Accounts.GetUserAsync(AdminEmail))!;
             Assert.Equal("200001", admin.EmpCode);
             Assert.Null((await k.Login("200001", "Hrms#2")).Error);
-            Assert.Equal("Sign in with your Employee ID and HRMS password.", (await k.Login(AdminEmail, "1234")).Error);
+            Assert.Equal("Sign in with your Employee ID and password.", (await k.Login(AdminEmail, "1234")).Error);
         }
 
         [Fact]

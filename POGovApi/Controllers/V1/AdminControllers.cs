@@ -101,8 +101,8 @@ namespace POGovApi.Controllers.V1
                 Active = e.EmpStatus, Resigned = e.IsResign, RegisteredAs = registered?.Email,
                 LinksExisting = registered == null && existing is { IsEmployee: false },
                 Problem = registered != null ? $"Already registered ({registered.Email})"
-                        : e.IsResign ? "Resigned in HRMS — can't be added"
-                        : !e.EmpStatus ? "Not active in HRMS — can't be added"
+                        : e.IsResign ? "Resigned — can't be added"
+                        : !e.EmpStatus ? "Not active — can't be added"
                         : existing is { IsEmployee: true } ? $"{email} is already registered with Employee ID {existing.EmpCode}"
                         : null
             });

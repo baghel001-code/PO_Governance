@@ -80,7 +80,7 @@ namespace Infrastructure.Services.V1
         {
             var row = await RowAsync(task, ct);
             if (row == null || string.IsNullOrWhiteSpace(row.Api_Url))
-                return (null, $"HRMS API {task} is not configured for environment {_api.Environment} (API_MASTER / API_BASE_URL HRMS_API)");
+                return (null, $"Employee service API {task} is not configured for environment {_api.Environment} (API_MASTER / API_BASE_URL HRMS_API)");
             try
             {
                 var method = new HttpMethod(string.IsNullOrWhiteSpace(row.Api_Http_Method) ? "POST" : row.Api_Http_Method.Trim().ToUpperInvariant());
@@ -101,10 +101,10 @@ namespace Infrastructure.Services.V1
                         task, (int)resp.StatusCode, resp.ReasonPhrase, method, row.Api_Url,
                         req.Headers.Authorization == null ? "none" : req.Headers.Authorization.Scheme,
                         UseProxy(row) ? ProxyAddress(row) : "none", text.Length > 300 ? text[..300] : text);
-                    return (null, $"HRMS answered HTTP {(int)resp.StatusCode} {resp.ReasonPhrase}");
+                    return (null, $"The employee service answered HTTP {(int)resp.StatusCode} {resp.ReasonPhrase}");
                 }
                 var answer = JsonSerializer.Deserialize<HrmsAnswer>(text, Json);
-                if (answer == null) return (null, "HRMS sent an empty answer");
+                if (answer == null) return (null, "The employee service sent an empty answer");
                 return (answer, null);
             }
             catch (OperationCanceledException) when (ct.IsCancellationRequested)
@@ -114,12 +114,12 @@ namespace Infrastructure.Services.V1
             catch (OperationCanceledException)
             {
                 _log.LogWarning("HRMS API {Task} timed out", task);
-                return (null, "HRMS did not answer in time");
+                return (null, "The employee service did not answer in time");
             }
             catch (Exception e) when (e is HttpRequestException or JsonException or InvalidOperationException or UriFormatException)
             {
                 _log.LogWarning(e, "HRMS API {Task} failed", task);
-                return (null, "HRMS could not be reached: " + e.Message);
+                return (null, "The employee service could not be reached: " + e.Message);
             }
         }
 

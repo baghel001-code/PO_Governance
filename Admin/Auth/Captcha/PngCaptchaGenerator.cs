@@ -1,3 +1,4 @@
+using Admin.Common;
 using System.IO.Compression;
 using System.Security.Cryptography;
 
@@ -5,24 +6,29 @@ namespace Admin.Auth.Captcha;
 
 /// <summary>
 /// Draws the CAPTCHA as a PNG without any image library (QPS draws it with the company VmmCaptcha.dll on System.Drawing,
-/// which is Windows-only): 5 characters from a set without look-alikes (no 0/O, 1/I/L), each from a built-in 5×7 font,
+/// which is Windows-only): 3 characters (CaptchaSettings.Length, 3–6) from a set without look-alikes (no 0/O, 1/I/L), each from a built-in 5×7 font,
 /// scaled, rotated and shifted on its own, bent by a wave, over a tinted background with noise lines and dots.
 /// The text never reaches the page — only the pixels.
 /// </summary>
 public sealed class PngCaptchaGenerator : ICaptchaGenerator
 {
     public const string Alphabet = "ABCDEFGHJKMNPQRSTUVWXYZ23456789";
-    public const int Length = 5;
+    public const int Length = CaptchaSettings.DefaultLength;
     private const int Width = 220, Height = 80;
 
     /// <summary>Optional fixed code (development only, for automated UI tests); null = random.</summary>
     private readonly string? _fixed;
+    private readonly int _length;
 
-    public PngCaptchaGenerator(string? fixedCode = null) => _fixed = string.IsNullOrWhiteSpace(fixedCode) ? null : fixedCode.Trim().ToUpperInvariant();
+    public PngCaptchaGenerator(string? fixedCode = null, int length = Length)
+    {
+        _fixed = string.IsNullOrWhiteSpace(fixedCode) ? null : fixedCode.Trim().ToUpperInvariant();
+        _length = Math.Clamp(length, 3, 6);
+    }
 
     public GeneratedCaptcha Generate()
     {
-        var text = _fixed ?? new string(Enumerable.Range(0, Length).Select(_ => Alphabet[RandomNumberGenerator.GetInt32(Alphabet.Length)]).ToArray());
+        var text = _fixed ?? new string(Enumerable.Range(0, _length).Select(_ => Alphabet[RandomNumberGenerator.GetInt32(Alphabet.Length)]).ToArray());
         return new GeneratedCaptcha(text, Convert.ToBase64String(Draw(text)));
     }
 

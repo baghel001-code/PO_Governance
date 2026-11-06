@@ -51,6 +51,7 @@ namespace Application.Services.V1.Sap
             var rows = msgs.Select(m => Row(kind, m)).ToList();
             // stored as received, never cancelled half-way
             var seqs = await repo.AddFeedAsync(rows, by, sourceSystem, traceId, clock.Now, CancellationToken.None);
+            // v7: while today's MRA file is not uploaded (IsDailyDataUpload false) the messages wait in the pending table
             source.Invalidate();
             var stored = await repo.StateAsync(clock.Today, ct);
             var st = MraReplay.Run(stored.File, stored.Feed);
@@ -58,10 +59,13 @@ namespace Application.Services.V1.Sap
             var answers = new List<MraFeedAnswer>();
             for (var i = 0; i < rows.Count; i++)
             {
-                bySeq.TryGetValue(seqs[i], out var r);
+                MraFeedResult? r = null;
+                if (!seqs[i].Pending) bySeq.TryGetValue(seqs[i].Seq, out r);
                 answers.Add(new MraFeedAnswer
                 {
-                    Seq = seqs[i], Outcome = rows[i].Error != null ? MraFeedOutcomes.Parked : r?.Outcome, Reason = rows[i].Error ?? r?.Reason,
+                    Seq = seqs[i].Seq,
+                    Outcome = rows[i].Error != null ? MraFeedOutcomes.Parked : seqs[i].Pending ? MraFeedOutcomes.Pending : r?.Outcome,
+                    Reason = rows[i].Error ?? (seqs[i].Pending ? MraFeedOutcomes.PendingReason : r?.Reason),
                     Mra = kind == "mra" ? MraStoreJson.Deserialize<MraMessage>(rows[i].MsgJson)?.Mra : MraStoreJson.Deserialize<PoMessage>(rows[i].MsgJson)?.Mra,
                     Po = kind == "po" ? MraStoreJson.Deserialize<PoMessage>(rows[i].MsgJson)?.Po : null
                 });
@@ -81,6 +85,8 @@ namespace Application.Services.V1.Sap
         [JsonPropertyName("older")] public int Older { get; set; }
         [JsonPropertyName("parked")] public int Parked { get; set; }
         [JsonPropertyName("stored")] public int Stored { get; set; }
+        /// <summary>v7: kept in the pending table until today's MRA file is uploaded.</summary>
+        [JsonPropertyName("pending")] public int Pending { get; set; }
         [JsonPropertyName("results")] public List<SapMraFeedResult> Results { get; set; } = new();
         [JsonPropertyName("received_at")] public string ReceivedAt { get; set; } = "";
     }
@@ -145,9 +151,11 @@ namespace Application.Services.V1.Sap
             resp.Older = answers.Count(a => a.Outcome == MraFeedOutcomes.Older);
             resp.Parked = answers.Count(a => a.Outcome == MraFeedOutcomes.Parked);
             resp.Stored = answers.Count(a => a.Outcome == MraFeedOutcomes.Stored);
+            resp.Pending = answers.Count(a => a.Outcome == MraFeedOutcomes.Pending);
             _log.LogInformation("SAP {Kind} events {BatchId}: {Received} message(s) - applied {Applied}, no change {NoChange}, duplicate {Duplicate}, " +
-                                "older {Older}, parked {Parked}, stored {Stored} (by {TechUser})",
-                kind.ToUpperInvariant(), resp.BatchId, resp.Received, resp.Applied, resp.NoChange, resp.Duplicate, resp.Older, resp.Parked, resp.Stored, caller.TechUser);
+                                "older {Older}, parked {Parked}, stored {Stored}, pending {Pending} (by {TechUser})",
+                kind.ToUpperInvariant(), resp.BatchId, resp.Received, resp.Applied, resp.NoChange, resp.Duplicate, resp.Older, resp.Parked, resp.Stored,
+                resp.Pending, caller.TechUser);
             if (resp.Parked > 0) _log.LogWarning("SAP {Kind} events {BatchId}: {Count} message(s) set aside (parked) - see the SAP Feed page", kind, resp.BatchId, resp.Parked);
             return new SapCallResult { Status = 200, Json = SapJson.Serialize(resp) };
         }
@@ -178,7 +186,7 @@ namespace Application.Services.V1.Sap
         public async Task<(MraStoredState Stored, MraCapacity Capacity)?> GetFullAsync(EngineData data, CancellationToken ct = default)
         {
             if (!_repo.Available) return null;
-            var stamp = await _repo.StampAsync(ct);
+            var stamp = await _repo.StampAsync(_clock.Today, ct);
             var today = _clock.Today;
             var sw = MraSwitches.From(data.Params);
             var key = $"{data.DataVersion}/{data.ParamsVersion}/{stamp}/{today}/{sw.LivePo}";
@@ -266,7 +274,11 @@ namespace Application.Services.V1.Sap
             resp.HeaderOnly = p.HeaderOnly; resp.ItemOnly = p.ItemOnly; resp.LevelDiff = p.LevelDiff; resp.Invalid = p.Invalid;
             resp.Decisions = p.Mras.Values.Count(x => x.DecisionInfo?.Decision != null);
             resp.UploadId = "MRAUPL-" + _clock.Now.ToString("yyyyMMdd-HHmmss");
-            await _repo.UploadAsync(p.Mras, resp.UploadId, _clock.Today, file.FileName, user.AuditName, MraStoreJson.Serialize(resp), ct);
+            resp.DataVersion = resp.UploadId;
+            // v7: the SAP changes received before the file (pending table) are moved onto it in the same transaction
+            resp.MovedFromPending = await _repo.UploadAsync(p.Mras, resp.UploadId, _clock.Today, file.FileName, user.AuditName, MraStoreJson.Serialize(resp), ct);
+            if (resp.MovedFromPending > 0)
+                resp.Warnings.Insert(0, $"{resp.MovedFromPending} SAP change(s) received before this file were applied on top of it");
             _source.Invalidate();
             resp.Ok = true;
 
@@ -304,7 +316,8 @@ namespace Application.Services.V1.Sap
             }
             var (stored, cap) = f;
             resp.Snapshot = stored.Snapshot;
-            resp.Stamp = await _repo.StampAsync(ct);
+            resp.Control = stored.Control;
+            resp.Stamp = await _repo.StampAsync(_clock.Today, ct);
             resp.Restricted = !PlatformCore.IsStaff(user) && _cfg.RestrictToOwnMcs;
             HashSet<string>? mine = null;
             var scope = resp.Restricted ? await _acc.ScopeIndexAsync(ct) : null;
@@ -338,6 +351,18 @@ namespace Application.Services.V1.Sap
                     Seq = ev.Seq, At = ev.At, By = ev.By, Kind = ev.Kind, Mra = ev.Mra, Po = ev.Po, Raw = mine == null ? ev.Raw : null, Error = ev.Error,
                     Outcome = ev.Error != null ? MraFeedOutcomes.Parked : r?.Outcome, Reason = ev.Error ?? r?.Reason,
                     EffectText = eff[i].Text, EffectCls = eff[i].Cls
+                });
+            }
+            // v7: SAP changes waiting for today's MRA file (not applied yet)
+            foreach (var ev in stored.Pending)
+            {
+                if (mine != null && (ev.Error != null || !((ev.Mra != null && visibleMras.Contains(ev.Mra.Mra)) || (ev.Po?.Mra != null && visibleMras.Contains(ev.Po.Mra)))))
+                    continue;
+                resp.Pending.Add(new MraLogRowDto
+                {
+                    Seq = ev.Seq, At = ev.At, By = ev.By, Kind = ev.Kind, Mra = ev.Mra, Po = ev.Po, Raw = mine == null ? ev.Raw : null, Error = ev.Error,
+                    Outcome = ev.Error != null ? MraFeedOutcomes.Parked : MraFeedOutcomes.Pending, Reason = ev.Error ?? MraFeedOutcomes.PendingReason,
+                    EffectText = ev.Error != null ? "set aside" : "waits for today's MRA file", EffectCls = "zr"
                 });
             }
             foreach (var (email, name) in await OwnersAsync(scope, mine, ct)) resp.Owners[email] = name;

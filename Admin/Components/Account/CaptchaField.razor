@@ -3,6 +3,7 @@
 @using MudBlazor
 @inject CaptchaService Captchas
 @inject ILogger<CaptchaField> Logger
+@inject Microsoft.Extensions.Options.IOptions<Admin.Common.PortalSettings> Portal
 @implements IDisposable
 
 @*
@@ -39,7 +40,7 @@
 
     <MudTextField T="string" Value="@Value" ValueChanged="@ValueChanged" For="@For"
                   Label="Security code" Variant="Variant.Outlined" Disabled="@Disabled"
-                  MaxLength="@CaptchaService.MaxLength" HelperText="Type the 5 characters shown (not case-sensitive)."
+                  MaxLength="@CaptchaService.MaxLength" HelperText="@($"Type the {Portal.Value.Captcha.LengthOrDefault} characters shown (not case-sensitive).")"
                   autocomplete="off" autocapitalize="characters" spellcheck="false" />
 </div>
 

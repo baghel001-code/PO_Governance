@@ -241,6 +241,19 @@ namespace Infrastructure.Utilitys
             return (result1, result2);
         }
 
+        public async Task<(IEnumerable<T1>, IEnumerable<T2>, IEnumerable<T3>, IEnumerable<T4>, IEnumerable<T5>)> ExecuteStoredProcedureMultiple5ListAsync<T1, T2, T3, T4, T5>(string storedProc, object? param = null, CancellationToken ct = default)
+        {
+            await using var connection = GetConnection();
+            await OpenConnectionAsync(connection, ct);
+            using var multi = await connection.QueryMultipleAsync(Cmd(storedProc, param, CommandType.StoredProcedure, null, ct));
+            var result1 = await TryReadAsync<T1>(multi);
+            var result2 = await TryReadAsync<T2>(multi);
+            var result3 = await TryReadAsync<T3>(multi);
+            var result4 = await TryReadAsync<T4>(multi);
+            var result5 = await TryReadAsync<T5>(multi);
+            return (result1, result2, result3, result4, result5);
+        }
+
         public async Task<(IEnumerable<T1>, IEnumerable<T2>, IEnumerable<T3>)> ExecuteStoredProcedureMultiple3ListAsync<T1, T2, T3>(string storedProc, object? param = null, CancellationToken ct = default)
         {
             await using var connection = GetConnection();

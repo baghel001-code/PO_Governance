@@ -238,10 +238,18 @@
         if (st.Snapshot is { } snap)
         {
             var counted = st.Rows.Where(r => r.C.Counted).ToList();
-            _mra.Ok($"✓ {snap.MraCount:N0} MRAs · {counted.Count:N0} counted ({counted.Sum(r => r.M.Qty):N0} pcs) · " +
-                    DataSetupText.FmtTime(snap.UploadedAt.ToString("o")),
-                    $"{snap.FileName} · {snap.By} · live changes since: {st.Log.Count:N0}");
+            var text = $"✓ {snap.MraCount:N0} MRAs · {counted.Count:N0} counted ({counted.Sum(r => r.M.Qty):N0} pcs) · " +
+                       DataSetupText.FmtTime(snap.UploadedAt.ToString("o"));
+            var title = $"{snap.FileName} · {snap.By} · data version {st.Control.DataVersion} · live changes applied: {st.Log.Count:N0}";
+            if (st.Control.IsDailyDataUpload) _mra.Ok(text, title);
+            else
+            {
+                // v7: today's file not uploaded yet — SAP changes wait in the pending table
+                _mra.Ok(text + $" · ⚠ today's file not uploaded ({st.Pending.Count:N0} SAP change(s) waiting)", title);
+                _mra.StatusClass = "er";
+            }
         }
+        else if (st.Pending.Count > 0) _mra.Reset($"Click to upload · {st.Pending.Count:N0} SAP change(s) waiting for the file");
     }
 
     private async Task OnMra(InputFileChangeEventArgs e)

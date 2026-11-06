@@ -43,7 +43,7 @@ else
             <div style="font-weight:700;margin-bottom:6px">Bulk add users</div>
             @if (Hrms)
             {
-                <div style="font-size:11.5px;color:var(--ink2);margin-bottom:8px">One per line: <code>Employee ID, role</code> — role is one of admin, planner, cathead, buyer (use + for several, e.g. <code>planner+buyer</code>). Each employee is fetched from HRMS; resigned / inactive employees and IDs HRMS does not know are skipped. You can paste straight from Excel.</div>
+                <div style="font-size:11.5px;color:var(--ink2);margin-bottom:8px">One per line: <code>Employee ID, role</code> — role is one of admin, planner, cathead, buyer (use + for several, e.g. <code>planner+buyer</code>). Each employee is fetched from the employee master; resigned / inactive employees and unknown IDs are skipped. You can paste straight from Excel.</div>
                 <textarea class="pf-in" rows="6" style="width:100%;font-family:var(--mono)" placeholder="102345, planner" @bind="_bulkText" @bind:event="oninput" data-testid="ub-text"></textarea>
             }
             else
@@ -70,7 +70,7 @@ else
                         <div class="pf-lbl">Employee ID</div>
                         <input class="pf-in" style="min-width:160px;font-family:var(--mono)" @bind="_empCode" @bind:event="oninput" @onkeyup="EmpKeyUp" data-testid="ue-emp" />
                     </div>
-                    <button class="btn-sec" disabled="@(_busy || string.IsNullOrWhiteSpace(_empCode))" @onclick="FetchAsync" data-testid="ue-fetch">🔍 Fetch from HRMS</button>
+                    <button class="btn-sec" disabled="@(_busy || string.IsNullOrWhiteSpace(_empCode))" @onclick="FetchAsync" data-testid="ue-fetch">🔍 Fetch employee</button>
                     @if (!isNew && _hr != null && _hr.Problem == null)
                     {
                         <button class="btn-pri" disabled="@_busy" @onclick="LinkAsync" data-testid="ue-link">Link to this employee</button>
@@ -85,7 +85,7 @@ else
                     }
                     @if (!isNew && _hr.Problem == null)
                     {
-                        <div class="pf-note">After linking, @_form.Name signs in with Employee ID <strong>@_hr.EmpCode</strong> and the HRMS password only; the password kept here is removed.</div>
+                        <div class="pf-note">After linking, @_form.Name signs in with Employee ID <strong>@_hr.EmpCode</strong> and the company password only; the password kept here is removed.</div>
                     }
                 }
             }
@@ -93,8 +93,8 @@ else
             {
                 <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:10px">
                     <span class="pf-lbl" style="margin:0">Employee ID</span> <strong class="pf-mono">@_form.EmpCode</strong>
-                    <span style="font-size:11px;color:var(--ink3)">signs in with the HRMS password@(string.IsNullOrEmpty(_form.HrFetchedAt) ? "" : " · HRMS details of " + Fmt.When(_form.HrFetchedAt))</span>
-                    <button class="btn-sec btn-sm" disabled="@_busy" @onclick="RefreshHrAsync" data-testid="ue-refresh">↻ Refresh from HRMS</button>
+                    <span style="font-size:11px;color:var(--ink3)">signs in with the company password@(string.IsNullOrEmpty(_form.HrFetchedAt) ? "" : " · employee details of " + Fmt.When(_form.HrFetchedAt))</span>
+                    <button class="btn-sec btn-sm" disabled="@_busy" @onclick="RefreshHrAsync" data-testid="ue-refresh">↻ Refresh employee details</button>
                 </div>
             }
             <div style="display:flex;flex-wrap:wrap;gap:12px;align-items:flex-end">
@@ -112,7 +112,7 @@ else
                 else if (_hr != null && string.IsNullOrEmpty(_hr.Email))
                 {
                     <div>
-                        <div class="pf-lbl">Company email (HRMS has none)</div>
+                        <div class="pf-lbl">Company email (the employee master has none)</div>
                         <input class="pf-in" style="min-width:280px" @bind="_form.Email" data-testid="ue-email" />
                     </div>
                 }
@@ -141,7 +141,7 @@ else
             </div>
             @if (isNew && Hrms)
             {
-                <div style="font-size:11px;color:var(--ink3);margin-top:8px">They sign in with their <strong>Employee ID</strong> and their <strong>HRMS password</strong> — no password is kept here. Only employees added here can sign in. <strong>Planner</strong> = upload data, parameters, Tool 2. <strong>Admin</strong> = also manage users.</div>
+                <div style="font-size:11px;color:var(--ink3);margin-top:8px">They sign in with their <strong>Employee ID</strong> and their <strong>company password</strong> — no password is kept here. Only employees added here can sign in. <strong>Planner</strong> = upload data, parameters, Tool 2. <strong>Admin</strong> = also manage users.</div>
             }
             else if (isNew)
             {
@@ -174,7 +174,7 @@ else
                     }
                     else if (u.NeedsEmpCode)
                     {
-                        <span style="color:#B45309;font-weight:700" title="HRMS sign-in: link an Employee ID (Edit) before this person can sign in">⚠ Employee ID needed</span>
+                        <span style="color:#B45309;font-weight:700" title="Employee ID sign-in: link an Employee ID (Edit) before this person can sign in">⚠ Employee ID needed</span>
                     }
                     else if (u.MustChange && u.LoginType != "hrms")
                     {
@@ -302,7 +302,7 @@ else
     private async Task LinkAsync()
     {
         if (_hr == null || string.IsNullOrEmpty(_edit)) return;
-        if (!await Dialogs.Confirm($"Link {_edit} to Employee ID {_hr.EmpCode} ({_hr.Name})?\n\nFrom now on this person signs in with the Employee ID and the HRMS password only.")) return;
+        if (!await Dialogs.Confirm($"Link {_edit} to Employee ID {_hr.EmpCode} ({_hr.Name})?\n\nFrom now on this person signs in with the Employee ID and the company password only.")) return;
         _busy = true;
         try
         {
@@ -323,7 +323,7 @@ else
         {
             var res = await ApiMasterService.LinkEmployeeAsync(_edit, null);
             if (!res.IsSuccess || res.Data?.User == null) { Snackbar.Warn(res.responseMessage); return; }
-            Snackbar.Toast("HRMS details refreshed");
+            Snackbar.Toast("Employee details refreshed");
             await LoadAsync();
             EditUser(_edit);
         }
@@ -360,7 +360,7 @@ else
                 if (_hr == null) return;
                 var res = await ApiMasterService.AddEmployeeAsync(_hr.EmpCode, OrderedRoles, string.IsNullOrEmpty(_hr.Email) ? _form.Email.Trim() : null);
                 if (!res.IsSuccess) { Snackbar.Warn(res.responseMessage); return; }
-                Snackbar.Toast($"{_hr.Name} added — signs in with Employee ID {_hr.EmpCode} and the HRMS password");
+                Snackbar.Toast($"{_hr.Name} added — signs in with Employee ID {_hr.EmpCode} and the company password");
             }
             else if (string.IsNullOrEmpty(_edit))
             {

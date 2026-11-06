@@ -81,6 +81,10 @@ else
         {
             <span>No MRA file loaded yet. Planner › Data Setup › “MRA – SAP Merchandise Requests”.</span>
         }
+        @if (!_s.Control.IsDailyDataUpload)
+        {
+            <span class="mq-chip off" data-testid="mq-not-uploaded" title="SAP changes are kept until today's MRA file is uploaded">Today's MRA file not uploaded · @_s.Pending.Count SAP change(s) waiting</span>
+        }
         <span style="margin-left:auto" class="mq-chip @(_s.Switches.ToolReqCapacity ? "on" : "off")">Tool requests use capacity: @(_s.Switches.ToolReqCapacity ? "ON" : "OFF")</span>
         <span class="mq-chip @(_s.Switches.LivePo ? "on" : "off")">Live PO changes: @(_s.Switches.LivePo ? "ON" : "OFF")</span>
         <button class="btn-sec btn-sm" @onclick="LoadAsync" disabled="@_busy">↻ Refresh</button>

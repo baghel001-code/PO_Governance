@@ -486,6 +486,9 @@ namespace DecisionEngine.Mra
     public static class MraFeedOutcomes
     {
         public const string Applied = "applied", NoChange = "no change", Duplicate = "duplicate", Older = "older", Parked = "parked", Stored = "stored";
+        /// <summary>v7: stored in the pending table — applied when today's MRA file is uploaded.</summary>
+        public const string Pending = "pending";
+        public const string PendingReason = "stored; applied when today's MRA file is uploaded";
     }
 
     /// <summary>mra.py replay(): the morning file + live messages in arrival order → current state.</summary>

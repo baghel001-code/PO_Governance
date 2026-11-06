@@ -61,8 +61,8 @@ namespace Infrastructure.Repositories
             })
         }));
 
-        public async Task UploadAsync(IReadOnlyDictionary<string, MraFileRecord> mras, string uploadId, string uploadDay, string? fileName, string by,
-                                      string countsJson, CancellationToken ct = default)
+        public async Task<int> UploadAsync(IReadOnlyDictionary<string, MraFileRecord> mras, string uploadId, string uploadDay, string? fileName, string by,
+                                           string countsJson, CancellationToken ct = default)
         {
             var p = P("UPLOAD");
             p.Add("@Rows", RowsJson(mras), DbType.String, size: -1);
@@ -71,8 +71,17 @@ namespace Infrastructure.Repositories
             p.Add("@File_Name", fileName is { Length: > 260 } f ? f[..260] : fileName, DbType.String, size: 260);
             p.Add("@Counts_Json", countsJson, DbType.String, size: -1);
             p.Add("@By", by, DbType.String, size: 200);
+            p.Add("@Moved_Count", dbType: DbType.Int32, direction: ParameterDirection.Output);
             await _db.ExecuteStoredProcedureAsync(Sp, p, commandTimeout: 600, ct: ct);
             Check(p);
+            return p.Get<int?>("@Moved_Count") ?? 0;
+        }
+
+        private sealed class ControlRow
+        {
+            public DateTime? DataDay { get; set; }
+            public bool IsDailyDataUpload { get; set; }
+            public string? DataVersion { get; set; }
         }
 
         private sealed class UploadRow
@@ -84,6 +93,7 @@ namespace Infrastructure.Repositories
             public string? FileName { get; set; }
             public int MraCount { get; set; }
             public string? CountsJson { get; set; }
+            public int? MovedFromPending { get; set; }
         }
 
         private sealed class FileRow
@@ -108,20 +118,36 @@ namespace Infrastructure.Repositories
             public string RawJson { get; set; } = "";
             public string? MsgJson { get; set; }
             public string? Error { get; set; }
+            public long? PendingSeq { get; set; }
+        }
+
+        private static MraFeedEvent Event(FeedRow r)
+        {
+            var ev = new MraFeedEvent { Seq = r.Seq, At = r.ReceivedAt, Kind = r.Kind, By = r.ByUser, Raw = r.RawJson, Error = r.Error };
+            if (r.Error == null)
+            {
+                if (r.Kind == "mra") ev.Mra = MraStoreJson.Deserialize<MraMessage>(r.MsgJson);
+                else ev.Po = MraStoreJson.Deserialize<PoMessage>(r.MsgJson);
+            }
+            return ev;
         }
 
         public async Task<MraStoredState> StateAsync(string today, CancellationToken ct = default)
         {
             var p = P("STATE");
             p.Add("@Today", DateTime.Parse(today, System.Globalization.CultureInfo.InvariantCulture), DbType.Date);
-            var (ups, files, feed) = await _db.ExecuteStoredProcedureMultiple3ListAsync<UploadRow, FileRow, FeedRow>(Sp, p, ct);
+            var (ctl, ups, files, feed, pending) = await _db.ExecuteStoredProcedureMultiple5ListAsync<ControlRow, UploadRow, FileRow, FeedRow, FeedRow>(Sp, p, ct);
             Check(p);
             var st = new MraStoredState();
+            if (ctl.FirstOrDefault() is { } c)
+                st.Control = new MraControl { DataDay = c.DataDay, IsDailyDataUpload = c.IsDailyDataUpload, DataVersion = c.DataVersion };
+            st.Pending = pending.Select(Event).ToList();
             if (ups.FirstOrDefault() is { } u)
                 st.Snapshot = new MraSnapshotInfo
                 {
                     UploadId = u.UploadId, UploadDay = u.UploadDay.ToString("yyyy-MM-dd"), UploadedAt = u.UploadedAt, By = u.UploadedBy,
-                    FileName = u.FileName, MraCount = u.MraCount, Counts = MraStoreJson.Deserialize<MraUploadResponse>(u.CountsJson)
+                    FileName = u.FileName, MraCount = u.MraCount, MovedFromPending = u.MovedFromPending,
+                    Counts = MraStoreJson.Deserialize<MraUploadResponse>(u.CountsJson)
                 };
             foreach (var f in files)
             {
@@ -134,33 +160,31 @@ namespace Infrastructure.Repositories
                     Lines = x.Lines, DecisionInfo = x.DecisionInfo
                 };
             }
-            foreach (var r in feed)
-            {
-                var ev = new MraFeedEvent { Seq = r.Seq, At = r.ReceivedAt, Kind = r.Kind, By = r.ByUser, Raw = r.RawJson, Error = r.Error };
-                if (r.Error == null)
-                {
-                    if (r.Kind == "mra") ev.Mra = MraStoreJson.Deserialize<MraMessage>(r.MsgJson);
-                    else ev.Po = MraStoreJson.Deserialize<PoMessage>(r.MsgJson);
-                }
-                st.Feed.Add(ev);
-            }
+            st.Feed = feed.Select(Event).ToList();
             return st;
         }
 
-        private sealed class StampRow { public string? LastUploadId { get; set; } public long MaxSeq { get; set; } }
-
-        public async Task<string> StampAsync(CancellationToken ct = default)
+        private sealed class StampRow
         {
-            var p = P("STAMP");
-            var rows = (await _db.ExecuteStoredProcedureListAsync<StampRow>(Sp, p, commandTimeout: null, ct: ct)).AsList();
-            Check(p);
-            var s = rows.FirstOrDefault();
-            return (s?.LastUploadId ?? "-") + "/" + (s?.MaxSeq ?? 0);
+            public string? DataVersion { get; set; }
+            public bool IsDailyDataUpload { get; set; }
+            public long MaxSeq { get; set; }
+            public long MaxPendingSeq { get; set; }
         }
 
-        private sealed class SeqRow { public int Idx { get; set; } public long Seq { get; set; } }
+        public async Task<string> StampAsync(string today, CancellationToken ct = default)
+        {
+            var p = P("STAMP");
+            p.Add("@Today", DateTime.Parse(today, System.Globalization.CultureInfo.InvariantCulture), DbType.Date);
+            var rows = (await _db.ExecuteStoredProcedureListAsync<StampRow>(Sp, p, commandTimeout: null, ct: ct)).AsList();
+            Check(p);
+            var x = rows.FirstOrDefault();
+            return $"{x?.DataVersion ?? "-"}/{(x?.IsDailyDataUpload == true ? 1 : 0)}/{x?.MaxSeq ?? 0}/{x?.MaxPendingSeq ?? 0}";
+        }
 
-        public async Task<List<long>> AddFeedAsync(IReadOnlyList<MraFeedRow> rows, string by, string? sourceSystem, string? traceId, DateTimeOffset receivedAt,
+        private sealed class SeqRow { public int Idx { get; set; } public long Seq { get; set; } public bool Pending { get; set; } }
+
+        public async Task<List<MraFeedStored>> AddFeedAsync(IReadOnlyList<MraFeedRow> rows, string by, string? sourceSystem, string? traceId, DateTimeOffset receivedAt,
                                                    CancellationToken ct = default)
         {
             var p = P("FEED_ADD");
@@ -170,9 +194,10 @@ namespace Infrastructure.Repositories
             p.Add("@Source_System", sourceSystem is { Length: > 10 } s ? s[..10] : sourceSystem, DbType.String, size: 10);
             p.Add("@Trace_Id", traceId, DbType.String, size: 20);
             p.Add("@Received_At", receivedAt, DbType.DateTimeOffset);
+            p.Add("@Today", receivedAt.Date, DbType.Date);
             var res = (await _db.ExecuteStoredProcedureListAsync<SeqRow>(Sp, p, commandTimeout: 300, ct: ct)).AsList();
             Check(p);
-            return res.OrderBy(r => r.Idx).Select(r => r.Seq).ToList();
+            return res.OrderBy(r => r.Idx).Select(r => new MraFeedStored(r.Seq, r.Pending)).ToList();
         }
     }
 
@@ -182,9 +207,9 @@ namespace Infrastructure.Repositories
         public bool Available => false;
         public string? UnavailableReason => SapUnavailableRepository.Reason;
         private static Exception Fail() => new SapApiException(503, SapErrorCodes.StorageNotSupported, SapUnavailableRepository.Reason);
-        public Task UploadAsync(IReadOnlyDictionary<string, MraFileRecord> mras, string uploadId, string uploadDay, string? fileName, string by, string countsJson, CancellationToken ct = default) => throw Fail();
+        public Task<int> UploadAsync(IReadOnlyDictionary<string, MraFileRecord> mras, string uploadId, string uploadDay, string? fileName, string by, string countsJson, CancellationToken ct = default) => throw Fail();
         public Task<MraStoredState> StateAsync(string today, CancellationToken ct = default) => throw Fail();
-        public Task<string> StampAsync(CancellationToken ct = default) => throw Fail();
-        public Task<List<long>> AddFeedAsync(IReadOnlyList<MraFeedRow> rows, string by, string? sourceSystem, string? traceId, DateTimeOffset receivedAt, CancellationToken ct = default) => throw Fail();
+        public Task<string> StampAsync(string today, CancellationToken ct = default) => throw Fail();
+        public Task<List<MraFeedStored>> AddFeedAsync(IReadOnlyList<MraFeedRow> rows, string by, string? sourceSystem, string? traceId, DateTimeOffset receivedAt, CancellationToken ct = default) => throw Fail();
     }
 }

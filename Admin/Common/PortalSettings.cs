@@ -34,8 +34,9 @@ namespace Admin.Common
     {
         /// <summary>"Vmm" (default) = company VmmCaptcha.dll (Windows; falls back to the built-in one when it can't draw); "Builtin" = PngCaptchaGenerator.</summary>
         public string Engine { get; set; } = "Vmm";
-        /// <summary>Characters, 4–6 (the answer box holds 6).</summary>
-        public int Length { get; set; } = 5;
+        /// <summary>Characters, 3–6 (default 3, as QPS; the answer box holds 6).</summary>
+        public int Length { get; set; } = DefaultLength;
+        public const int DefaultLength = 3;
         /// <summary>Each character is rotated by a random angle within ± this many degrees.</summary>
         public int AngleDegrees { get; set; } = 15;
         public string FontName { get; set; } = "Arial";
@@ -44,7 +45,7 @@ namespace Admin.Common
         public int NoiseLines { get; set; } = 8;
         public int NoiseDots { get; set; } = 600;
 
-        public int LengthOrDefault => Math.Clamp(Length <= 0 ? 5 : Length, 4, 6);
+        public int LengthOrDefault => Math.Clamp(Length <= 0 ? DefaultLength : Length, 3, 6);
         public bool UseVmm => !string.Equals(Engine?.Trim(), "Builtin", StringComparison.OrdinalIgnoreCase);
     }
 

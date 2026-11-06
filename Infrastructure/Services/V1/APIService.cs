@@ -63,7 +63,7 @@ namespace Infrastructure.Services.V1
         {
             if (string.IsNullOrWhiteSpace(taskName)) return new ApiMasterRes { responseCode = 400, responseMessage = "TaskName is required" };
             if (_db == null)
-                return new ApiMasterRes { responseCode = 404, responseMessage = $"{taskName}: server-only APIs (HRMS) need the SQL Server API master" };
+                return new ApiMasterRes { responseCode = 404, responseMessage = $"{taskName}: server-only APIs (employee service) need the SQL Server API master" };
             var p = DapperHelper.AddErrorOutputs(new DynamicParameters());
             p.Add("@Cmd", "SERVER_TASK", DbType.String);
             p.Add("@Task_Name", taskName, DbType.String);

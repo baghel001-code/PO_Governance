@@ -45,6 +45,16 @@ else
         (@_s.Log.Count(l => l.Outcome == "applied") applied · @_s.Log.Count(l => l.Outcome == "parked") set aside · @_s.Log.Count(l => l.Outcome is "duplicate" or "older") ignored)
         · MRA file: <strong>@(_s.Snapshot?.FileName ?? "not loaded")</strong>
         <button class="btn-sec btn-sm" style="margin-left:10px" @onclick="LoadAsync">↻ Refresh</button>
+        <div style="margin-top:6px" data-testid="sf-daily">
+            IsDailyDataUpload (today's MRA file uploaded):
+            <strong style="color:@(_s.Control.IsDailyDataUpload ? "#00873E" : "#B45309")">@(_s.Control.IsDailyDataUpload ? "Yes" : "No")</strong>
+            · data version: <strong>@(_s.Control.DataVersion ?? "—")</strong>
+            · SAP changes waiting for today's file: <strong>@_s.Pending.Count.ToString("N0")</strong>
+            @if (!_s.Control.IsDailyDataUpload)
+            {
+                <span class="mq-sub"> — until the planner uploads today's MRA file, SAP changes are kept in the pending table and applied on top of the file when it is uploaded.</span>
+            }
+        </div>
     </div>
 
     <div class="sf-sw" data-testid="sf-switch-toolreq">
@@ -92,8 +102,31 @@ else
         }
     </div>
 
+    @if (_s.Pending.Count > 0)
+    {
+        <div class="card" style="padding:10px 12px;margin-bottom:10px;border-left:4px solid #B45309" data-testid="sf-pending">
+            <div style="font-weight:800;margin-bottom:6px">Waiting for today's MRA file <span class="mq-sub" style="font-weight:400">(pending table, oldest first — moved onto the file when it is uploaded)</span></div>
+            <div style="overflow:auto;max-height:40vh;border:1px solid var(--brd);border-radius:10px">
+                <table class="sf-tbl">
+                    <thead><tr><th>#</th><th>Time</th><th>Kind</th><th>Message as received</th><th>Result</th><th>From</th></tr></thead>
+                    <tbody>
+                        @foreach (var r in _s.Pending)
+                        {
+                            <tr>
+                                <td>@r.Seq</td><td style="white-space:nowrap">@Fmt.When(r.At.ToString("o"))</td><td>@r.Kind.ToUpperInvariant()</td>
+                                <td class="sf-raw">@r.Raw</td>
+                                <td><b>@r.Outcome</b>@if (r.Reason != null) { <div class="mq-sub">@r.Reason</div> }</td>
+                                <td class="mq-sub">@r.By</td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    }
+
     <div class="card" style="padding:10px 12px">
-        <div style="font-weight:800;margin-bottom:6px">Messages received <span class="mq-sub" style="font-weight:400">(newest first, since the MRA file; every message is stored, also a bad one)</span></div>
+        <div style="font-weight:800;margin-bottom:6px">Messages received <span class="mq-sub" style="font-weight:400">(newest first, applied on the current data version @(_s.Control.DataVersion); every message is stored, also a bad one)</span></div>
         <div style="overflow:auto;max-height:60vh;border:1px solid var(--brd);border-radius:10px">
             <table class="sf-tbl" data-testid="sf-log">
                 <thead><tr><th>#</th><th>Time</th><th>Kind</th><th>Message as received</th><th>Result</th><th>Effect</th><th>From</th></tr></thead>

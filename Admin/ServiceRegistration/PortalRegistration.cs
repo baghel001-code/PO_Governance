@@ -76,7 +76,7 @@ namespace Admin.ServiceRegistration
                 log.LogWarning("CAPTCHA: fixed code from PortalSettings:DevCaptchaCode (Development only)");
                 return new PngCaptchaGenerator(settings.DevCaptchaCode);
             }
-            var builtin = new PngCaptchaGenerator();
+            var builtin = new PngCaptchaGenerator(null, settings.Captcha.LengthOrDefault);
             if (!settings.Captcha.UseVmm)
             {
                 log.LogInformation("CAPTCHA: built-in generator (PortalSettings:Captcha:Engine = Builtin)");

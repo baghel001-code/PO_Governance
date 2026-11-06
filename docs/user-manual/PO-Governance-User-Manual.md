@@ -33,19 +33,19 @@ automatically when a PO is released.
 ![Sign-in page](img/01-sign-in.png)
 
 1. Open the portal address your administrator gave you (for example `http://<server>:8177`).
-2. Enter your **Employee ID** and your **HRMS password** (the same password as MyVishal).
-3. Type the **security code** shown in the picture (5 characters, not case-sensitive; ↻ shows a new picture). A new
+2. Enter your **Employee ID** and your **password** (your company password).
+3. Type the **security code** shown in the picture (3 characters, not case-sensitive; ↻ shows a new picture). A new
    picture appears after every attempt.
 4. Tick **Keep me signed in** if the browser should remember you after it is closed, then click **Sign in**.
 
 Good to know:
 
-- **Only employees registered by the administrator can sign in.** A valid HRMS account alone does not give access: if
+- **Only employees registered by the administrator can sign in.** A valid company account alone does not give access: if
   you are not registered, the answer is "Employee ID or password is incorrect" — ask the administrator to add you.
-- Your **email does not work** as the sign-in ID ("Sign in with your Employee ID and HRMS password.").
+- Your **email does not work** as the sign-in ID ("Sign in with your Employee ID and password.").
 - After **5 wrong passwords** your account is locked here for **15 minutes** ("Too many wrong attempts — locked for 15
-  minutes."). The administrator can unlock you earlier. HRMS has its own lock: "Your HRMS account is locked…" — unlock
-  it in MyVishal (My Page → Unlock User) or wait about 30 minutes.
+  minutes."). The administrator can unlock you earlier. The company account has its own lock: "Your account is locked…" — unlock
+  it in the company portal or wait about 30 minutes.
 - **One device at a time.** Signing in on another computer or browser signs out the first one ("You were signed out
   because your account was signed in on another device."); the new one shows "You were signed in on another device —
   that session has been signed out."
@@ -54,13 +54,13 @@ Good to know:
   signed out even when active.
 - **When the administrator changes you.** If your roles are changed, your account is deactivated or your Employee ID is
   linked, you are signed out within a minute and asked to sign in again (the sign-in page says why).
-- **Forgot your password?** Use **Forgot or locked? Open MyVishal ↗** on the sign-in page — the portal keeps no
-  password for you, so the administrator cannot reset it here.
+- **Forgot your password?** Use **Forgot password?** on the sign-in page — the portal keeps no password for you, so
+  the administrator cannot reset it here.
 
 ### 1.2 Change your password
 
-Your password is your **HRMS password**: change it in MyVishal. User menu → **🔑 Change password** is not shown for
-employees (the page only points to MyVishal).
+Your password is your **company password**: change it in the company portal. User menu → **🔑 Change password** is not
+shown for employees (the page only points to the company portal).
 
 *Only for the built-in administrator account (email sign-in, see 6.1) and for servers in "Local" sign-in mode:* the
 page **Set your own password** / **Change your password** asks for the current password (1234 the first time) and a
@@ -437,29 +437,29 @@ Admins can do everything planners can (section 5). Admin pages are in the **👥
 
 Tab **👥 Users** → **👥 Users**:
 
-People sign in with their **Employee ID** and **HRMS password**, and **only people you register here can sign in**.
-The portal never talks to HRMS itself: the server fetches the employee from HRMS when you register them, and at sign-in
-asks HRMS for the password only for registered, active employees.
+People sign in with their **Employee ID** and **company password**, and **only people you register here can sign in**.
+The portal never talks to the employee master itself: the server fetches the employee when you register them, and at
+sign-in checks the password only for registered, active employees.
 
-- **+ Add user** → **Employee ID** → **🔍 Fetch from HRMS**: the card shows name, email, department, designation,
-  location, mobile, reporting manager, grade and **HRMS status**. Tick the roles (Buyer, Category Head, Planner, Admin)
-  and click **Add user**. Refused with a red line: unknown ID, **Resigned** / **Inactive** in HRMS, or **Already
-  registered**. If HRMS has no email for the employee, type the company email. No password is set or shown.
+- **+ Add user** → **Employee ID** → **🔍 Fetch employee**: the card shows name, email, department, designation,
+  location, mobile, reporting manager, grade and **Employee status**. Tick the roles (Buyer, Category Head, Planner, Admin)
+  and click **Add user**. Refused with a red line: unknown ID, **Resigned** / **Inactive**, or **Already
+  registered**. If the employee master has no email for the employee, type the company email. No password is set or shown.
 - **Bulk add…** — one employee per line: `Employee ID, role` (roles combined with `+`, e.g. `102345, planner+buyer`);
-  paste from Excel works. Every ID is fetched from HRMS; "Added N · M skipped" lists unknown, resigned and
+  paste from Excel works. Every ID is fetched from the employee master; "Added N · M skipped" lists unknown, resigned and
   already-registered IDs.
-- **Edit** — name, roles, **Active (can sign in)**; **↻ Refresh from HRMS** re-reads the details. A login without an
-  Employee ID (status **⚠ Employee ID needed**, e.g. created from the SCR file) gets **Employee ID → Fetch from HRMS →
+- **Edit** — name, roles, **Active (can sign in)**; **↻ Refresh employee details** re-reads the details. A login without an
+  Employee ID (status **⚠ Employee ID needed**, e.g. created from the SCR file) gets **Employee ID → Fetch employee →
   Link to this employee**; registering the same employee with **+ Add user** links it too and keeps its roles.
   **Delete user** (prefer unticking Active: the next SCR upload would re-create a deleted login).
-- **Unlock** — for an account locked after 5 wrong passwords (HRMS locks are unlocked in MyVishal).
-- **Reset password** — only for the built-in admin account (employees' passwords live in HRMS).
+- **Unlock** — for an account locked after 5 wrong passwords (company account locks are unlocked in the company portal).
+- **Reset password** — only for the built-in admin account (employees' passwords live in the company account).
 - The user column shows **ID 102345 · designation · department**. Status: Active, ⚠ Employee ID needed, 🔒 Locked,
   Inactive; filter **Employee ID needed** in the role list. **MCs (SCR)** = mapped MCs; **Source** = SCR file / Added by
   admin / Bulk add / Built-in.
 - **Built-in admin** (`PoGovSettings:AdminEmail`): signs in with its email and a local password while
-  `AllowAdminLocalLogin` is on — for the first set-up and when HRMS is down. Set `AdminEmpCode` so it can sign in with
-  HRMS, then switch `AllowAdminLocalLogin` off.
+  `AllowAdminLocalLogin` is on — for the first set-up and when the employee service is down. Set `AdminEmpCode` so it can sign in with
+  its Employee ID, then switch `AllowAdminLocalLogin` off.
 
 Safeguards: you cannot remove your own admin role or deactivate yourself, and at least one active admin must remain.
 
@@ -584,11 +584,11 @@ slow seller is sent as HOLD with reason BLOCK).
 | "You were signed out because your account was signed in on another device." | Only one device at a time — sign in again here to continue (that signs out the other one) |
 | "Your access was changed by the administrator. Please sign in again." | Sign in again to get your new roles |
 | "You were signed out after a period of inactivity." | 30 minutes without activity — sign in again |
-| "Employee ID or password is incorrect" | Check the Employee ID and HRMS password; if both are right, you are not registered — ask the administrator. After 5 tries you are locked for 15 minutes |
-| "Sign in with your Employee ID and HRMS password." | You typed an email: use your Employee ID |
-| "Your HRMS account is locked…" | Unlock it in MyVishal (My Page → Unlock User) or wait about 30 minutes |
-| "Your HRMS record is not active." | HRMS shows you as resigned / inactive — contact the administrator |
-| "Sign-in is temporarily unavailable (HRMS did not answer)…" | Try again in a few minutes; if it stays, tell IT |
+| "Employee ID or password is incorrect" | Check the Employee ID and password; if both are right, you are not registered — ask the administrator. After 5 tries you are locked for 15 minutes |
+| "Sign in with your Employee ID and password." | You typed an email: use your Employee ID |
+| "Your account is locked…" | Unlock it in the company portal or wait about 30 minutes |
+| "Your employee record is not active." | You are shown as resigned / inactive — contact the administrator |
+| "Sign-in is temporarily unavailable…" | Try again in a few minutes; if it stays, tell IT |
 | "Too many wrong attempts…" | Wait 15 minutes or ask the admin to **Unlock** you |
 | "⚠ Upload required files first: …" | The planner must load the missing files in Data Setup |
 | "This Brand / MC / MRP is not mapped to you in the SCR products file." | Ask the admin to update the SCR mapping |
@@ -605,7 +605,7 @@ slow seller is sent as HOLD with reason BLOCK).
 | Topic | Contact |
 |---|---|
 | Access (registration), roles, MCs | Tool administrator |
-| HRMS password, HRMS lock | MyVishal / HR |
+| Company password, account lock | HR / IT |
 | Missing or wrong data, parameters | Planning team |
 | A decision looks wrong | 💬 Feedback (type "Data looks wrong", with GM and colour) |
 | SAP check / verdict link | SAP team / tool administrator |

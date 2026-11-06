@@ -251,7 +251,9 @@ head maintains them on `/admin/sap` → *Reason codes* (code ≤ 4, text ≤ 60 
   `SAP-API-Reference.md` §7.
 * `POST /api/sap/v1/mra-events` and `/po-events` (v1.1.7): live MRA level changes and PO releases. Every message is
   stored as received (`SAP_MRA_FEED`, procedure `PRO_SAP_MRA`, schema v6); the morning MRA workbook uploaded in
-  Data Setup → MRA file replaces the list (`SAP_MRA_FILE`, `SAP_MRA_FILE_UPLOADS`). The tool replays file + messages
+  Data Setup → MRA file replaces the list (`SAP_MRA_FILE`, `SAP_MRA_FILE_UPLOADS`). Schema v7: until the day's file is
+  uploaded (`SAP_MRA_CONTROL.Is_Daily_Data_Upload` = 0) messages wait in `SAP_MRA_FEED_PENDING` (answer `pending`); the
+  upload moves them onto the new file (data version = upload ID). The tool replays file + messages
   (DecisionEngine/Mra) and counts open MRAs (levels 1, 2, 4, level 5 reached live today) like released POs in the
   single concept Max Permissible, also in `/decisions`. Admin page: SAP Feed (switches, test sender, messages).
   Full contract: `SAP-API-Reference.md` §8.

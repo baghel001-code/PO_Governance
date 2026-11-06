@@ -700,7 +700,13 @@ but not counted.
   (DOC.NO, ARTICLE CODE, Color, Generic Article, TOTAL PO QTY, DEL. DATE, LEVEL) and the header report (Document
   Number, Purchase order, Status). It **replaces** the previous MRA list.
 - **During the whole day** SAP sends every MRA change to `/mra-events` and every PO release / unrelease to
-  `/po-events`, as soon as it happens. Changes received on or after the upload day are applied on top of the file.
+  `/po-events`, as soon as it happens.
+- **Before the day's file is uploaded** (flag `IsDailyDataUpload` = false, e.g. early in the morning) the tool keeps
+  the changes in a **pending** table: the answer is `pending` and they are not applied yet. When the planner uploads
+  the day's file, the pending changes are moved onto it in the order they arrived (also an MRA that is not in the
+  file is created from its message) and the pending table is emptied. After the upload (`IsDailyDataUpload` = true)
+  every change is applied at once. Each file starts a new **data version** (its upload ID); the changes applied on it
+  carry the same version, so SAP never has to resend anything.
 
 ### What counts against capacity
 
@@ -739,6 +745,7 @@ message with status 3 for the same MRA makes it count.
 | `older` | Older than the change already applied | – |
 | `parked` | Not understood (reason given), or a new MRA without `generic_article` / `colour` / `qty` / `delivery_date` | Correct and send again with a new `msg_id` |
 | `stored` | PO message stored (it moves capacity only when the admin switch "Live PO changes" is ON) | – |
+| `pending` | Received before today's MRA file was uploaded: kept and applied when the file is uploaded | – (do not resend) |
 
 ### 8a. `POST /mra-events` — MRA message
 
@@ -798,7 +805,7 @@ One new MRA:
 
 ```json
 { "batch_id": "MRAEV-20261105-144859-5e77", "received": 1, "applied": 1, "no_change": 0, "duplicate": 0, "older": 0,
-  "parked": 0, "stored": 0,
+  "parked": 0, "stored": 0, "pending": 0,
   "results": [ { "index": 0, "seq": 8, "outcome": "applied", "reason": null, "mra_no": "900201", "po_no": null } ],
   "received_at": "2026-11-05T14:48:59+05:30" }
 ```
@@ -808,7 +815,7 @@ not known):
 
 ```json
 { "batch_id": "MRAEV-20261105-144859-553b", "received": 5, "applied": 1, "no_change": 0, "duplicate": 1, "older": 1,
-  "parked": 2, "stored": 0,
+  "parked": 2, "stored": 0, "pending": 0,
   "results": [
     { "index": 0, "seq": 9,  "outcome": "applied",   "reason": null, "mra_no": "900201", "po_no": null },
     { "index": 1, "seq": 10, "outcome": "duplicate", "reason": "same message id received before", "mra_no": "900201", "po_no": null },
@@ -822,7 +829,7 @@ A PO message:
 
 ```json
 { "batch_id": "POEV-20261105-144859-d7bd", "received": 1, "applied": 0, "no_change": 0, "duplicate": 0, "older": 0,
-  "parked": 0, "stored": 1,
+  "parked": 0, "stored": 1, "pending": 0,
   "results": [ { "index": 0, "seq": 14, "outcome": "stored", "reason": null, "mra_no": "900201", "po_no": "4500099001" } ],
   "received_at": "2026-11-05T14:48:59+05:30" }
 ```

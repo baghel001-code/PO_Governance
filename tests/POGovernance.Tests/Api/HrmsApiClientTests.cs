@@ -178,7 +178,7 @@ namespace POGovernance.Tests.Api
             var r = await c.GetEmployeeAsync("102345");
             Assert.Null(http.Seen.Single().Req.Headers.Authorization);   // no Basic header built from the proxy login
             Assert.Equal(HrmsStatus.Unavailable, r.Status);
-            Assert.Equal("HRMS answered HTTP 403 Forbidden", r.Message);
+            Assert.Equal("The employee service answered HTTP 403 Forbidden", r.Message);
         }
     }
 }

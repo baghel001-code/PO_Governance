@@ -9,16 +9,22 @@ namespace Application.Interfaces.V1.Sap
     /// <summary>A stored feed message to add (one per received message, also a bad one).</summary>
     public sealed record MraFeedRow(string Kind, string RawJson, string? MsgJson, string? Error);
 
-    /// <summary>What is stored: the last morning file and the messages to replay on top of it.</summary>
+    /// <summary>A stored message: its number, and whether it waits in the pending table (today's file not uploaded yet).</summary>
+    public sealed record MraFeedStored(long Seq, bool Pending);
+
+    /// <summary>What is stored: the last morning file, the messages to replay on top of it and the pending ones.</summary>
     public sealed class MraStoredState
     {
+        public MraControl Control { get; set; } = new();
         public MraSnapshotInfo? Snapshot { get; set; }
+        /// <summary>v7: SAP changes received while today's file is not uploaded (applied when it is).</summary>
+        public List<MraFeedEvent> Pending { get; set; } = new();
         public Dictionary<string, MraFileRecord> File { get; set; } = new(StringComparer.Ordinal);
         public List<MraFeedEvent> Feed { get; set; } = new();
     }
 
     /// <summary>
-    /// SAP MRA storage (database/sqlserver/05_sap_interface.sql v6: SAP_MRA_FILE / _FILE_UPLOADS / _FEED, PRO_SAP_MRA).
+    /// SAP MRA storage (database/sqlserver/05_sap_interface.sql v7: SAP_MRA_FILE / _FILE_UPLOADS / _FEED / _FEED_PENDING / _CONTROL, PRO_SAP_MRA).
     /// SQL Server only: with PostgreSQL storage <see cref="Available"/> is false and every call throws 503.
     /// </summary>
     public interface IMraRepository
@@ -26,18 +32,21 @@ namespace Application.Interfaces.V1.Sap
         bool Available { get; }
         string? UnavailableReason { get; }
 
-        /// <summary>Morning file: replaces the MRA list in one transaction.</summary>
-        Task UploadAsync(IReadOnlyDictionary<string, MraFileRecord> mras, string uploadId, string uploadDay, string? fileName, string by, string countsJson,
+        /// <summary>Morning file: replaces the MRA list, moves the pending SAP changes onto it (one transaction). Returns how many were moved.</summary>
+        Task<int> UploadAsync(IReadOnlyDictionary<string, MraFileRecord> mras, string uploadId, string uploadDay, string? fileName, string by, string countsJson,
                          CancellationToken ct = default);
 
-        /// <summary>The last file and the messages received since its upload day (at most 31 days), in arrival order.</summary>
+        /// <summary>Control (IsDailyDataUpload, data version), the last file, its messages (apply order) and the pending messages.</summary>
         Task<MraStoredState> StateAsync(string today, CancellationToken ct = default);
 
-        /// <summary>"last upload id / max seq": changes whenever a file is uploaded or a message is received.</summary>
-        Task<string> StampAsync(CancellationToken ct = default);
+        /// <summary>Changes whenever a file is uploaded, a message is received or a new day starts (IsDailyDataUpload of <paramref name="today"/>).</summary>
+        Task<string> StampAsync(string today, CancellationToken ct = default);
 
-        /// <summary>Stores the messages in order; returns their Seq numbers in the same order.</summary>
-        Task<List<long>> AddFeedAsync(IReadOnlyList<MraFeedRow> rows, string by, string? sourceSystem, string? traceId, DateTimeOffset receivedAt,
+        /// <summary>
+        /// Stores the messages in order — in the feed when today's file is uploaded (IsDailyDataUpload), else in the pending
+        /// table; returns their numbers in the same order.
+        /// </summary>
+        Task<List<MraFeedStored>> AddFeedAsync(IReadOnlyList<MraFeedRow> rows, string by, string? sourceSystem, string? traceId, DateTimeOffset receivedAt,
                                       CancellationToken ct = default);
     }
 

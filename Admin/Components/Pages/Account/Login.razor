@@ -23,7 +23,10 @@
 
 <div class="pga-eyebrow">PO Governance Platform</div>
 <h2 class="pga-title">Sign in</h2>
-<p class="pga-sub">@(_hrms ? "Use your Employee ID and your HRMS (MyVishal) password." : "Use your company email and password.")</p>
+@if (!_hrms)
+{
+    <p class="pga-sub">Use your company email and password.</p>
+}
 
 @if (_notice is not null)
 {
@@ -39,7 +42,7 @@
     <MudTextField @bind-Value="_model.Login" For="@(() => _model.Login)" Label="@(_hrms ? "Employee ID" : "Email")"
                   Variant="Variant.Outlined" Class="mb-4" AutoFocus="true" Disabled="_busy" MaxLength="100"
                   InputId="login" autocomplete="username" spellcheck="false" />
-    <MudTextField @bind-Value="_model.Password" For="@(() => _model.Password)" Label="@(_hrms ? "HRMS password" : "Password")"
+    <MudTextField @bind-Value="_model.Password" For="@(() => _model.Password)" Label="Password"
                   Variant="Variant.Outlined" InputId="pw"
                   InputType="@(_showPassword ? InputType.Text : InputType.Password)"
                   Adornment="Adornment.End"
@@ -71,24 +74,7 @@
     </MudButton>
 </EditForm>
 
-@if (_hrms)
-{
-    <p class="pga-note">
-        <MudIcon Icon="@Icons.Material.Outlined.Info" Size="Size.Small" />
-        <span>
-            Only employees registered by the PO Governance administrator can sign in. Forgot or locked your HRMS password?
-            @if (!string.IsNullOrEmpty(_passwordUrl))
-            {
-                <a href="@_passwordUrl" target="_blank" rel="noopener">Open MyVishal</a>
-            }
-            else
-            {
-                <span>Use MyVishal.</span>
-            }
-        </span>
-    </p>
-}
-else
+@if (!_hrms)
 {
     <p class="pga-note">
         <MudIcon Icon="@Icons.Material.Outlined.Info" Size="Size.Small" />

@@ -313,6 +313,9 @@ namespace POGovernance.Tests.Platform
             settings.Captcha.Engine = "Builtin";
             Assert.IsType<PngCaptchaGenerator>(Admin.ServiceRegistration.PortalRegistration.CaptchaGenerator(settings, new Env(), log));
             Assert.Equal(6, new Admin.Common.CaptchaSettings { Length = 9 }.LengthOrDefault);   // the answer box holds 6
+            Assert.Equal(3, new Admin.Common.CaptchaSettings().LengthOrDefault);                 // default 3 characters
+            Assert.Equal(3, new Admin.Common.CaptchaSettings { Length = 0 }.LengthOrDefault);
+            Assert.Equal(4, new PngCaptchaGenerator(null, 4).Generate().Answer.Length);
         }
     }
 }

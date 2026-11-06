@@ -54,7 +54,22 @@ namespace DecisionEngine.Results.Mra
         /// <summary>Counted against capacity right after the upload (levels 1, 2, 4, delivery date not passed, single concept, in Article Master).</summary>
         public int CountedMras { get; set; }
         public long CountedQty { get; set; }
+        /// <summary>v7: the data version this file starts (= UploadId).</summary>
+        public string? DataVersion { get; set; }
+        /// <summary>v7: SAP changes received before the file (pending) and now applied on top of it.</summary>
+        public int MovedFromPending { get; set; }
         public List<string> Warnings { get; set; } = new();
+    }
+
+    /// <summary>
+    /// v7 (SAP_MRA_CONTROL): IsDailyDataUpload = today's MRA file is uploaded; until then SAP changes wait in the pending
+    /// table. DataVersion = Upload_Id of the file in use (the messages applied on it carry the same version).
+    /// </summary>
+    public sealed class MraControl
+    {
+        public DateTime? DataDay { get; set; }
+        public bool IsDailyDataUpload { get; set; }
+        public string? DataVersion { get; set; }
     }
 
     /// <summary>The last morning file.</summary>
@@ -66,6 +81,8 @@ namespace DecisionEngine.Results.Mra
         public string? By { get; set; }
         public string? FileName { get; set; }
         public int MraCount { get; set; }
+        /// <summary>v7: SAP changes received before this file and moved onto it by the upload.</summary>
+        public int? MovedFromPending { get; set; }
         public MraUploadResponse? Counts { get; set; }
     }
 
@@ -112,6 +129,10 @@ namespace DecisionEngine.Results.Mra
         public string? UnavailableReason { get; set; }
         public string Today { get; set; } = "";
         public MraSnapshotInfo? Snapshot { get; set; }
+        /// <summary>v7: IsDailyDataUpload and the data version.</summary>
+        public MraControl Control { get; set; } = new();
+        /// <summary>v7: SAP changes waiting for today's MRA file (not applied yet), oldest first.</summary>
+        public List<MraLogRowDto> Pending { get; set; } = new();
         public List<MraRowDto> Rows { get; set; } = new();
         public List<MraPoRowDto> Pos { get; set; } = new();
         /// <summary>Last 1,500 messages (newest last).</summary>

@@ -15,7 +15,8 @@
      PRO_SAP_REASON_CODES
    Own error numbers: 50001 unknown @Cmd, 50404 not found, 50409 already exists / request_id already decided.
    schema_info version = 6 (v4: verdict link View_Token, SAP_DECISION_DOCUMENTS / PRO_SAP_DOCUMENT_SAVE;
-   v5: MRA status (replaced); v6: SAP MRAs SAP_MRA_FILE / _FILE_UPLOADS / _FEED, PRO_SAP_MRA). Idempotent (IF NOT EXISTS / CREATE OR ALTER): safe to run again.
+   v5: MRA status (replaced); v6: SAP MRAs SAP_MRA_FILE / _FILE_UPLOADS / _FEED, PRO_SAP_MRA;
+   v7: SAP_MRA_CONTROL (IsDailyDataUpload, Data_Version), SAP_MRA_FEED_PENDING). Idempotent (IF NOT EXISTS / CREATE OR ALTER): safe to run again.
    ═══════════════════════════════════════════════════════════════════════════ */
 SET NOCOUNT ON;
 SET ANSI_NULLS ON;
@@ -911,14 +912,22 @@ BEGIN
 END
 GO
 
-/* ───────────────────────────── SAP MRAs (v6) ─────────────────────────────
+/* ───────────────────────────── SAP MRAs (v6, v7) ─────────────────────────────
    MRA = SAP Merchandise Request (the pre-PO document). v1.1.7 rules (agreed 4-5 Nov 2026):
    - each morning the planner uploads the MRA workbook in Data Setup (item lines + header report); it REPLACES the
      previous list (SAP_MRA_FILE, one row per MRA, all sites added up; SAP_MRA_FILE_UPLOADS one row per upload);
    - during the day SAP sends every MRA change (level 1..9 / X) and PO change to POST /api/sap/v1/mra-events and
-     /po-events; every message is stored as received, also a bad one (SAP_MRA_FEED, Seq = arrival order);
-   - the tool replays file + messages received since the upload day (DecisionEngine/Mra/MraFeed.cs) and decides
-     what takes capacity (MraCapacity.cs). Nothing is worked out in SQL.
+     /po-events; every message is stored as received, also a bad one;
+   - the tool replays file + messages of the current data version (DecisionEngine/Mra/MraFeed.cs) and decides what
+     takes capacity (MraCapacity.cs). Nothing is worked out in SQL.
+   v7 (6 Nov 2026) — SAP changes received before the day's file:
+   - SAP_MRA_CONTROL (one row): IsDailyDataUpload = today's MRA file is uploaded (Data_Day = today), and the current
+     Data_Version (= Upload_Id of the file in use). On a new day the flag counts as false until the file is uploaded;
+   - a message received while IsDailyDataUpload is false goes to SAP_MRA_FEED_PENDING (temporary table) and is not
+     applied yet; while it is true it goes to SAP_MRA_FEED with the current Data_Version (applied at once);
+   - the upload moves the pending messages (arrival order) into SAP_MRA_FEED with the new Data_Version, re-tags the
+     messages already applied today to it, empties SAP_MRA_FEED_PENDING and sets IsDailyDataUpload = 1. So a change
+     SAP sent before the file — also for an MRA that is not in the file — is applied on top of the new file.
    v5 (MRA status SAP_MRA_STATUS / _HISTORY / _UPLOADS, PRO_SAP_MRA_STATUS) is replaced and dropped. */
 
 IF OBJECT_ID(N'dbo.PRO_SAP_MRA_STATUS', N'P') IS NOT NULL DROP PROCEDURE dbo.PRO_SAP_MRA_STATUS;
@@ -943,8 +952,8 @@ GO
 IF OBJECT_ID(N'dbo.SAP_MRA_FILE_UPLOADS', N'U') IS NULL
 CREATE TABLE dbo.SAP_MRA_FILE_UPLOADS (
     Id                   BIGINT IDENTITY(1,1) NOT NULL CONSTRAINT PK_SAP_MRA_FILE_UPLOADS PRIMARY KEY,
-    Upload_Id            NVARCHAR(40)  NOT NULL,
-    Upload_Day           DATE          NOT NULL,                                          -- live messages from this day on are applied on top
+    Upload_Id            NVARCHAR(40)  NOT NULL,                                          -- = the Data_Version it starts
+    Upload_Day           DATE          NOT NULL,
     Uploaded_At          DATETIMEOFFSET(7) NOT NULL CONSTRAINT DF_SAP_MRA_FILE_UPLOADS_At DEFAULT SYSDATETIMEOFFSET(),
     Uploaded_By          NVARCHAR(200) NULL,
     File_Name            NVARCHAR(260) NULL,
@@ -952,9 +961,12 @@ CREATE TABLE dbo.SAP_MRA_FILE_UPLOADS (
     Counts_Json          NVARCHAR(MAX) NULL                                               -- per level, rows read, set aside …
 );
 GO
+IF COL_LENGTH(N'dbo.SAP_MRA_FILE_UPLOADS', N'Moved_From_Pending') IS NULL
+    ALTER TABLE dbo.SAP_MRA_FILE_UPLOADS ADD Moved_From_Pending INT NULL;               -- v7: SAP changes moved in by this upload
+GO
 IF OBJECT_ID(N'dbo.SAP_MRA_FEED', N'U') IS NULL
 CREATE TABLE dbo.SAP_MRA_FEED (
-    Seq                  BIGINT IDENTITY(1,1) NOT NULL CONSTRAINT PK_SAP_MRA_FEED PRIMARY KEY,   -- arrival order
+    Seq                  BIGINT IDENTITY(1,1) NOT NULL CONSTRAINT PK_SAP_MRA_FEED PRIMARY KEY,   -- apply order
     Received_At          DATETIMEOFFSET(7) NOT NULL,
     Received_Day         DATE          NOT NULL,
     Kind                 NVARCHAR(3)   NOT NULL,                                          -- mra / po
@@ -966,18 +978,59 @@ CREATE TABLE dbo.SAP_MRA_FEED (
     Error                NVARCHAR(500) NULL                                               -- why it was set aside
 );
 GO
+IF COL_LENGTH(N'dbo.SAP_MRA_FEED', N'Data_Version') IS NULL
+    ALTER TABLE dbo.SAP_MRA_FEED ADD Data_Version NVARCHAR(40) NULL,                      -- v7: the file (Upload_Id) it applies on
+                                     Pending_Seq  BIGINT NULL;                            -- v7: its number in the pending table, when moved
+GO
 IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'IX_SAP_MRA_FEED_Day' AND object_id = OBJECT_ID(N'dbo.SAP_MRA_FEED'))
     CREATE INDEX IX_SAP_MRA_FEED_Day ON dbo.SAP_MRA_FEED (Received_Day, Seq);
+GO
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'IX_SAP_MRA_FEED_Version' AND object_id = OBJECT_ID(N'dbo.SAP_MRA_FEED'))
+    CREATE INDEX IX_SAP_MRA_FEED_Version ON dbo.SAP_MRA_FEED (Data_Version, Seq);
+GO
+IF OBJECT_ID(N'dbo.SAP_MRA_FEED_PENDING', N'U') IS NULL
+CREATE TABLE dbo.SAP_MRA_FEED_PENDING (
+    Pending_Seq          BIGINT IDENTITY(1,1) NOT NULL CONSTRAINT PK_SAP_MRA_FEED_PENDING PRIMARY KEY,   -- arrival order
+    Received_At          DATETIMEOFFSET(7) NOT NULL,
+    Received_Day         DATE          NOT NULL,
+    Kind                 NVARCHAR(3)   NOT NULL,
+    By_User              NVARCHAR(200) NULL,
+    Source_System        NVARCHAR(10)  NULL,
+    Trace_Id             NVARCHAR(20)  NULL,
+    Raw_Json             NVARCHAR(MAX) NOT NULL,
+    Msg_Json             NVARCHAR(MAX) NULL,
+    Error                NVARCHAR(500) NULL
+);
+GO
+IF OBJECT_ID(N'dbo.SAP_MRA_CONTROL', N'U') IS NULL
+BEGIN
+    CREATE TABLE dbo.SAP_MRA_CONTROL (
+        Id                    TINYINT       NOT NULL CONSTRAINT PK_SAP_MRA_CONTROL PRIMARY KEY CONSTRAINT CK_SAP_MRA_CONTROL_One CHECK (Id = 1),
+        Data_Day              DATE          NULL,                                          -- day of the file in use
+        Is_Daily_Data_Upload  BIT           NOT NULL CONSTRAINT DF_SAP_MRA_CONTROL_Flag DEFAULT (0),
+        Data_Version          NVARCHAR(40)  NULL,                                          -- Upload_Id of the file in use
+        Updated_At            DATETIMEOFFSET(7) NOT NULL CONSTRAINT DF_SAP_MRA_CONTROL_At DEFAULT SYSDATETIMEOFFSET()
+    );
+    -- from v6: the last upload becomes the data version; the messages replayed on it (received on or after its day) get it
+    DECLARE @v NVARCHAR(40), @d DATE;
+    SELECT TOP 1 @v = Upload_Id, @d = Upload_Day FROM dbo.SAP_MRA_FILE_UPLOADS ORDER BY Id DESC;
+    INSERT INTO dbo.SAP_MRA_CONTROL (Id, Data_Day, Is_Daily_Data_Upload, Data_Version) VALUES (1, @d, CASE WHEN @v IS NULL THEN 0 ELSE 1 END, @v);
+    IF @v IS NOT NULL UPDATE dbo.SAP_MRA_FEED SET Data_Version = @v WHERE Data_Version IS NULL AND Received_Day >= @d;
+END
 GO
 
 /* SAP MRAs.
    @Cmd UPLOAD    morning file: SAP_MRA_FILE emptied and filled from @Rows (JSON array: MraNo, Ga, Colour, Qty, Dd,
-                  Level, PosJson, ExtraJson) in ONE transaction (a failing file leaves the previous list); one
-                  SAP_MRA_FILE_UPLOADS row (@Upload_Id, @Upload_Day, @File_Name, @By, @Counts_Json).
-   @Cmd STATE     1st result: the last upload (or none); 2nd: the file rows; 3rd: the feed rows to replay =
-                  received on or after the upload day (@Today when no upload), at most 31 days back, in Seq order.
-   @Cmd STAMP     (Last_Upload_Id, Max_Seq): cheap "has anything changed" check.
-   @Cmd FEED_ADD  @Rows JSON array (Kind, RawJson, MsgJson, Error) stored in order; returns (Idx, Seq). */
+                  Level, PosJson, ExtraJson); one SAP_MRA_FILE_UPLOADS row; the pending SAP changes are moved into
+                  SAP_MRA_FEED with Data_Version = @Upload_Id (arrival order) and the changes already applied on @Upload_Day
+                  are re-tagged to it; SAP_MRA_FEED_PENDING emptied; SAP_MRA_CONTROL: Data_Day = @Upload_Day,
+                  IsDailyDataUpload = 1, Data_Version = @Upload_Id. ONE transaction (a failing file changes nothing).
+                  OUTPUT @Moved_Count.
+   @Cmd STATE     1st result: control (DataDay, IsDailyDataUpload for @Today, DataVersion); 2nd: the last upload; 3rd: the
+                  file rows; 4th: the messages of the current data version (Seq order); 5th: the pending messages.
+   @Cmd STAMP     (Data_Version, Is_Daily_Data_Upload for @Today, Max_Seq, Max_Pending_Seq): "has anything changed".
+   @Cmd FEED_ADD  @Rows JSON array (Kind, RawJson, MsgJson, Error) stored in order: in SAP_MRA_FEED (current Data_Version)
+                  when today's file is uploaded, else in SAP_MRA_FEED_PENDING. Returns (Idx, Seq, Pending). */
 CREATE OR ALTER PROCEDURE dbo.PRO_SAP_MRA
     @Cmd             NVARCHAR(20),
     @Rows            NVARCHAR(MAX) = NULL,
@@ -990,6 +1043,7 @@ CREATE OR ALTER PROCEDURE dbo.PRO_SAP_MRA
     @Trace_Id        NVARCHAR(20)  = NULL,
     @Received_At     DATETIMEOFFSET(7) = NULL,
     @Today           DATE          = NULL,
+    @Moved_Count     INT = NULL OUTPUT,
     @Error_Code      INT = NULL OUTPUT,
     @Error_Message   NVARCHAR(500) = NULL OUTPUT
 AS
@@ -998,44 +1052,69 @@ BEGIN
     SET XACT_ABORT ON;
     SELECT @Error_Code = 0, @Error_Message = N'';
     BEGIN TRY
+        DECLARE @t DATE = ISNULL(@Today, CAST(SYSDATETIMEOFFSET() AS DATE));
+        IF NOT EXISTS (SELECT 1 FROM dbo.SAP_MRA_CONTROL WHERE Id = 1)
+            INSERT INTO dbo.SAP_MRA_CONTROL (Id, Is_Daily_Data_Upload) VALUES (1, 0);
+
         IF @Cmd = N'UPLOAD'
         BEGIN
             BEGIN TRANSACTION;
+            DECLARE @prevVersion NVARCHAR(40), @prevDay DATE;
+            -- the control row is the lock: SAP changes wait while the file is replaced
+            SELECT @prevVersion = Data_Version, @prevDay = Data_Day FROM dbo.SAP_MRA_CONTROL WITH (UPDLOCK, HOLDLOCK) WHERE Id = 1;
             DELETE FROM dbo.SAP_MRA_FILE WITH (TABLOCKX);
             INSERT INTO dbo.SAP_MRA_FILE (Mra_No, Generic_Article, Colour, Qty, Delivery_Date, Mra_Level, Pos_Json, Extra_Json, Upload_Id)
             SELECT j.MraNo, j.Ga, j.Colour, j.Qty, j.Dd, j.Lvl, j.PosJson, j.ExtraJson, @Upload_Id
               FROM OPENJSON(@Rows) WITH (
                    MraNo NVARCHAR(30) '$.MraNo', Ga NVARCHAR(10) '$.Ga', Colour NVARCHAR(40) '$.Colour', Qty BIGINT '$.Qty',
                    Dd DATE '$.Dd', Lvl NVARCHAR(2) '$.Level', PosJson NVARCHAR(MAX) '$.PosJson', ExtraJson NVARCHAR(MAX) '$.ExtraJson') j;
-            INSERT INTO dbo.SAP_MRA_FILE_UPLOADS (Upload_Id, Upload_Day, Uploaded_By, File_Name, Mra_Count, Counts_Json)
-            VALUES (@Upload_Id, @Upload_Day, @By, @File_Name, @@ROWCOUNT, @Counts_Json);
-            UPDATE dbo.SAP_MRA_FILE_UPLOADS SET Mra_Count = (SELECT COUNT(*) FROM dbo.SAP_MRA_FILE) WHERE Id = SCOPE_IDENTITY();
+            DECLARE @n INT = @@ROWCOUNT;
+            -- changes already applied today (an earlier file of the same day) stay applied on the new file
+            UPDATE dbo.SAP_MRA_FEED SET Data_Version = @Upload_Id
+             WHERE @prevVersion IS NOT NULL AND Data_Version = @prevVersion AND Received_Day >= @Upload_Day;
+            -- the changes SAP sent before the file: applied on top of it, in arrival order
+            INSERT INTO dbo.SAP_MRA_FEED (Received_At, Received_Day, Kind, By_User, Source_System, Trace_Id, Raw_Json, Msg_Json, Error, Data_Version, Pending_Seq)
+            SELECT Received_At, Received_Day, Kind, By_User, Source_System, Trace_Id, Raw_Json, Msg_Json, Error, @Upload_Id, Pending_Seq
+              FROM dbo.SAP_MRA_FEED_PENDING WITH (TABLOCKX) ORDER BY Pending_Seq;
+            SET @Moved_Count = @@ROWCOUNT;
+            DELETE FROM dbo.SAP_MRA_FEED_PENDING;
+            INSERT INTO dbo.SAP_MRA_FILE_UPLOADS (Upload_Id, Upload_Day, Uploaded_By, File_Name, Mra_Count, Counts_Json, Moved_From_Pending)
+            VALUES (@Upload_Id, @Upload_Day, @By, @File_Name, @n, @Counts_Json, @Moved_Count);
+            UPDATE dbo.SAP_MRA_CONTROL SET Data_Day = @Upload_Day, Is_Daily_Data_Upload = 1, Data_Version = @Upload_Id, Updated_At = SYSDATETIMEOFFSET()
+             WHERE Id = 1;
             COMMIT TRANSACTION;
             RETURN;
         END
 
         IF @Cmd = N'STATE'
         BEGIN
-            DECLARE @t DATE = ISNULL(@Today, CAST(SYSDATETIMEOFFSET() AS DATE));
-            DECLARE @lastId BIGINT = (SELECT MAX(Id) FROM dbo.SAP_MRA_FILE_UPLOADS);
-            DECLARE @from DATE = ISNULL((SELECT Upload_Day FROM dbo.SAP_MRA_FILE_UPLOADS WHERE Id = @lastId), @t);
-            IF @from < DATEADD(DAY, -31, @t) SET @from = DATEADD(DAY, -31, @t);
-            SELECT Upload_Id AS UploadId, Upload_Day AS UploadDay, Uploaded_At AS UploadedAt, Uploaded_By AS UploadedBy,
-                   File_Name AS FileName, Mra_Count AS MraCount, Counts_Json AS CountsJson
-              FROM dbo.SAP_MRA_FILE_UPLOADS WHERE Id = @lastId;
+            DECLARE @ver NVARCHAR(40);
+            SELECT @ver = Data_Version FROM dbo.SAP_MRA_CONTROL WHERE Id = 1;
+            SELECT Data_Day AS DataDay, CAST(CASE WHEN Is_Daily_Data_Upload = 1 AND Data_Day = @t THEN 1 ELSE 0 END AS BIT) AS IsDailyDataUpload,
+                   Data_Version AS DataVersion
+              FROM dbo.SAP_MRA_CONTROL WHERE Id = 1;
+            SELECT TOP 1 Upload_Id AS UploadId, Upload_Day AS UploadDay, Uploaded_At AS UploadedAt, Uploaded_By AS UploadedBy,
+                   File_Name AS FileName, Mra_Count AS MraCount, Counts_Json AS CountsJson, Moved_From_Pending AS MovedFromPending
+              FROM dbo.SAP_MRA_FILE_UPLOADS ORDER BY Id DESC;
             SELECT Mra_No AS MraNo, Generic_Article AS Ga, Colour, Qty, Delivery_Date AS Dd, Mra_Level AS Level, Pos_Json AS PosJson,
                    Extra_Json AS ExtraJson
               FROM dbo.SAP_MRA_FILE ORDER BY Mra_No;
             SELECT Seq, Received_At AS ReceivedAt, Kind, By_User AS ByUser, Source_System AS SourceSystem, Raw_Json AS RawJson,
+                   Msg_Json AS MsgJson, Error, Pending_Seq AS PendingSeq
+              FROM dbo.SAP_MRA_FEED WHERE Data_Version = @ver ORDER BY Seq;
+            SELECT Pending_Seq AS Seq, Received_At AS ReceivedAt, Kind, By_User AS ByUser, Source_System AS SourceSystem, Raw_Json AS RawJson,
                    Msg_Json AS MsgJson, Error
-              FROM dbo.SAP_MRA_FEED WHERE Received_Day >= @from ORDER BY Seq;
+              FROM dbo.SAP_MRA_FEED_PENDING ORDER BY Pending_Seq;
             RETURN;
         END
 
         IF @Cmd = N'STAMP'
         BEGIN
-            SELECT (SELECT TOP 1 Upload_Id FROM dbo.SAP_MRA_FILE_UPLOADS ORDER BY Id DESC) AS LastUploadId,
-                   ISNULL((SELECT MAX(Seq) FROM dbo.SAP_MRA_FEED), 0) AS MaxSeq;
+            SELECT c.Data_Version AS DataVersion,
+                   CAST(CASE WHEN c.Is_Daily_Data_Upload = 1 AND c.Data_Day = @t THEN 1 ELSE 0 END AS BIT) AS IsDailyDataUpload,
+                   ISNULL((SELECT MAX(Seq) FROM dbo.SAP_MRA_FEED), 0) AS MaxSeq,
+                   ISNULL((SELECT MAX(Pending_Seq) FROM dbo.SAP_MRA_FEED_PENDING), 0) AS MaxPendingSeq
+              FROM dbo.SAP_MRA_CONTROL c WHERE c.Id = 1;
             RETURN;
         END
 
@@ -1048,19 +1127,31 @@ BEGIN
               FROM OPENJSON(@Rows) r
              CROSS APPLY OPENJSON(r.value) WITH (Kind NVARCHAR(3) '$.Kind', RawJson NVARCHAR(MAX) '$.RawJson',
                                                  MsgJson NVARCHAR(MAX) '$.MsgJson', Error NVARCHAR(500) '$.Error') j;
-            DECLARE @out TABLE (Idx INT NOT NULL PRIMARY KEY, Seq BIGINT NOT NULL);
+            DECLARE @out TABLE (Idx INT NOT NULL PRIMARY KEY, Seq BIGINT NOT NULL, Pending BIT NOT NULL);
             DECLARE @at DATETIMEOFFSET(7) = ISNULL(@Received_At, SYSDATETIMEOFFSET());
             BEGIN TRANSACTION;
+            DECLARE @flag BIT, @cur NVARCHAR(40);
+            SELECT @flag = CASE WHEN Is_Daily_Data_Upload = 1 AND Data_Day = @t THEN 1 ELSE 0 END, @cur = Data_Version
+              FROM dbo.SAP_MRA_CONTROL WITH (UPDLOCK, HOLDLOCK) WHERE Id = 1;
             DECLARE @i INT = (SELECT MIN(Idx) FROM @in);
             WHILE @i IS NOT NULL
             BEGIN
-                INSERT INTO dbo.SAP_MRA_FEED (Received_At, Received_Day, Kind, By_User, Source_System, Trace_Id, Raw_Json, Msg_Json, Error)
-                SELECT @at, CAST(@at AS DATE), Kind, @By, @Source_System, @Trace_Id, RawJson, MsgJson, Error FROM @in WHERE Idx = @i;
-                INSERT INTO @out (Idx, Seq) VALUES (@i, SCOPE_IDENTITY());
+                IF @flag = 1
+                BEGIN
+                    INSERT INTO dbo.SAP_MRA_FEED (Received_At, Received_Day, Kind, By_User, Source_System, Trace_Id, Raw_Json, Msg_Json, Error, Data_Version)
+                    SELECT @at, CAST(@at AS DATE), Kind, @By, @Source_System, @Trace_Id, RawJson, MsgJson, Error, @cur FROM @in WHERE Idx = @i;
+                    INSERT INTO @out (Idx, Seq, Pending) VALUES (@i, SCOPE_IDENTITY(), 0);
+                END
+                ELSE
+                BEGIN
+                    INSERT INTO dbo.SAP_MRA_FEED_PENDING (Received_At, Received_Day, Kind, By_User, Source_System, Trace_Id, Raw_Json, Msg_Json, Error)
+                    SELECT @at, CAST(@at AS DATE), Kind, @By, @Source_System, @Trace_Id, RawJson, MsgJson, Error FROM @in WHERE Idx = @i;
+                    INSERT INTO @out (Idx, Seq, Pending) VALUES (@i, SCOPE_IDENTITY(), 1);
+                END
                 SET @i = (SELECT MIN(Idx) FROM @in WHERE Idx > @i);
             END
             COMMIT TRANSACTION;
-            SELECT Idx, Seq FROM @out ORDER BY Idx;
+            SELECT Idx, Seq, Pending FROM @out ORDER BY Idx;
             RETURN;
         END
 
@@ -1075,6 +1166,6 @@ GO
 
 /* ───────────────────────────── schema version ───────────────────────────── */
 IF NOT EXISTS (SELECT 1 FROM dbo.schema_info WHERE [key] = N'version')
-    INSERT INTO dbo.schema_info ([key], value) VALUES (N'version', N'6');
-UPDATE dbo.schema_info SET value = N'6' WHERE [key] = N'version' AND value < N'6';
+    INSERT INTO dbo.schema_info ([key], value) VALUES (N'version', N'7');
+UPDATE dbo.schema_info SET value = N'7' WHERE [key] = N'version' AND value < N'7';
 GO

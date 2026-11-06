@@ -691,6 +691,8 @@ tool can report which checked POs were actually generated — not only which one
 
 ## 8. `POST /mra-events` and `POST /po-events` — live MRA and PO changes
 
+The whole MRA data process as a flow chart: [MRA-Data-Flow.pdf](MRA-Data-Flow.pdf) (also `.png` / `.svg`).
+
 MRA = Merchandise Request, the SAP document raised before the PO. The tool counts the **open MRAs** against the
 colour capacity, like a released PO: Max Permissible = what is still free after the plan, the stock, the released
 POs (morning F2 file), the open MRAs and today's tool approvals. Single concept only; multi concept MRAs are shown

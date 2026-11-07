@@ -48,6 +48,12 @@ namespace Application.Interfaces.V1.Sap
         /// </summary>
         Task<List<MraFeedStored>> AddFeedAsync(IReadOnlyList<MraFeedRow> rows, string by, string? sourceSystem, string? traceId, DateTimeOffset receivedAt,
                                       CancellationToken ct = default);
+
+        /// <summary>v8: the tool's answered SAP decision items since <paramref name="since"/> (newest first) — linked to the MRAs.</summary>
+        Task<List<MraToolDecision>> DecisionsAsync(DateTime since, CancellationToken ct = default);
+
+        /// <summary>v8: the working saved with decision item <paramref name="itemId"/> (JSON), or null.</summary>
+        Task<string?> WorkingAsync(long itemId, CancellationToken ct = default);
     }
 
     /// <summary>
@@ -79,5 +85,7 @@ namespace Application.Interfaces.V1.Sap
         Task<MraSwitchesResponse> SetSwitchesAsync(MraSwitchesReq req, AppUserContext user, CancellationToken ct = default);
         /// <summary>SAP Feed page test sender (admin): stored and applied exactly like a message from SAP.</summary>
         Task<MraFeedResponse> TestSendAsync(MraTestSendReq req, AppUserContext user, CancellationToken ct = default);
+        /// <summary>v8: the tool's decision of one MRA with the working saved with it (side panel of MRA Queues).</summary>
+        Task<MraDecisionDetail> DecisionAsync(string mraNo, AppUserContext user, CancellationToken ct = default);
     }
 }

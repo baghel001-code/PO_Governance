@@ -20,6 +20,9 @@ namespace Admin.Services.Platform
         public static Task<ApiDataResponse<MraSwitchesResponse>> MraSwitchesAsync(this IAPICall api, MraSwitchesReq req) =>
             Call<MraSwitchesResponse, MraSwitchesReq>(api, AllApiNames.PO_MRA_SWITCHES, req);
 
+        public static Task<ApiDataResponse<MraDecisionDetail>> MraDecisionAsync(this IAPICall api, string mraNo) =>
+            Call<MraDecisionDetail, MraNoReq>(api, AllApiNames.PO_MRA_DECISION, new MraNoReq { MraNo = mraNo });
+
         public static Task<ApiDataResponse<MraFeedResponse>> MraTestSendAsync(this IAPICall api, MraTestSendReq req) =>
             Call<MraFeedResponse, MraTestSendReq>(api, AllApiNames.PO_MRA_TEST_SEND, req);
     }

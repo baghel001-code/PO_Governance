@@ -199,9 +199,56 @@ namespace Infrastructure.Repositories
             Check(p);
             return res.OrderBy(r => r.Idx).Select(r => new MraFeedStored(r.Seq, r.Pending)).ToList();
         }
+
+        private sealed class DecisionRow
+        {
+            public long ItemId { get; set; }
+            public string? Gm { get; set; }
+            public string? Colour { get; set; }
+            public string? DeliveryMonth { get; set; }
+            public double OrderQty { get; set; }
+            public double GroupQty { get; set; }
+            public string? Verdict { get; set; }
+            public string? EngineDecision { get; set; }
+            public string? ReasonText { get; set; }
+            public double? MaxPermissible { get; set; }
+            public bool HasWorking { get; set; }
+            public string DecisionId { get; set; } = "";
+            public string? RequestId { get; set; }
+            public string? PoNumber { get; set; }
+            public DateTimeOffset DecidedAt { get; set; }
+            public string? Mode { get; set; }
+            public string? ViewUrl { get; set; }
+        }
+
+        public async Task<List<MraToolDecision>> DecisionsAsync(DateTime since, CancellationToken ct = default)
+        {
+            var p = P("DECISIONS");
+            p.Add("@Since", since.Date, DbType.Date);
+            var rows = (await _db.ExecuteStoredProcedureListAsync<DecisionRow>(Sp, p, commandTimeout: 120, ct: ct)).AsList();
+            Check(p);
+            return rows.Select(r => new MraToolDecision
+            {
+                ItemId = r.ItemId, Gm = r.Gm ?? "", Colour = r.Colour ?? "", DeliveryMonth = r.DeliveryMonth ?? "", OrderQty = r.OrderQty,
+                Verdict = r.Verdict, Decision = r.EngineDecision ?? "", Reason = r.ReasonText, MaxPermissible = r.MaxPermissible, HasWorking = r.HasWorking,
+                DecisionId = r.DecisionId, RequestId = r.RequestId, PoNumber = r.PoNumber, DecidedAt = r.DecidedAt, Mode = r.Mode, ViewUrl = r.ViewUrl
+            }).ToList();
+        }
+
+        private sealed class WorkingRow { public string? WorkingJson { get; set; } }
+
+        public async Task<string?> WorkingAsync(long itemId, CancellationToken ct = default)
+        {
+            var p = P("WORKING");
+            p.Add("@Item_Id", itemId, DbType.Int64);
+            var rows = (await _db.ExecuteStoredProcedureListAsync<WorkingRow>(Sp, p, commandTimeout: null, ct: ct)).AsList();
+            Check(p);
+            return rows.FirstOrDefault()?.WorkingJson;
+        }
     }
 
     /// <summary>PostgreSQL storage: the MRA tables exist only on SQL Server.</summary>
+    /// <remarks>(v8 decision lookups below are part of <see cref="MraSqlServerRepository"/>.)</remarks>
     public sealed class MraUnavailableRepository : IMraRepository
     {
         public bool Available => false;
@@ -211,5 +258,7 @@ namespace Infrastructure.Repositories
         public Task<MraStoredState> StateAsync(string today, CancellationToken ct = default) => throw Fail();
         public Task<string> StampAsync(string today, CancellationToken ct = default) => throw Fail();
         public Task<List<MraFeedStored>> AddFeedAsync(IReadOnlyList<MraFeedRow> rows, string by, string? sourceSystem, string? traceId, DateTimeOffset receivedAt, CancellationToken ct = default) => throw Fail();
+        public Task<List<MraToolDecision>> DecisionsAsync(DateTime since, CancellationToken ct = default) => throw Fail();
+        public Task<string?> WorkingAsync(long itemId, CancellationToken ct = default) => throw Fail();
     }
 }

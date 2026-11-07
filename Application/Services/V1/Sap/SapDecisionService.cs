@@ -449,7 +449,8 @@ namespace Application.Services.V1.Sap
             {
                 PlanQty = i.Metrics.PlanQty, StockQty = i.Metrics.StockQty, OpenPoQty = i.Metrics.OpenPoQty, HeadroomQty = i.Metrics.HeadroomQty,
                 CoverDays = i.Metrics.CoverDays, SellThroughPct = i.Metrics.SellThroughPct
-            })
+            }),
+            WorkingJson = i.Working?.ToJsonString()
         }).ToList();
 
         private static string? Clip(string? s, int max) => s == null ? null : s.Length <= max ? s : s[..max];

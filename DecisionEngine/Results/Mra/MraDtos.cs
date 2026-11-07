@@ -86,14 +86,61 @@ namespace DecisionEngine.Results.Mra
         public MraUploadResponse? Counts { get; set; }
     }
 
+    /// <summary>
+    /// v8: the tool's own SAP /decisions check the MRA was raised from (SAP does not send it back): linked by the PO number
+    /// when known, else by Generic Article + colour + delivery month — the latest answered check made before the MRA.
+    /// </summary>
+    public sealed class MraToolDecision
+    {
+        /// <summary>SAP_DECISION_ITEMS.Id (its working is read on demand).</summary>
+        public long ItemId { get; set; }
+        public string DecisionId { get; set; } = "";
+        public string? RequestId { get; set; }
+        public string? PoNumber { get; set; }
+        public DateTimeOffset DecidedAt { get; set; }
+        public string? Mode { get; set; }
+        /// <summary>The tool's decision as given to the buyer (Auto Allow, Recommend Reduced Qty, Watch List, Hold …).</summary>
+        public string Decision { get; set; } = "";
+        /// <summary>The SAP verdict of the item (ALLOW / REDUCE / WATCH / HOLD / BLOCK).</summary>
+        public string? Verdict { get; set; }
+        public string? Reason { get; set; }
+        public double? MaxPermissible { get; set; }
+        public double OrderQty { get; set; }
+        /// <summary>Verdict page (the link SAP got in view_url); null when the decision had no link.</summary>
+        public string? ViewUrl { get; set; }
+        public bool HasWorking { get; set; }
+        /// <summary>"PO number" or "article · colour · month".</summary>
+        public string MatchedBy { get; set; } = "";
+
+        // key of the decided item (for the link)
+        public string Gm { get; set; } = "";
+        public string Colour { get; set; } = "";
+        public string DeliveryMonth { get; set; } = "";
+    }
+
+    /// <summary>The side panel of one MRA: its decision and the working saved with it.</summary>
+    public sealed class MraDecisionDetail
+    {
+        public string MraNo { get; set; } = "";
+        public MraToolDecision? Decision { get; set; }
+        public System.Text.Json.Nodes.JsonObject? Working { get; set; }
+    }
+
+    public sealed class MraNoReq
+    {
+        public string MraNo { get; set; } = "";
+    }
+
     /// <summary>One MRA on the dashboard: its replayed state and where it is / whether it counts.</summary>
     public sealed class MraRowDto
     {
         public string No { get; set; } = "";
         public MraState M { get; set; } = new();
         public MraClass C { get; set; } = new();
-        /// <summary>Decision group of the decision SAP sent (Allow, Reduce, Watch List, Hold, Block, No Plan, Other, Not sent).</summary>
+        /// <summary>Decision group (Allow, Reduce, Watch List, Hold, Block, No Plan, Other, Not sent): of the tool's decision, else of the one SAP sent.</summary>
         public string DecGroup { get; set; } = "Not sent";
+        /// <summary>v8: the tool's own decision for this MRA (null when no saved check matches).</summary>
+        public MraToolDecision? ToolDecision { get; set; }
     }
 
     public sealed class MraPoRowDto

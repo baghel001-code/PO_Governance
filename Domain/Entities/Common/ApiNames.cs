@@ -44,6 +44,7 @@ namespace Domain.Entities.Common
         public string? PO_MRA_STATE { get; set; }
         public string? PO_MRA_SWITCHES { get; set; }
         public string? PO_MRA_TEST_SEND { get; set; }
+        public string? PO_MRA_DECISION { get; set; }
         public string? PO_USERS_SCR_SYNC { get; set; }
         public string? PO_USERS_SCR_MAPPING { get; set; }
         public string? PO_USER_UPDATE { get; set; }

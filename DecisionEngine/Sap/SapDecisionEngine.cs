@@ -96,6 +96,9 @@ namespace DecisionEngine.Sap
                 var verdict = SapVerdictMap.VerdictFor(rule, options.BlockVerdict);
                 var metrics = Metrics(o);
                 var shares = verdict == SapVerdicts.Reduce ? SplitMax(metrics.HeadroomQty ?? 0, group.Select(x => x.OrderQty).ToList()) : null;
+                var working = o.Engine == "B" && o.B is { Chain.Count: > 0 }
+                    ? Tool1Working.Build(o, data.Params, today, Tool1LaterPoCaution.Compute(o.Engine, o.Decision, o.B, data.Params))
+                    : null;
                 for (var i = 0; i < group.Count; i++)
                 {
                     var d = group[i];
@@ -110,6 +113,7 @@ namespace DecisionEngine.Sap
                     d.Metrics = metrics;
                     d.MaxQty = shares?[i];
                     d.ReasonText = Clip(ReasonText(path, o, data.Params, metrics, qty, group.Count), ReasonTextMax);
+                    d.Working = working;
                 }
             }
 

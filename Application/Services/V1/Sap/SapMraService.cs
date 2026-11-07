@@ -324,8 +324,14 @@ namespace Application.Services.V1.Sap
             if (resp.Restricted) mine = new HashSet<string>(scope!.KeysOf(user.Email), StringComparer.Ordinal);
             bool OkInfo(MraArticleInfo? i) => mine == null || (i != null && mine.Contains(string.Join("|", PlatformCore.NKey(i.Brand), PlatformCore.NKey(i.McCd), PlatformCore.NKey(i.Mrp))));
 
+            // v8: each MRA linked to the tool's own decision (SAP does not send it back)
+            var decisions = MraDecisionLinker.Index(await DecisionsSafeAsync(ct));
             foreach (var (no, m, c) in cap.Rows)
-                if (OkInfo(c.Info)) resp.Rows.Add(new MraRowDto { No = no, M = m, C = c, DecGroup = MraCapacity.DecisionGroup(m.Decision.Decision) });
+                if (OkInfo(c.Info))
+                {
+                    var td = MraDecisionLinker.Link(m, c.Mon, decisions);
+                    resp.Rows.Add(new MraRowDto { No = no, M = m, C = c, ToolDecision = td, DecGroup = MraCapacity.DecisionGroup(td?.Decision ?? m.Decision.Decision) });
+                }
             var visibleMras = new HashSet<string>(resp.Rows.Select(r => r.No), StringComparer.Ordinal);
             var effects = cap.PoEffects.ToDictionary(e => e.Po, StringComparer.Ordinal);
             foreach (var (po, ps) in cap.State.Pos)
@@ -414,6 +420,36 @@ namespace Application.Services.V1.Sap
             ToolReqCapacity = p?[MraSwitches.ToolReqKey] is not JsonValue t || !(t.GetValueKind() == JsonValueKind.False),
             LivePo = p?[MraSwitches.LivePoKey] is JsonValue l && l.GetValueKind() == JsonValueKind.True
         };
+
+        /// <summary>Decision items of the last <see cref="DecisionDays"/> days; none (logged) when the lookup fails.</summary>
+        private async Task<List<MraToolDecision>> DecisionsSafeAsync(CancellationToken ct)
+        {
+            try
+            {
+                return await _repo.DecisionsAsync(_clock.Now.Date.AddDays(-DecisionDays), ct);
+            }
+            catch (Exception e) when (e is not OperationCanceledException)
+            {
+                _log.LogWarning(e, "MRA Queues: the tool's decisions could not be read - shown without them");
+                return new List<MraToolDecision>();
+            }
+        }
+
+        /// <summary>How far back a saved decision is linked to an MRA.</summary>
+        public const int DecisionDays = 180;
+
+        public async Task<MraDecisionDetail> DecisionAsync(string mraNo, AppUserContext user, CancellationToken ct = default)
+        {
+            var no = MraNorm.NoZeros((mraNo ?? "").Trim());
+            var st = await StateAsync(user, ct);                       // the user's own view (buyers / category heads: own MCs)
+            var row = st.Rows.FirstOrDefault(r => r.No == no) ?? throw new NotFoundException("MRA " + no + " not found");
+            var res = new MraDecisionDetail { MraNo = no, Decision = row.ToolDecision };
+            if (row.ToolDecision is { HasWorking: true } td && await _repo.WorkingAsync(td.ItemId, ct) is { Length: > 0 } json)
+                res.Working = JsonNode.Parse(json) as JsonObject;
+            else if (row.ToolDecision == null && row.M.Decision.Working != null)
+                res.Working = (JsonObject)row.M.Decision.Working.DeepClone();   // a working SAP sent (optional field)
+            return res;
+        }
 
         public async Task<MraFeedResponse> TestSendAsync(MraTestSendReq req, AppUserContext user, CancellationToken ct = default)
         {

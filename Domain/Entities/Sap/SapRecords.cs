@@ -161,6 +161,8 @@ namespace Domain.Entities.Sap
         public string? EngineDecision { get; set; }
         public string? EngineReason { get; set; }
         public string? MetricsJson { get; set; }
+        /// <summary>v8: the working of the decision (single concept), JSON.</summary>
+        public string? WorkingJson { get; set; }
     }
 
     /// <summary>SAP_EVENTS row (every received event: accepted or parked; duplicates only bump Dup_Count).</summary>

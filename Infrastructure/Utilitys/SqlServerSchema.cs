@@ -45,7 +45,7 @@ namespace Infrastructure.Utilitys
             return sql;
         }
 
-        public const string ExpectedVersion = "7";
+        public const string ExpectedVersion = "8";
 
         private static readonly Regex GoLine = new(@"^\s*GO\s*(?:--.*)?$", RegexOptions.Multiline | RegexOptions.IgnoreCase | RegexOptions.Compiled);
 

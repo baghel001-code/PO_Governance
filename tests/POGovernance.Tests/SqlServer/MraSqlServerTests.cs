@@ -84,10 +84,34 @@ namespace POGovernance.Tests.SqlServer
         }
 
         [SqlServerFact]
-        public async Task Schema_is_v7_and_the_v5_tables_are_gone()
+        public async Task Decisions_and_their_working_are_read_for_the_mra_link()
+        {
+            await using (var c = new SqlConnection(_fx.ConnectionString))
+            {
+                await c.ExecuteAsync("""
+                    INSERT INTO dbo.SAP_DECISION_LOG (Decision_Id, Request_Id, Http_Status, Is_Test, Po_Number, Decided_At, Response_Json)
+                    VALUES (N'D-20261106-000001', N'R-MRA-1', 200, 0, N'4500099001', '2026-11-06T10:00:00+05:30', N'{"view_url":"http://portal/verdict/tok1"}'),
+                           (N'D-20261106-000002', N'R-MRA-2', 200, 1, N'4500099002', '2026-11-06T10:00:00+05:30', N'{}');
+                    INSERT INTO dbo.SAP_DECISION_ITEMS (Decision_Log_Id, Po_Item, Gm, Colour, Delivery_Month, Order_Qty, Verdict, Engine_Decision, Reason_Text, Metrics_Json, Working_Json)
+                    SELECT Id, 10, N'1112045675', N'BLK', N'12.2026', 2000, N'ALLOW', N'Auto Allow', N'Colour STR within limit', N'{"headroom_qty":22803}',
+                           N'{"decision":"Auto Allow","maxPermissible":22803}'
+                      FROM dbo.SAP_DECISION_LOG WHERE Request_Id IN (N'R-MRA-1', N'R-MRA-2');
+                    """);
+            }
+            var r = Repo();
+            var d = (await r.DecisionsAsync(new DateTime(2026, 10, 1))).Where(x => x.RequestId?.StartsWith("R-MRA") == true).ToList();
+            var one = Assert.Single(d);                                    // the test decision is left out
+            Assert.Equal(("D-20261106-000001", "Auto Allow", 22803d, "http://portal/verdict/tok1", true),
+                         (one.DecisionId, one.Decision, one.MaxPermissible!.Value, one.ViewUrl, one.HasWorking));
+            Assert.Equal(("1112045675", "BLK", "12.2026", "4500099001"), (one.Gm, one.Colour, one.DeliveryMonth, one.PoNumber));
+            Assert.Contains("\"maxPermissible\":22803", await r.WorkingAsync(one.ItemId));
+        }
+
+        [SqlServerFact]
+        public async Task Schema_is_v8_and_the_v5_tables_are_gone()
         {
             await using var c = new SqlConnection(_fx.ConnectionString);
-            Assert.Equal("7", await c.ExecuteScalarAsync<string>("SELECT value FROM dbo.schema_info WHERE [key] = N'version'"));
+            Assert.Equal("8", await c.ExecuteScalarAsync<string>("SELECT value FROM dbo.schema_info WHERE [key] = N'version'"));
             Assert.Null(await c.ExecuteScalarAsync<int?>("SELECT OBJECT_ID(N'dbo.SAP_MRA_STATUS', N'U')"));
             Assert.NotNull(await c.ExecuteScalarAsync<int?>("SELECT OBJECT_ID(N'dbo.PRO_SAP_MRA', N'P')"));
         }

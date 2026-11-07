@@ -16,7 +16,8 @@
    Own error numbers: 50001 unknown @Cmd, 50404 not found, 50409 already exists / request_id already decided.
    schema_info version = 6 (v4: verdict link View_Token, SAP_DECISION_DOCUMENTS / PRO_SAP_DOCUMENT_SAVE;
    v5: MRA status (replaced); v6: SAP MRAs SAP_MRA_FILE / _FILE_UPLOADS / _FEED, PRO_SAP_MRA;
-   v7: SAP_MRA_CONTROL (IsDailyDataUpload, Data_Version), SAP_MRA_FEED_PENDING). Idempotent (IF NOT EXISTS / CREATE OR ALTER): safe to run again.
+   v7: SAP_MRA_CONTROL (IsDailyDataUpload, Data_Version), SAP_MRA_FEED_PENDING;
+   v8: SAP_DECISION_ITEMS.Working_Json, PRO_SAP_MRA DECISIONS / WORKING — MRAs linked to the tool's decisions). Idempotent (IF NOT EXISTS / CREATE OR ALTER): safe to run again.
    ═══════════════════════════════════════════════════════════════════════════ */
 SET NOCOUNT ON;
 SET ANSI_NULLS ON;
@@ -121,6 +122,14 @@ IF OBJECT_ID(N'dbo.FK_SAP_DECISION_ITEMS_Log', N'F') IS NOT NULL
     ALTER TABLE dbo.SAP_DECISION_ITEMS DROP CONSTRAINT FK_SAP_DECISION_ITEMS_Log;
 IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'IX_SAP_DECISION_ITEMS_Log' AND object_id = OBJECT_ID(N'dbo.SAP_DECISION_ITEMS'))
     CREATE INDEX IX_SAP_DECISION_ITEMS_Log ON dbo.SAP_DECISION_ITEMS (Decision_Log_Id, Po_Item);
+GO
+/* schema v8: the working of each decided item (same fields as "Download working (JSON)"), shown on MRA Queues for the MRA
+   raised from that check; and the lookup article + colour + delivery month → decisions */
+IF COL_LENGTH(N'dbo.SAP_DECISION_ITEMS', N'Working_Json') IS NULL
+    ALTER TABLE dbo.SAP_DECISION_ITEMS ADD Working_Json NVARCHAR(MAX) NULL;
+GO
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'IX_SAP_DECISION_ITEMS_Key' AND object_id = OBJECT_ID(N'dbo.SAP_DECISION_ITEMS'))
+    CREATE INDEX IX_SAP_DECISION_ITEMS_Key ON dbo.SAP_DECISION_ITEMS (Gm, Colour, Delivery_Month) INCLUDE (Decision_Log_Id, Order_Qty);
 GO
 
 /* schema v4: verdict link (View_Token) on the decision, and the final SAP document (MRN) of a request_id */
@@ -438,10 +447,10 @@ BEGIN
 
         INSERT INTO dbo.SAP_DECISION_ITEMS (Decision_Log_Id, Po_Item, Article, Generic_Article, Gm, Gm_Match, Colour_Sent, Colour, Colour_Match,
                     Delivery_Month, Order_Qty, Group_Qty, Verdict, Verdict_Code, Max_Qty, Reason_Code, Rule_Id, Reason_Text, Engine,
-                    Engine_Decision, Engine_Reason, Metrics_Json)
+                    Engine_Decision, Engine_Reason, Metrics_Json, Working_Json)
         SELECT @Log_Id, j.PoItem, j.Article, j.GenericArticle, j.Gm, j.GmMatch, j.ColourSent, j.Colour, j.ColourMatch, j.DeliveryMonth,
                ISNULL(j.OrderQty, 0), ISNULL(j.GroupQty, 0), j.Verdict, j.VerdictCode, j.MaxQty, j.ReasonCode, j.RuleId, LEFT(j.ReasonText, 200),
-               j.Engine, LEFT(j.EngineDecision, 40), j.EngineReason, j.MetricsJson
+               j.Engine, LEFT(j.EngineDecision, 40), j.EngineReason, j.MetricsJson, j.WorkingJson
           FROM OPENJSON(ISNULL(@Items, N'[]')) AS a
          CROSS APPLY OPENJSON(a.value) WITH (
                 PoItem INT N'$.PoItem', Article NVARCHAR(40) N'$.Article', GenericArticle NVARCHAR(40) N'$.GenericArticle',
@@ -450,7 +459,7 @@ BEGIN
                 OrderQty FLOAT N'$.OrderQty', GroupQty FLOAT N'$.GroupQty', Verdict NVARCHAR(10) N'$.Verdict', VerdictCode NCHAR(1) N'$.VerdictCode',
                 MaxQty FLOAT N'$.MaxQty', ReasonCode NVARCHAR(40) N'$.ReasonCode', RuleId NVARCHAR(30) N'$.RuleId',
                 ReasonText NVARCHAR(400) N'$.ReasonText', Engine NVARCHAR(10) N'$.Engine', EngineDecision NVARCHAR(100) N'$.EngineDecision',
-                EngineReason NVARCHAR(MAX) N'$.EngineReason', MetricsJson NVARCHAR(MAX) N'$.MetricsJson') AS j
+                EngineReason NVARCHAR(MAX) N'$.EngineReason', MetricsJson NVARCHAR(MAX) N'$.MetricsJson', WorkingJson NVARCHAR(MAX) N'$.WorkingJson') AS j
          ORDER BY CAST(a.[key] AS INT);
         COMMIT TRANSACTION;
     END TRY
@@ -1030,7 +1039,10 @@ GO
                   file rows; 4th: the messages of the current data version (Seq order); 5th: the pending messages.
    @Cmd STAMP     (Data_Version, Is_Daily_Data_Upload for @Today, Max_Seq, Max_Pending_Seq): "has anything changed".
    @Cmd FEED_ADD  @Rows JSON array (Kind, RawJson, MsgJson, Error) stored in order: in SAP_MRA_FEED (current Data_Version)
-                  when today's file is uploaded, else in SAP_MRA_FEED_PENDING. Returns (Idx, Seq, Pending). */
+                  when today's file is uploaded, else in SAP_MRA_FEED_PENDING. Returns (Idx, Seq, Pending).
+   @Cmd DECISIONS (v8) the tool's answered SAP decision items since @Since (no tests): key (Gm, Colour, Delivery_Month),
+                  decision, reason, Max Permissible, PO, request / decision ID, time, verdict link — linked to the MRAs in the API.
+   @Cmd WORKING   (v8) Working_Json of decision item @Item_Id. */
 CREATE OR ALTER PROCEDURE dbo.PRO_SAP_MRA
     @Cmd             NVARCHAR(20),
     @Rows            NVARCHAR(MAX) = NULL,
@@ -1043,6 +1055,8 @@ CREATE OR ALTER PROCEDURE dbo.PRO_SAP_MRA
     @Trace_Id        NVARCHAR(20)  = NULL,
     @Received_At     DATETIMEOFFSET(7) = NULL,
     @Today           DATE          = NULL,
+    @Since           DATE          = NULL,
+    @Item_Id         BIGINT        = NULL,
     @Moved_Count     INT = NULL OUTPUT,
     @Error_Code      INT = NULL OUTPUT,
     @Error_Message   NVARCHAR(500) = NULL OUTPUT
@@ -1155,6 +1169,28 @@ BEGIN
             RETURN;
         END
 
+        IF @Cmd = N'DECISIONS'
+        BEGIN
+            SELECT i.Id AS ItemId, i.Gm, i.Colour, i.Delivery_Month AS DeliveryMonth, i.Order_Qty AS OrderQty, i.Group_Qty AS GroupQty,
+                   i.Verdict, i.Engine_Decision AS EngineDecision, i.Reason_Text AS ReasonText,
+                   TRY_CAST(JSON_VALUE(i.Metrics_Json, '$.headroom_qty') AS FLOAT) AS MaxPermissible,
+                   CAST(CASE WHEN i.Working_Json IS NULL THEN 0 ELSE 1 END AS BIT) AS HasWorking,
+                   l.Decision_Id AS DecisionId, l.Request_Id AS RequestId, l.Po_Number AS PoNumber, l.Decided_At AS DecidedAt, l.Mode,
+                   JSON_VALUE(l.Response_Json, '$.view_url') AS ViewUrl
+              FROM dbo.SAP_DECISION_ITEMS i
+              JOIN dbo.SAP_DECISION_LOG l ON l.Id = i.Decision_Log_Id
+             WHERE l.Http_Status = 200 AND l.Is_Test = 0 AND i.Engine_Decision IS NOT NULL
+               AND l.Decided_At >= ISNULL(@Since, DATEADD(DAY, -180, @t))
+             ORDER BY l.Decided_At DESC, i.Id DESC;
+            RETURN;
+        END
+
+        IF @Cmd = N'WORKING'
+        BEGIN
+            SELECT Working_Json AS WorkingJson FROM dbo.SAP_DECISION_ITEMS WHERE Id = @Item_Id;
+            RETURN;
+        END
+
         ;THROW 50001, N'PRO_SAP_MRA: unknown @Cmd.', 1;
     END TRY
     BEGIN CATCH
@@ -1166,6 +1202,6 @@ GO
 
 /* ───────────────────────────── schema version ───────────────────────────── */
 IF NOT EXISTS (SELECT 1 FROM dbo.schema_info WHERE [key] = N'version')
-    INSERT INTO dbo.schema_info ([key], value) VALUES (N'version', N'7');
-UPDATE dbo.schema_info SET value = N'7' WHERE [key] = N'version' AND value < N'7';
+    INSERT INTO dbo.schema_info ([key], value) VALUES (N'version', N'8');
+UPDATE dbo.schema_info SET value = N'8' WHERE [key] = N'version' AND value < N'8';
 GO

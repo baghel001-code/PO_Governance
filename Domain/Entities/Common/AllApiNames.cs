@@ -95,6 +95,8 @@ namespace Domain.Entities.Common
         public static string PO_MRA_SWITCHES { get; set; } = nameof(PO_MRA_SWITCHES);
         /// <summary>SAP Feed: test sender (admin) — api/v1/MraTestSend (POST).</summary>
         public static string PO_MRA_TEST_SEND { get; set; } = nameof(PO_MRA_TEST_SEND);
+        /// <summary>MRA Queues: the tool's decision of an MRA with its working — api/v1/MraDecision (POST).</summary>
+        public static string PO_MRA_DECISION { get; set; } = nameof(PO_MRA_DECISION);
         /// <summary>Create logins from the SCR file (admin) — api/v1/UsersScrSync (POST).</summary>
         public static string PO_USERS_SCR_SYNC { get; set; } = nameof(PO_USERS_SCR_SYNC);
         /// <summary>Save the SCR column mapping, then sync (admin) — api/v1/UsersScrMapping (POST).</summary>

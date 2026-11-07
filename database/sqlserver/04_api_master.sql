@@ -274,6 +274,7 @@ INSERT INTO @seed (Api_Name, Task_Name, Action_Name, Api_Http_Method, Api_Conten
         (N'MraState', N'PO_MRA_STATE', N'MraState', N'POST', N'application/json', 120, N'MRA Queues / SAP Feed: MRAs, PO queue, live messages, switches'),
         (N'MraSwitches', N'PO_MRA_SWITCHES', N'MraSwitches', N'POST', N'application/json', 60, N'SAP Feed: admin switches (tool requests use capacity, live PO changes)'),
         (N'MraTestSend', N'PO_MRA_TEST_SEND', N'MraTestSend', N'POST', N'application/json', 120, N'SAP Feed: test sender (admin)'),
+        (N'MraDecision', N'PO_MRA_DECISION', N'MraDecision', N'POST', N'application/json', 120, N'MRA Queues: the tool decision of an MRA with its working'),
         (N'UsersScrSync', N'PO_USERS_SCR_SYNC', N'UsersScrSync', N'POST', N'application/json', 120, N'Create logins from the SCR file (admin)'),
         (N'UsersScrMapping', N'PO_USERS_SCR_MAPPING', N'UsersScrMapping', N'POST', N'application/json', 120, N'Save the SCR column mapping, then sync (admin)'),
         (N'UserUpdate', N'PO_USER_UPDATE', N'UserUpdate', N'POST', N'application/json', 60, N'Change name / roles / active / unlock (admin)'),

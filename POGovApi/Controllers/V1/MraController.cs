@@ -38,6 +38,11 @@ namespace POGovApi.Controllers.V1
         public async Task<ActionResult<ApiDataResponse<MraStateResponse>>> MraState(CancellationToken ct) =>
             Success(await _mra.StateAsync(Me, ct));
 
+        /// <summary>{MraNo}: the tool's decision of the MRA (linked from its saved SAP check) and the working saved with it.</summary>
+        [HttpPost]
+        public async Task<ActionResult<ApiDataResponse<MraDecisionDetail>>> MraDecision([FromBody] MraNoReq req, CancellationToken ct) =>
+            Success(await _mra.DecisionAsync(req.MraNo, Me, ct));
+
         /// <summary>{ToolReqCapacity?, LivePo?} (admin).</summary>
         [HttpPost]
         public async Task<ActionResult<ApiDataResponse<MraSwitchesResponse>>> MraSwitches([FromBody] MraSwitchesReq req, CancellationToken ct)

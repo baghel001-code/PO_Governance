@@ -419,8 +419,11 @@ the **single concept** Max Permissible, like a released PO (multi concept MRAs a
    The box under the slot says how many MRAs were read per level, how many count now, and what was skipped.
 2. **During the day** SAP sends every change (new MRA, approval, self reject, reject, final) — it counts at once.
 3. **📦 MRA Queues** (everyone; buyers and category heads see their own MCs): tiles per queue (open, exception, today,
-   closed), the decision SAP sent, filters, **Waiting with me**, group by, **⬇ Excel**. Click an MRA for where it is,
-   why it counts or not, and its level history. **By colour** shows what the MRAs take per colour and month; **Today's
+   closed), the tool's decision for each MRA, filters, **Waiting with me**, group by, **⬇ Excel**. Click **Level /
+   waiting with** (or the row) for the side panel: the tool's decision for this PO (Decision ID, date, PO checked,
+   request ID, Max Permissible, **Verdict page open ↗**), the working saved with it (stock, colour share, window,
+   month by month, incoming by month), where the MRA is now and its level history. SAP does not send the decision:
+   the tool finds its own saved `/decisions` check by PO number, else by article + colour + delivery month. **By colour** shows what the MRAs take per colour and month; **Today's
    changes** shows each live change and its effect on Max Permissible.
 4. On the **New PO request** card, the box **"Open MRAs from SAP counted in this colour"** lists the MRAs added to the
    released POs; the single concept Recommendation column is **Open MRA + approved today**.

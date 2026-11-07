@@ -103,6 +103,11 @@ namespace DecisionEngine.Sap
         public string? OptionType { get; set; }
         public string EngineDecision { get; set; } = "";
         public string EngineReason { get; set; } = "";
+        /// <summary>
+        /// v8: the working of a single concept decision (Tool1Working: stock, colour share, window, month by month, incoming
+        /// parts, open MRAs counted) — saved with the decision, shown on MRA Queues for the MRA raised from this check.
+        /// </summary>
+        public System.Text.Json.Nodes.JsonObject? Working { get; set; }
     }
 
     /// <summary>The decision for a whole PO.</summary>

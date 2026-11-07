@@ -386,6 +386,7 @@ else
                     <tr><td>Decided at</td><td>@Time(td.DecidedAt)@(td.Mode != null ? " · " + td.Mode : "")</td></tr>
                     @if (!string.IsNullOrEmpty(td.PoNumber)) { <tr><td>PO checked</td><td>@td.PoNumber</td></tr> }
                     @if (!string.IsNullOrEmpty(td.RequestId)) { <tr><td>Request ID</td><td>@td.RequestId</td></tr> }
+                    @if (!string.IsNullOrEmpty(td.DocumentNo)) { <tr><td>Document (MRN) from SAP</td><td>@td.DocumentNo</td></tr> }
                     <tr><td>Qty checked</td><td>@NfD(td.OrderQty)@(td.Verdict != null ? " · SAP verdict " + td.Verdict : "")</td></tr>
                     @if (td.MaxPermissible != null) { <tr><td>Max Permissible at the decision</td><td><b>@NfD(td.MaxPermissible)</b></td></tr> }
                     <tr><td>Verdict page</td><td>@if (td.ViewUrl != null) { <a href="@td.ViewUrl" target="_blank" rel="noopener noreferrer" data-testid="mq-verdict-link">open ↗</a> } else { <span class="mq-sub">no link for this decision</span> }</td></tr>

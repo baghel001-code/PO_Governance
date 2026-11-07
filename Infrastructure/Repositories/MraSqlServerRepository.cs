@@ -219,6 +219,7 @@ namespace Infrastructure.Repositories
             public DateTimeOffset DecidedAt { get; set; }
             public string? Mode { get; set; }
             public string? ViewUrl { get; set; }
+            public string? DocumentNo { get; set; }
         }
 
         public async Task<List<MraToolDecision>> DecisionsAsync(DateTime since, CancellationToken ct = default)
@@ -231,7 +232,8 @@ namespace Infrastructure.Repositories
             {
                 ItemId = r.ItemId, Gm = r.Gm ?? "", Colour = r.Colour ?? "", DeliveryMonth = r.DeliveryMonth ?? "", OrderQty = r.OrderQty,
                 Verdict = r.Verdict, Decision = r.EngineDecision ?? "", Reason = r.ReasonText, MaxPermissible = r.MaxPermissible, HasWorking = r.HasWorking,
-                DecisionId = r.DecisionId, RequestId = r.RequestId, PoNumber = r.PoNumber, DecidedAt = r.DecidedAt, Mode = r.Mode, ViewUrl = r.ViewUrl
+                DecisionId = r.DecisionId, RequestId = r.RequestId, PoNumber = r.PoNumber, DecidedAt = r.DecidedAt, Mode = r.Mode, ViewUrl = r.ViewUrl,
+                DocumentNo = r.DocumentNo
             }).ToList();
         }
 

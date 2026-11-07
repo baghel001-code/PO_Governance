@@ -87,8 +87,9 @@ namespace DecisionEngine.Results.Mra
     }
 
     /// <summary>
-    /// v8: the tool's own SAP /decisions check the MRA was raised from (SAP does not send it back): linked by the PO number
-    /// when known, else by Generic Article + colour + delivery month — the latest answered check made before the MRA.
+    /// v8: the tool's own SAP /decisions check the MRA was raised from (SAP does not send it back): linked by the MRA number
+    /// SAP stored against the decision with POST /documents, else by the PO number when known, else by Generic Article +
+    /// colour + delivery month — the latest answered check made before the MRA.
     /// </summary>
     public sealed class MraToolDecision
     {
@@ -109,7 +110,9 @@ namespace DecisionEngine.Results.Mra
         /// <summary>Verdict page (the link SAP got in view_url); null when the decision had no link.</summary>
         public string? ViewUrl { get; set; }
         public bool HasWorking { get; set; }
-        /// <summary>"PO number" or "article · colour · month".</summary>
+        /// <summary>The final document (MRN = MRA number) SAP stored against the decision with POST /documents.</summary>
+        public string? DocumentNo { get; set; }
+        /// <summary>"MRA number (/documents)", "PO number" or "article · colour · month".</summary>
         public string MatchedBy { get; set; } = "";
 
         // key of the decided item (for the link)

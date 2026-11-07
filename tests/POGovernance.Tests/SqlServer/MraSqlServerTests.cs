@@ -96,11 +96,25 @@ namespace POGovernance.Tests.SqlServer
                     SELECT Id, 10, N'1112045675', N'BLK', N'12.2026', 2000, N'ALLOW', N'Auto Allow', N'Colour STR within limit', N'{"headroom_qty":22803}',
                            N'{"decision":"Auto Allow","maxPermissible":22803}'
                       FROM dbo.SAP_DECISION_LOG WHERE Request_Id IN (N'R-MRA-1', N'R-MRA-2');
+                    -- an old decision (before @Since) still comes when SAP stored its document (MRA number)
+                    INSERT INTO dbo.SAP_DECISION_LOG (Decision_Id, Request_Id, Http_Status, Is_Test, Po_Number, Decided_At, Response_Json)
+                    VALUES (N'D-20260801-000001', N'R-MRA-3', 200, 0, NULL, '2026-08-01T10:00:00+05:30', N'{}'),
+                           (N'D-20260801-000002', N'R-MRA-4', 200, 0, NULL, '2026-08-01T10:00:00+05:30', N'{}');
+                    INSERT INTO dbo.SAP_DECISION_ITEMS (Decision_Log_Id, Po_Item, Gm, Colour, Delivery_Month, Order_Qty, Verdict, Engine_Decision)
+                    SELECT Id, 10, N'1112045675', N'WHT', N'12.2026', 500, N'ALLOW', N'Auto Allow' FROM dbo.SAP_DECISION_LOG WHERE Request_Id IN (N'R-MRA-3', N'R-MRA-4');
+                    INSERT INTO dbo.SAP_DECISION_DOCUMENTS (Decision_Log_Id, Request_Id, Decision_Id, Document_No, Is_Current)
+                    SELECT Id, Request_Id, Decision_Id, N'900777', 1 FROM dbo.SAP_DECISION_LOG WHERE Request_Id = N'R-MRA-3';
+                    INSERT INTO dbo.SAP_DECISION_DOCUMENTS (Decision_Log_Id, Request_Id, Decision_Id, Document_No, Is_Current)
+                    SELECT Id, Request_Id, Decision_Id, N'900111', 1 FROM dbo.SAP_DECISION_LOG WHERE Request_Id = N'R-MRA-1';
                     """);
             }
             var r = Repo();
             var d = (await r.DecisionsAsync(new DateTime(2026, 10, 1))).Where(x => x.RequestId?.StartsWith("R-MRA") == true).ToList();
-            var one = Assert.Single(d);                                    // the test decision is left out
+            var old = Assert.Single(d, x => x.RequestId == "R-MRA-3");    // older than @Since, but SAP stored its document
+            Assert.Equal("900777", old.DocumentNo);
+            Assert.DoesNotContain(d, x => x.RequestId is "R-MRA-2" or "R-MRA-4");   // test decision / old without document
+            var one = Assert.Single(d, x => x.RequestId == "R-MRA-1");
+            Assert.Equal("900111", one.DocumentNo);
             Assert.Equal(("D-20261106-000001", "Auto Allow", 22803d, "http://portal/verdict/tok1", true),
                          (one.DecisionId, one.Decision, one.MaxPermissible!.Value, one.ViewUrl, one.HasWorking));
             Assert.Equal(("1112045675", "BLK", "12.2026", "4500099001"), (one.Gm, one.Colour, one.DeliveryMonth, one.PoNumber));

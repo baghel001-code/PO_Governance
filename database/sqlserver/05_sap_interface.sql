@@ -1176,11 +1176,13 @@ BEGIN
                    TRY_CAST(JSON_VALUE(i.Metrics_Json, '$.headroom_qty') AS FLOAT) AS MaxPermissible,
                    CAST(CASE WHEN i.Working_Json IS NULL THEN 0 ELSE 1 END AS BIT) AS HasWorking,
                    l.Decision_Id AS DecisionId, l.Request_Id AS RequestId, l.Po_Number AS PoNumber, l.Decided_At AS DecidedAt, l.Mode,
-                   JSON_VALUE(l.Response_Json, '$.view_url') AS ViewUrl
+                   JSON_VALUE(l.Response_Json, '$.view_url') AS ViewUrl,
+                   doc.Document_No AS DocumentNo
               FROM dbo.SAP_DECISION_ITEMS i
               JOIN dbo.SAP_DECISION_LOG l ON l.Id = i.Decision_Log_Id
+              LEFT JOIN dbo.SAP_DECISION_DOCUMENTS doc ON doc.Decision_Log_Id = l.Id AND doc.Is_Current = 1
              WHERE l.Http_Status = 200 AND l.Is_Test = 0 AND i.Engine_Decision IS NOT NULL
-               AND l.Decided_At >= ISNULL(@Since, DATEADD(DAY, -180, @t))
+               AND (l.Decided_At >= ISNULL(@Since, DATEADD(DAY, -180, @t)) OR doc.Id IS NOT NULL)
              ORDER BY l.Decided_At DESC, i.Id DESC;
             RETURN;
         END

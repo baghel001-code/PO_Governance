@@ -423,7 +423,8 @@ the **single concept** Max Permissible, like a released PO (multi concept MRAs a
    waiting with** (or the row) for the side panel: the tool's decision for this PO (Decision ID, date, PO checked,
    request ID, Max Permissible, **Verdict page open ↗**), the working saved with it (stock, colour share, window,
    month by month, incoming by month), where the MRA is now and its level history. SAP does not send the decision:
-   the tool finds its own saved `/decisions` check by PO number, else by article + colour + delivery month. **By colour** shows what the MRAs take per colour and month; **Today's
+   the tool finds its own saved `/decisions` check by the MRA number SAP stored with `/documents`, else by PO number,
+   else by article + colour + delivery month. **By colour** shows what the MRAs take per colour and month; **Today's
    changes** shows each live change and its effect on Max Permissible.
 4. On the **New PO request** card, the box **"Open MRAs from SAP counted in this colour"** lists the MRAs added to the
    released POs; the single concept Recommendation column is **Open MRA + approved today**.

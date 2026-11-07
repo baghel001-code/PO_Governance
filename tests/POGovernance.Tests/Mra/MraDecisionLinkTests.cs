@@ -30,10 +30,10 @@ namespace POGovernance.Tests.Mra
                 D(4, "2026-11-02T10:00:00+05:30", 2000, colour: "WHT"),           // other colour
                 D(5, "2026-11-02T10:00:00+05:30", 2000, mon: "01.2027"),          // other month
             });
-            var d = MraDecisionLinker.Link(M("2026-11-05"), "12.2026", idx)!;
+            var d = MraDecisionLinker.Link(M("2026-11-05"), "900201", "12.2026", idx)!;
             Assert.Equal((2L, "article · colour · month"), (d.ItemId, d.MatchedBy));
             Assert.Equal("http://portal/verdict/abc", d.ViewUrl);
-            Assert.Null(MraDecisionLinker.Link(M("2026-10-30"), "12.2026", idx));   // no check before it
+            Assert.Null(MraDecisionLinker.Link(M("2026-10-30"), "900201", "12.2026", idx));   // no check before it
         }
 
         [Fact]
@@ -45,8 +45,8 @@ namespace POGovernance.Tests.Mra
                 D(2, "2026-11-03T10:00:00+05:30", 2500),
                 D(3, "2026-10-20T10:00:00+05:30", 999, po: "0004500099001"),
             });
-            Assert.Equal(1, MraDecisionLinker.Link(M("2026-11-05"), "12.2026", idx)!.ItemId);                       // same qty as the MRA
-            var byPo = MraDecisionLinker.Link(M("2026-11-05", po: "4500099001"), "12.2026", idx)!;
+            Assert.Equal(1, MraDecisionLinker.Link(M("2026-11-05"), "900201", "12.2026", idx)!.ItemId);                       // same qty as the MRA
+            var byPo = MraDecisionLinker.Link(M("2026-11-05", po: "4500099001"), "900201", "12.2026", idx)!;
             Assert.Equal((3L, "PO number"), (byPo.ItemId, byPo.MatchedBy));
         }
 
@@ -56,8 +56,22 @@ namespace POGovernance.Tests.Mra
             var d = D(1, "2026-11-01T10:00:00+05:30", 3000);
             d.Gm = "000000001112045675";
             d.ViewUrl = "javascript:alert(1)";
-            var link = MraDecisionLinker.Link(M("2026-11-05"), "12.2026", MraDecisionLinker.Index(new[] { d }))!;
+            var link = MraDecisionLinker.Link(M("2026-11-05"), "900201", "12.2026", MraDecisionLinker.Index(new[] { d }))!;
             Assert.Null(link.ViewUrl);
+        }
+    
+
+        [Fact]
+        public void The_mra_number_sent_with_documents_links_first()
+        {
+            var d1 = D(1, "2026-11-04T10:00:00+05:30", 3000);                                    // article · colour · month match
+            var d2 = D(2, "2026-10-01T10:00:00+05:30", 1200, colour: "WHT");                      // other colour of the same decision
+            var d3 = D(3, "2026-10-01T10:00:00+05:30", 800);                                      // this MRA's item
+            d2.DecisionId = d3.DecisionId = "D-77"; d2.DocumentNo = d3.DocumentNo = "0000900201";
+            var idx = MraDecisionLinker.Index(new[] { d1, d2, d3 });
+            var link = MraDecisionLinker.Link(M("2026-11-05"), "900201", "12.2026", idx)!;
+            Assert.Equal((3L, "MRA number (/documents)", "0000900201"), (link.ItemId, link.MatchedBy, link.DocumentNo));
+            Assert.Equal(1, MraDecisionLinker.Link(M("2026-11-05"), "900299", "12.2026", idx)!.ItemId);   // no document: by article
         }
     }
 }

@@ -329,7 +329,7 @@ namespace Application.Services.V1.Sap
             foreach (var (no, m, c) in cap.Rows)
                 if (OkInfo(c.Info))
                 {
-                    var td = MraDecisionLinker.Link(m, c.Mon, decisions);
+                    var td = MraDecisionLinker.Link(m, no, c.Mon, decisions);
                     resp.Rows.Add(new MraRowDto { No = no, M = m, C = c, ToolDecision = td, DecGroup = MraCapacity.DecisionGroup(td?.Decision ?? m.Decision.Decision) });
                 }
             var visibleMras = new HashSet<string>(resp.Rows.Select(r => r.No), StringComparer.Ordinal);

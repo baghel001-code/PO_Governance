@@ -220,20 +220,12 @@ namespace Infrastructure.Repositories
             public string? Mode { get; set; }
             public string? ViewUrl { get; set; }
             public string? DocumentNo { get; set; }
-            public string? OverallVerdict { get; set; }
-            public int? PoItem { get; set; }
         }
 
-        public Task<List<MraToolDecision>> DecisionsAsync(DateTime since, CancellationToken ct = default) => DecisionsAsync(since, null, ct);
-
-        public Task<List<MraToolDecision>> DecisionsForMrasAsync(IReadOnlyCollection<string> mraNos, CancellationToken ct = default) =>
-            DecisionsAsync(DateTime.Today, System.Text.Json.JsonSerializer.Serialize(mraNos), ct);
-
-        private async Task<List<MraToolDecision>> DecisionsAsync(DateTime since, string? mraNosJson, CancellationToken ct)
+        public async Task<List<MraToolDecision>> DecisionsAsync(DateTime since, CancellationToken ct = default)
         {
             var p = P("DECISIONS");
             p.Add("@Since", since.Date, DbType.Date);
-            if (mraNosJson != null) p.Add("@Rows", mraNosJson, DbType.String, size: -1);
             var rows = (await _db.ExecuteStoredProcedureListAsync<DecisionRow>(Sp, p, commandTimeout: 120, ct: ct)).AsList();
             Check(p);
             return rows.Select(r => new MraToolDecision
@@ -241,7 +233,7 @@ namespace Infrastructure.Repositories
                 ItemId = r.ItemId, Gm = r.Gm ?? "", Colour = r.Colour ?? "", DeliveryMonth = r.DeliveryMonth ?? "", OrderQty = r.OrderQty,
                 Verdict = r.Verdict, Decision = r.EngineDecision ?? "", Reason = r.ReasonText, MaxPermissible = r.MaxPermissible, HasWorking = r.HasWorking,
                 DecisionId = r.DecisionId, RequestId = r.RequestId, PoNumber = r.PoNumber, DecidedAt = r.DecidedAt, Mode = r.Mode, ViewUrl = r.ViewUrl,
-                DocumentNo = r.DocumentNo, OverallVerdict = r.OverallVerdict, PoItem = r.PoItem
+                DocumentNo = r.DocumentNo
             }).ToList();
         }
 
@@ -269,7 +261,6 @@ namespace Infrastructure.Repositories
         public Task<string> StampAsync(string today, CancellationToken ct = default) => throw Fail();
         public Task<List<MraFeedStored>> AddFeedAsync(IReadOnlyList<MraFeedRow> rows, string by, string? sourceSystem, string? traceId, DateTimeOffset receivedAt, CancellationToken ct = default) => throw Fail();
         public Task<List<MraToolDecision>> DecisionsAsync(DateTime since, CancellationToken ct = default) => throw Fail();
-        public Task<List<MraToolDecision>> DecisionsForMrasAsync(IReadOnlyCollection<string> mraNos, CancellationToken ct = default) => throw Fail();
         public Task<string?> WorkingAsync(long itemId, CancellationToken ct = default) => throw Fail();
     }
 }

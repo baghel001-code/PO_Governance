@@ -111,9 +111,6 @@ namespace DecisionEngine.Results.Mra
         public bool HasWorking { get; set; }
         /// <summary>The final document (MRN = MRA number) SAP stored against the decision with POST /documents.</summary>
         public string? DocumentNo { get; set; }
-        /// <summary>Overall verdict of the decision (SAP_DECISION_LOG) and the PO item of this line.</summary>
-        public string? OverallVerdict { get; set; }
-        public int? PoItem { get; set; }
         /// <summary>How it was linked: "MRA number (/documents)".</summary>
         public string MatchedBy { get; set; } = "";
 

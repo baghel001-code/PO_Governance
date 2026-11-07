@@ -52,9 +52,6 @@ namespace Application.Interfaces.V1.Sap
         /// <summary>v8: the tool's answered SAP decision items that have a document (MRA number) stored by POST /documents (newest first). <paramref name="since"/> is not used (kept for the call shape).</summary>
         Task<List<MraToolDecision>> DecisionsAsync(DateTime since, CancellationToken ct = default);
 
-        /// <summary>Decision items whose document (POST /documents) is one of these MRA numbers (leading zeros ignored), newest first.</summary>
-        Task<List<MraToolDecision>> DecisionsForMrasAsync(IReadOnlyCollection<string> mraNos, CancellationToken ct = default);
-
         /// <summary>v8: the working saved with decision item <paramref name="itemId"/> (JSON), or null.</summary>
         Task<string?> WorkingAsync(long itemId, CancellationToken ct = default);
     }
@@ -77,9 +74,6 @@ namespace Application.Interfaces.V1.Sap
     {
         /// <param name="kind">"mra" or "po".</param>
         Task<SapCallResult> ReceiveAsync(string kind, string body, SapCallContext caller, CancellationToken ct = default);
-
-        /// <summary>GET/POST /mra-verdict: the tool's decision and verdict page of MRAs (linked by the MRA number sent to /documents).</summary>
-        Task<SapCallResult> VerdictAsync(string? mraNo, string? body, SapCallContext caller, CancellationToken ct = default);
     }
 
     /// <summary>Data Setup → MRA file, MRA Queues and SAP Feed pages.</summary>

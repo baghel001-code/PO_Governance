@@ -13,7 +13,7 @@ namespace POGovApi.Controllers.Sap
     /// The SAP R/3 integration API — paths, fields and status codes fixed by the SAP API specification v1.4
     /// (legacy/python-app/docs/po-governance-sap-api.yaml): <c>GET /api/sap/v1/ping</c>, <c>GET /api/sap/v1/reason-codes</c>,
     /// <c>POST /api/sap/v1/events</c>, <c>POST /api/sap/v1/decisions</c>; additions: <c>POST /api/sap/v1/documents</c>,
-    /// <c>POST /api/sap/v1/mra-events</c>, <c>POST /api/sap/v1/po-events</c>, <c>GET|POST /api/sap/v1/mra-verdict</c>. snake_case JSON (not the portal's QPS
+    /// <c>POST /api/sap/v1/mra-events</c>, <c>POST /api/sap/v1/po-events</c>. snake_case JSON (not the portal's QPS
     /// conventions), HTTP Basic authentication of a technical user (scheme <c>SapBasic</c>), IP allow-list and error bodies
     /// by <see cref="SapInterfaceMiddleware"/>. Not part of the API master (SAP calls it directly through SM59).
     /// </summary>
@@ -84,19 +84,6 @@ namespace POGovApi.Controllers.Sap
         /// </summary>
         [HttpPost("mra-events")]
         public async Task<IActionResult> MraEvents(CancellationToken ct) => Answer(await _mra.ReceiveAsync("mra", await BodyAsync(ct), Caller, ct));
-
-        /// <summary>
-        /// The tool's decision and verdict page (view_url) of an MRA, for SAP users at any approval level: GET ?mra_no=… or
-        /// POST {"mra_no": "…"} / {"mra_nos": [...]} (max 200). Linked by the MRA number SAP sent as document_no to /documents.
-        /// Always 200 with one result per MRA (found true / false).
-        /// </summary>
-        [HttpGet("mra-verdict")]
-        public async Task<IActionResult> MraVerdictGet([FromQuery(Name = "mra_no")] string? mraNo, CancellationToken ct) =>
-            Answer(await _mra.VerdictAsync(mraNo ?? "", null, Caller, ct));
-
-        /// <summary>Same as GET /mra-verdict, several MRA numbers in one call.</summary>
-        [HttpPost("mra-verdict")]
-        public async Task<IActionResult> MraVerdict(CancellationToken ct) => Answer(await _mra.VerdictAsync(null, await BodyAsync(ct), Caller, ct));
 
         /// <summary>Live PO changes (release / unrelease): stored always; they move capacity only with the admin switch "Live PO changes".</summary>
         [HttpPost("po-events")]

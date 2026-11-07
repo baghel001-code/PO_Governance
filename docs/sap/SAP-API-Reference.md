@@ -67,7 +67,6 @@ today. All examples below were captured from the running interface.
 | 5 | `POST /documents` | After the PO is really created / received in SAP | **Final document number (MRN) against the `request_id`** of the decision — feeds the "PO generated" report |
 | 6 | `POST /mra-events` | Every time an MRA changes level in SAP during the day (new, approved, self rejected, rejected, final …) | **Open MRAs take capacity** in the next decision; the morning MRA file in Data Setup replaces the list first |
 | 7 | `POST /po-events` | Every PO release / unrelease | Stored; moves capacity only with the admin switch "Live PO changes" |
-| 8 | `GET` / `POST /mra-verdict` | SAP MRA approvers at any level ("show verdict" button) | **Decision and verdict page link (`view_url`) of an MRA** by its MRA number |
 
 ---
 
@@ -861,109 +860,11 @@ A PO message:
 
 ---
 
-## 9. `GET /mra-verdict` and `POST /mra-verdict` — decision and verdict link of an MRA
-
-SAP users at every MRA approval level (Division Head, Category Head, Commercial …) can open the tool's verdict for the
-MRA they are approving. SAP passes the **MRA number** and gets the decision that was made for the PO behind it and the
-**verdict page link** (`view_url`, the same link as in the `/decisions` answer; opens in a browser without sign-in).
-
-### How the MRA is found
-
-The link is the MRA number SAP sent as `document_no` to **`POST /documents`** (§7) with the `request_id` of the checked
-PO. Nothing else is used. An MRA whose number was never sent to `/documents` answers `"found": false`. Leading zeros
-are ignored (`0000348404` = `348404`). When the same MRA number was sent for several decisions, the latest decision is
-returned.
-
-### Request
-
-One MRA — `GET`:
-
-```
-GET /api/sap/v1/mra-verdict?mra_no=0000348404
-```
-
-One or several MRAs (max 200) — `POST`:
-
-```json
-{ "mra_no": "0000348404" }
-```
-
-```json
-{ "mra_nos": ["0000348404", "321062", "900201"] }
-```
-
-| Field | Type | Req. | Meaning |
-|---|---|---|---|
-| `mra_no` | string, max 40 | one of the two | MRA number (letters, digits, `-`, `_`) |
-| `mra_nos` | array of strings | one of the two | Several MRA numbers, at most 200 |
-
-Same Basic authentication and IP allow-list as the other endpoints. Read only — safe to call any number of times.
-
-### Response `200`
-
-Always `200` with one result per MRA number asked, in the same order.
-
-```json
-{
-  "asked": 2,
-  "found": 1,
-  "results": [
-    {
-      "mra_no": "348404",
-      "found": true,
-      "message": null,
-      "decision_id": "D-20261107-000163",
-      "request_id": "WI-MRA-LINK-0007",
-      "po_number": "4500077001",
-      "document_no": "0000348404",
-      "overall_verdict": "ALLOW",
-      "mode": "SHADOW",
-      "decided_at": "2026-11-07T15:34:12+05:30",
-      "view_url": "http://192.168.0.175:8177/verdict/EQJnCvEGrHg9-PNPreztNL4epNmCkbve4I7aEwLkBd4",
-      "items": [
-        { "po_item": 10, "generic_article": "1101000101", "colour": "WHT", "delivery_month": "12.2026", "order_qty": 1500,
-          "verdict": "ALLOW", "decision": "Auto Allow", "reason_text": "Cover 0 days within the 79-day norm", "max_permissible": 16814 }
-      ]
-    },
-    {
-      "mra_no": "999999",
-      "found": false,
-      "message": "No decision for MRA 999999 - send it as document_no to POST /documents with the request_id of the checked PO",
-      "decision_id": null, "request_id": null, "po_number": null, "document_no": null, "overall_verdict": null,
-      "mode": null, "decided_at": null, "view_url": null, "items": null
-    }
-  ]
-}
-```
-
-| Field | Meaning |
-|---|---|
-| `asked` / `found` | MRA numbers asked / found |
-| `mra_no` | The MRA number without leading zeros |
-| `found` | `false` = no decision linked to this MRA (see `message`) |
-| `decision_id`, `request_id`, `po_number` | The `/decisions` call the MRA is linked to |
-| `document_no` | The MRA number as SAP sent it to `/documents` |
-| `overall_verdict` | Overall verdict of that decision (ALLOW / REDUCE / WATCH / HOLD / BLOCK) |
-| `mode`, `decided_at` | SHADOW / ENFORCE and when the tool decided |
-| `view_url` | **Verdict page** — open it in a browser (no sign-in) |
-| `items[]` | Each PO item of that decision: article, colour, delivery month, qty, verdict, the tool's decision and reason, Max Permissible at the decision |
-
-### Error answers
-
-| Case | HTTP | Body |
-|---|---|---|
-| No `mra_no` / `mra_nos` | 400 | `{"error_code":"VALIDATION_FAILED","message":"mra_no is required","trace_id":"T-…"}` |
-| Bad MRA number | 400 | `{"error_code":"VALIDATION_FAILED","message":"mra_no 'A B' is not valid (letters, digits, - and _, max 40)","trace_id":"T-…"}` |
-| More than 200 | 413 | `{"error_code":"BATCH_TOO_LARGE","message":"201 MRA numbers in one call - at most 200","trace_id":"T-…"}` |
-| Credentials / IP | 401 | as for the other endpoints |
-
----
-
-## 10. Status of the tool side
+## 9. Status of the tool side
 
 | Item | Status |
 |---|---|
-| `ping`, `reason-codes`, `decisions`, `events`, `documents`, `mra-events`, `po-events`, `mra-verdict` | **Available for testing** on staging |
+| `ping`, `reason-codes`, `decisions`, `events`, `documents`, `mra-events`, `po-events` | **Available for testing** on staging |
 | Open MRAs in the verdicts | Counted in `/decisions` (single concept): levels 1, 2, 4 and level 5 reached live today lower Max Permissible of their colour and delivery month |
 | Verdict link (`view_url`) | Available; the portal page `/verdict/<token>` opens without sign-in |
 | Decision logic | Same rules as the tool's New Request screen (Single Concept, Multi Concept, Watch List, Max Permissible) |
@@ -983,8 +884,6 @@ Always `200` with one result per MRA number asked, in the same order.
 7. `POST /documents` with the MRN of a PO that was created, then the same call again (`UNCHANGED`).
 8. `POST /mra-events`: a new MRA at level 1 (`applied`; the next `/decisions` for that colour and month has a lower Max
    Permissible), then the same MRA at level 7 (capacity comes back), then the first message again (`duplicate`).
-9. `POST /documents` with an MRA number as `document_no`, then `GET /mra-verdict?mra_no=<that MRA>` and open its
-   `view_url`.
 
 The tool's administrator sees every call — request, response, timing and trace ID — on **🔌 SAP Interface** in the
 portal, so results can be checked together.

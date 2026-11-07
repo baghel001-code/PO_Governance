@@ -124,45 +124,6 @@ namespace POGovernance.Tests.SqlServer
         }
 
         [SqlServerFact]
-        public async Task Mra_verdict_answers_the_decision_and_link_by_the_mra_number()
-        {
-            await using (var c = new SqlConnection(_fx.ConnectionString))
-            {
-                await c.ExecuteAsync("""
-                    INSERT INTO dbo.SAP_DECISION_LOG (Decision_Id, Request_Id, Http_Status, Is_Test, Po_Number, Overall_Verdict, Mode, Decided_At, Response_Json)
-                    VALUES (N'D-20261107-000501', N'R-MV-1', 200, 0, N'4500077001', N'REDUCE', N'SHADOW', '2026-11-07T10:00:00+05:30', N'{"view_url":"http://portal/verdict/mv1"}');
-                    INSERT INTO dbo.SAP_DECISION_ITEMS (Decision_Log_Id, Po_Item, Gm, Colour, Delivery_Month, Order_Qty, Verdict, Engine_Decision, Reason_Text, Metrics_Json)
-                    SELECT Id, 20, N'1120106630', N'TBL', N'11.2026', 999, N'REDUCE', N'Recommend Reduced Qty', N'Over the limit', N'{"headroom_qty":600}' FROM dbo.SAP_DECISION_LOG WHERE Request_Id = N'R-MV-1'
-                    UNION ALL
-                    SELECT Id, 10, N'1120106630', N'BLK', N'11.2026', 400, N'ALLOW', N'Auto Allow', N'Within', N'{"headroom_qty":5000}' FROM dbo.SAP_DECISION_LOG WHERE Request_Id = N'R-MV-1';
-                    INSERT INTO dbo.SAP_DECISION_DOCUMENTS (Decision_Log_Id, Request_Id, Decision_Id, Document_No, Is_Current)
-                    SELECT Id, Request_Id, Decision_Id, N'0000348404', 1 FROM dbo.SAP_DECISION_LOG WHERE Request_Id = N'R-MV-1';
-                    """);
-            }
-            var svc = new Application.Services.V1.Sap.SapMraFeedService(Repo(), null!, new POGovernance.Tests.Tool1.FakeAppClock(),
-                Microsoft.Extensions.Options.Options.Create(new Domain.Entities.AppSettings.SapInterfaceSettings()),
-                Microsoft.Extensions.Logging.Abstractions.NullLogger<Application.Services.V1.Sap.SapMraFeedService>.Instance);
-            var ctx = new SapCallContext("sap_ecq", "ECQ", "127.0.0.1", "T-1");
-
-            var one = await svc.VerdictAsync("348404", null, ctx);                  // GET ?mra_no= (leading zeros ignored)
-            Assert.Equal(200, one.Status);
-            var j = System.Text.Json.Nodes.JsonNode.Parse(one.Json)!;
-            var r = j["results"]![0]!;
-            Assert.Equal((true, "D-20261107-000501", "REDUCE", "http://portal/verdict/mv1", "4500077001"),
-                         ((bool)r["found"]!, (string?)r["decision_id"], (string?)r["overall_verdict"], (string?)r["view_url"], (string?)r["po_number"]));
-            Assert.Equal(new[] { 10, 20 }, r["items"]!.AsArray().Select(i => (int)i!["po_item"]!));
-            Assert.Equal(600d, (double)r["items"]![1]!["max_permissible"]!);
-
-            var many = System.Text.Json.Nodes.JsonNode.Parse((await svc.VerdictAsync(null, """{"mra_nos":["0000348404","999999"]}""", ctx)).Json)!;
-            Assert.Equal((2, 1), ((int)many["asked"]!, (int)many["found"]!));
-            Assert.False((bool)many["results"]![1]!["found"]!);
-            Assert.Equal("999999", (string?)many["results"]![1]!["mra_no"]);
-
-            var e = await Assert.ThrowsAsync<Domain.Exceptions.SapApiException>(() => svc.VerdictAsync(null, "{}", ctx));
-            Assert.Equal(400, e.Status);
-        }
-
-        [SqlServerFact]
         public async Task Schema_is_v8_and_the_v5_tables_are_gone()
         {
             await using var c = new SqlConnection(_fx.ConnectionString);

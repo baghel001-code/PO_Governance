@@ -737,7 +737,10 @@ message with status 3 for the same MRA makes it count.
   order. Nothing is refused as a whole — check `results[].outcome`.
 - Field names are not case sensitive; `_` and spaces are ignored (`mra_no`, `MRA No`, `mraNo` are the same).
 - MRA / PO numbers: letters, digits, `-` and `_`; leading zeros are dropped (`0000900201` = `900201`).
-- **`msg_id`** (recommended): unique per message. The same `msg_id` again → `duplicate` (safe to resend a batch).
+- **`msg_id`** (recommended): unique per message. The same `msg_id` again **for the same MRA number** (`/po-events`:
+  the same PO number) → `duplicate` (safe to resend a batch). The same `msg_id` for a different MRA / PO is applied
+  normally. Still build it unique — e.g. `ECQ300-MRA-0000348404-20261107175329-01` (system + object + number +
+  timestamp + counter) — a timestamp alone repeats when two MRAs change in the same second.
 - **`occurred_at`** (recommended): when the change happened in SAP (ISO 8601; with `Z` / `+05:30` or local time). A
   change older than the one already applied for that MRA / PO → `older` (ignored).
 
@@ -745,7 +748,7 @@ message with status 3 for the same MRA makes it count.
 |---|---|---|
 | `applied` | The change was applied | – |
 | `no change` | Same as already known | – |
-| `duplicate` | The same `msg_id` was received before | – |
+| `duplicate` | The same `msg_id` was received before for the same MRA / PO number | – |
 | `older` | Older than the change already applied | – |
 | `parked` | Not understood (reason given), or a new MRA without `generic_article` / `colour` / `qty` / `delivery_date` | Correct and send again with a new `msg_id` |
 | `stored` | PO message stored (it moves capacity only when the admin switch "Live PO changes" is ON) | – |
@@ -822,7 +825,7 @@ not known):
   "parked": 2, "stored": 0, "pending": 0,
   "results": [
     { "index": 0, "seq": 9,  "outcome": "applied",   "reason": null, "mra_no": "900201", "po_no": null },
-    { "index": 1, "seq": 10, "outcome": "duplicate", "reason": "same message id received before", "mra_no": "900201", "po_no": null },
+    { "index": 1, "seq": 10, "outcome": "duplicate", "reason": "same message id received before for MRA 900201", "mra_no": "900201", "po_no": null },
     { "index": 2, "seq": 11, "outcome": "older",     "reason": "older than the change already applied", "mra_no": "900201", "po_no": null },
     { "index": 3, "seq": 12, "outcome": "parked",    "reason": "new MRA without ga, colour, qty, dd", "mra_no": "900299", "po_no": null },
     { "index": 4, "seq": 13, "outcome": "parked",    "reason": "level not recognised: 'Approved'", "mra_no": null, "po_no": null } ],

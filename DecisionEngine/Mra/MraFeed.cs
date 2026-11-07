@@ -528,9 +528,12 @@ namespace DecisionEngine.Mra
                 var mid = isMra ? ev.Mra!.MsgId : ev.Po!.MsgId;
                 if (!string.IsNullOrEmpty(mid))
                 {
-                    if (!seen.Add(ev.Kind + "\u0001" + mid))
+                    // duplicate = same msg_id for the same MRA (PO) number: a msg_id SAP reuses for another MRA / PO is applied
+                    var num = isMra ? ev.Mra!.Mra : ev.Po!.Po;
+                    if (!seen.Add(ev.Kind + "\u0001" + num + "\u0001" + mid))
                     {
-                        res.Results.Add(new MraFeedResult { Seq = ev.Seq, Outcome = MraFeedOutcomes.Duplicate, Reason = "same message id received before" });
+                        res.Results.Add(new MraFeedResult { Seq = ev.Seq, Outcome = MraFeedOutcomes.Duplicate,
+                            Reason = "same message id received before for " + (isMra ? "MRA " : "PO ") + num });
                         continue;
                     }
                 }

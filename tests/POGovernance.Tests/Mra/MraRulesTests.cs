@@ -90,6 +90,29 @@ namespace POGovernance.Tests.Mra
         }
 
         [Fact]
+        public void A_msg_id_is_a_duplicate_only_for_the_same_mra_or_po_number()
+        {
+            // SAP built msg_id from the second only: two MRAs changed in the same second share it
+            var evs = new[]
+            {
+                Ev(1, "mra", """{"mra_no":"0000321062","level":"5","po_no":"5901056876","po_status":"UNRELEASED","generic_article":"000000001120102820","colour":"MST","qty":"1200.000 ","delivery_date":"20261128","msg_id":"SAP-20261107175329"}"""),
+                Ev(2, "mra", """{"mra_no":"0000348404","level":"1","generic_article":"000000001120106630","colour":"TBL","qty":"999 ","delivery_date":"20261130","msg_id":"SAP-20261107175329"}"""),
+                Ev(3, "mra", """{"mra_no":"348404","level":"1","generic_article":"1120106630","colour":"TBL","qty":999,"delivery_date":"20261130","msg_id":"SAP-20261107175329"}"""),
+                Ev(4, "po", """{"po_no":"5901056876","status":"2","qty":1200,"msg_id":"SAP-20261107175329"}"""),
+                Ev(5, "po", """{"po_no":"5901056877","status":"2","qty":1200,"msg_id":"SAP-20261107175329"}"""),
+                Ev(6, "po", """{"po_no":"5901056877","status":"3","qty":1200,"msg_id":"SAP-20261107175329"}"""),
+            };
+            var st = MraReplay.Run(Snap(), evs);
+            var res = st.Results.ToDictionary(r => r.Seq);
+            Assert.Equal("applied", res[2].Outcome);                         // another MRA with the same msg_id: applied
+            Assert.True(st.Mras.ContainsKey("348404"));
+            Assert.Equal(("duplicate", "same message id received before for MRA 348404"), (res[3].Outcome, res[3].Reason));
+            Assert.NotEqual("duplicate", res[4].Outcome);                    // a PO: its own number space
+            Assert.NotEqual("duplicate", res[5].Outcome);
+            Assert.Equal("duplicate", res[6].Outcome);
+        }
+
+        [Fact]
         public void Action_by_and_remark_are_optional_and_kept_in_the_history()
         {
             var (none, err) = MraMessage.Parse(JsonNode.Parse("""{"mra_no":"100","level":"7"}"""));

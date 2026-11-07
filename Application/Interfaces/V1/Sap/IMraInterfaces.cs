@@ -54,6 +54,9 @@ namespace Application.Interfaces.V1.Sap
 
         /// <summary>v8: the working saved with decision item <paramref name="itemId"/> (JSON), or null.</summary>
         Task<string?> WorkingAsync(long itemId, CancellationToken ct = default);
+
+        /// <summary>The verdict page (view_url) of the latest decision SAP stored MRA <paramref name="mraNo"/> for (POST /documents), or null.</summary>
+        Task<string?> VerdictUrlAsync(string mraNo, CancellationToken ct = default);
     }
 
     /// <summary>
@@ -74,6 +77,9 @@ namespace Application.Interfaces.V1.Sap
     {
         /// <param name="kind">"mra" or "po".</param>
         Task<SapCallResult> ReceiveAsync(string kind, string body, SapCallContext caller, CancellationToken ct = default);
+
+        /// <summary>GET /verdict-url?mra_no=: only the verdict page link of the MRA (404 MRA_NOT_FOUND when none).</summary>
+        Task<SapCallResult> VerdictUrlAsync(string? mraNo, SapCallContext caller, CancellationToken ct = default);
     }
 
     /// <summary>Data Setup → MRA file, MRA Queues and SAP Feed pages.</summary>

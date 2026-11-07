@@ -237,6 +237,17 @@ namespace Infrastructure.Repositories
             }).ToList();
         }
 
+        private sealed class VerdictUrlRow { public string? ViewUrl { get; set; } public string? DecisionId { get; set; } }
+
+        public async Task<string?> VerdictUrlAsync(string mraNo, CancellationToken ct = default)
+        {
+            var p = P("VERDICT_URL");
+            p.Add("@Mra_No", mraNo, DbType.String, size: 40);
+            var rows = (await _db.ExecuteStoredProcedureListAsync<VerdictUrlRow>(Sp, p, commandTimeout: null, ct: ct)).AsList();
+            Check(p);
+            return rows.FirstOrDefault()?.ViewUrl;
+        }
+
         private sealed class WorkingRow { public string? WorkingJson { get; set; } }
 
         public async Task<string?> WorkingAsync(long itemId, CancellationToken ct = default)
@@ -262,5 +273,6 @@ namespace Infrastructure.Repositories
         public Task<List<MraFeedStored>> AddFeedAsync(IReadOnlyList<MraFeedRow> rows, string by, string? sourceSystem, string? traceId, DateTimeOffset receivedAt, CancellationToken ct = default) => throw Fail();
         public Task<List<MraToolDecision>> DecisionsAsync(DateTime since, CancellationToken ct = default) => throw Fail();
         public Task<string?> WorkingAsync(long itemId, CancellationToken ct = default) => throw Fail();
+        public Task<string?> VerdictUrlAsync(string mraNo, CancellationToken ct = default) => throw Fail();
     }
 }

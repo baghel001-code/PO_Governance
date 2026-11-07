@@ -1057,6 +1057,7 @@ CREATE OR ALTER PROCEDURE dbo.PRO_SAP_MRA
     @Today           DATE          = NULL,
     @Since           DATE          = NULL,
     @Item_Id         BIGINT        = NULL,
+    @Mra_No          NVARCHAR(40)  = NULL,
     @Moved_Count     INT = NULL OUTPUT,
     @Error_Code      INT = NULL OUTPUT,
     @Error_Message   NVARCHAR(500) = NULL OUTPUT
@@ -1183,6 +1184,20 @@ BEGIN
               JOIN dbo.SAP_DECISION_DOCUMENTS doc ON doc.Decision_Log_Id = l.Id AND doc.Is_Current = 1   -- only the link: MRA number = document_no
              WHERE l.Http_Status = 200 AND l.Is_Test = 0 AND i.Engine_Decision IS NOT NULL
              ORDER BY l.Decided_At DESC, i.Id DESC;
+            RETURN;
+        END
+
+        /* GET /api/sap/v1/verdict-url?mra_no=: the verdict page of the latest answered decision SAP stored this MRA number
+           for as document_no (POST /documents); leading zeros ignored. No row = not found. */
+        IF @Cmd = N'VERDICT_URL'
+        BEGIN
+            SELECT TOP (1) JSON_VALUE(l.Response_Json, '$.view_url') AS ViewUrl, l.Decision_Id AS DecisionId
+              FROM dbo.SAP_DECISION_DOCUMENTS doc
+              JOIN dbo.SAP_DECISION_LOG l ON l.Id = doc.Decision_Log_Id
+             WHERE doc.Is_Current = 1 AND l.Http_Status = 200 AND l.Is_Test = 0
+               AND SUBSTRING(doc.Document_No, PATINDEX(N'%[^0]%', doc.Document_No + N'.'), 40)
+                 = SUBSTRING(@Mra_No, PATINDEX(N'%[^0]%', @Mra_No + N'.'), 40)
+             ORDER BY l.Decided_At DESC, doc.Id DESC;
             RETURN;
         END
 

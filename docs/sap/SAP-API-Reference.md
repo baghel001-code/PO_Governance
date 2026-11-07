@@ -67,6 +67,7 @@ today. All examples below were captured from the running interface.
 | 5 | `POST /documents` | After the PO is really created / received in SAP | **Final document number (MRN) against the `request_id`** of the decision — feeds the "PO generated" report |
 | 6 | `POST /mra-events` | Every time an MRA changes level in SAP during the day (new, approved, self rejected, rejected, final …) | **Open MRAs take capacity** in the next decision; the morning MRA file in Data Setup replaces the list first |
 | 7 | `POST /po-events` | Every PO release / unrelease | Stored; moves capacity only with the admin switch "Live PO changes" |
+| 8 | `GET /verdict-url` | SAP MRA approvers at any level | **Verdict page link of an MRA** by its MRA number |
 
 ---
 
@@ -860,11 +861,47 @@ A PO message:
 
 ---
 
-## 9. Status of the tool side
+## 9. `GET /verdict-url` — verdict link of an MRA
+
+SAP users at every MRA approval level pass the **MRA number** and get the **verdict page link** (`view_url`, the same
+link as in the `/decisions` answer; it opens in a browser without sign-in).
+
+The MRA is found by the MRA number SAP sent as `document_no` to `POST /documents` (§7) with the `request_id` of the
+checked PO. Leading zeros are ignored (`0000348404` = `348404`). When the same MRA number was sent for several
+decisions, the link of the latest decision is returned. Read only — safe to call any number of times.
+
+### Request
+
+```
+GET /api/sap/v1/verdict-url?mra_no=0000348404
+```
+
+| Parameter | Req. | Meaning |
+|---|---|---|
+| `mra_no` | **yes** | MRA number (letters, digits, `-`, `_`; max 40) |
+
+### Response `200` (captured)
+
+```json
+{ "mra_no": "990888", "view_url": "http://localhost:5090/verdict/EQJnCvEGrHg9-PNPreztNL4epNmCkbve4I7aEwLkBd4" }
+```
+
+### Error answers (captured)
+
+| Case | HTTP | Body |
+|---|---|---|
+| No verdict for the MRA (its number was never sent to `/documents`) | 404 | `{"error_code":"MRA_NOT_FOUND","message":"No verdict for MRA 990777 - send it as document_no to POST /documents with the request_id of the checked PO","trace_id":"T-bd903d"}` |
+| `mra_no` missing | 400 | `{"error_code":"VALIDATION_FAILED","message":"mra_no is required","trace_id":"T-e4e038"}` |
+| `mra_no` not valid | 400 | `{"error_code":"VALIDATION_FAILED","message":"mra_no is not valid (letters, digits, - and _, max 40)","trace_id":"T-cd81f8"}` |
+| Credentials / IP | 401 | as for the other endpoints |
+
+---
+
+## 10. Status of the tool side
 
 | Item | Status |
 |---|---|
-| `ping`, `reason-codes`, `decisions`, `events`, `documents`, `mra-events`, `po-events` | **Available for testing** on staging |
+| `ping`, `reason-codes`, `decisions`, `events`, `documents`, `mra-events`, `po-events`, `verdict-url` | **Available for testing** on staging |
 | Open MRAs in the verdicts | Counted in `/decisions` (single concept): levels 1, 2, 4 and level 5 reached live today lower Max Permissible of their colour and delivery month |
 | Verdict link (`view_url`) | Available; the portal page `/verdict/<token>` opens without sign-in |
 | Decision logic | Same rules as the tool's New Request screen (Single Concept, Multi Concept, Watch List, Max Permissible) |
@@ -884,6 +921,7 @@ A PO message:
 7. `POST /documents` with the MRN of a PO that was created, then the same call again (`UNCHANGED`).
 8. `POST /mra-events`: a new MRA at level 1 (`applied`; the next `/decisions` for that colour and month has a lower Max
    Permissible), then the same MRA at level 7 (capacity comes back), then the first message again (`duplicate`).
+9. `POST /documents` with an MRA number as `document_no`, then `GET /verdict-url?mra_no=<that MRA>` and open the link.
 
 The tool's administrator sees every call — request, response, timing and trace ID — on **🔌 SAP Interface** in the
 portal, so results can be checked together.

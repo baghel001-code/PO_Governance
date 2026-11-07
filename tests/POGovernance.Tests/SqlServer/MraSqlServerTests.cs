@@ -124,6 +124,37 @@ namespace POGovernance.Tests.SqlServer
         }
 
         [SqlServerFact]
+        public async Task Verdict_url_of_an_mra_number_from_documents()
+        {
+            await using (var c = new SqlConnection(_fx.ConnectionString))
+            {
+                await c.ExecuteAsync("""
+                    INSERT INTO dbo.SAP_DECISION_LOG (Decision_Id, Request_Id, Http_Status, Is_Test, Decided_At, Response_Json)
+                    VALUES (N'D-VU-1', N'R-VU-1', 200, 0, '2026-11-01T10:00:00+05:30', N'{"view_url":"http://portal/verdict/old"}'),
+                           (N'D-VU-2', N'R-VU-2', 200, 0, '2026-11-06T10:00:00+05:30', N'{"view_url":"http://portal/verdict/new"}'),
+                           (N'D-VU-3', N'R-VU-3', 200, 1, '2026-11-07T10:00:00+05:30', N'{"view_url":"http://portal/verdict/test"}');
+                    INSERT INTO dbo.SAP_DECISION_DOCUMENTS (Decision_Log_Id, Request_Id, Decision_Id, Document_No, Is_Current)
+                    SELECT Id, Request_Id, Decision_Id, CASE Request_Id WHEN N'R-VU-1' THEN N'0000348404' ELSE N'348404' END, 1
+                      FROM dbo.SAP_DECISION_LOG WHERE Request_Id LIKE N'R-VU-%';
+                    """);
+            }
+            var r = Repo();
+            Assert.Equal("http://portal/verdict/new", await r.VerdictUrlAsync("348404"));       // latest, test decision left out
+            Assert.Equal("http://portal/verdict/new", await r.VerdictUrlAsync("0000348404"));   // leading zeros ignored
+            Assert.Null(await r.VerdictUrlAsync("348405"));
+
+            var svc = new Application.Services.V1.Sap.SapMraFeedService(r, null!, new POGovernance.Tests.Tool1.FakeAppClock(),
+                Microsoft.Extensions.Options.Options.Create(new Domain.Entities.AppSettings.SapInterfaceSettings()),
+                Microsoft.Extensions.Logging.Abstractions.NullLogger<Application.Services.V1.Sap.SapMraFeedService>.Instance);
+            var ctx = new SapCallContext("sap_ecq", "ECQ", "127.0.0.1", "T-1");
+            var ok = await svc.VerdictUrlAsync("0000348404", ctx);
+            Assert.Equal((200, """{"mra_no":"348404","view_url":"http://portal/verdict/new"}"""), (ok.Status, ok.Json));
+            var nf = await Assert.ThrowsAsync<Domain.Exceptions.SapApiException>(() => svc.VerdictUrlAsync("348405", ctx));
+            Assert.Equal((404, "MRA_NOT_FOUND"), (nf.Status, nf.ErrorCode));
+            Assert.Equal(400, (await Assert.ThrowsAsync<Domain.Exceptions.SapApiException>(() => svc.VerdictUrlAsync(" ", ctx))).Status);
+        }
+
+        [SqlServerFact]
         public async Task Schema_is_v8_and_the_v5_tables_are_gone()
         {
             await using var c = new SqlConnection(_fx.ConnectionString);

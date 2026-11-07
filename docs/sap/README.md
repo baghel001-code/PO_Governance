@@ -257,6 +257,9 @@ head maintains them on `/admin/sap` → *Reason codes* (code ≤ 4, text ≤ 60 
   (DecisionEngine/Mra) and counts open MRAs (levels 1, 2, 4, level 5 reached live today) like released POs in the
   single concept Max Permissible, also in `/decisions`. Admin page: SAP Feed (switches, test sender, messages).
   Full contract: `SAP-API-Reference.md` §8.
+- **`GET /api/sap/v1/verdict-url?mra_no=…`**: only the verdict page link (`view_url`) of an MRA, for SAP approvers at
+  any level — by the MRA number SAP sent as `document_no` to `/documents`; 404 `MRA_NOT_FOUND` when none. Full
+  contract: `SAP-API-Reference.md` §9.
 
 Where a /decisions call is stored: **request** = `SAP_DECISION_LOG.Request_Json` (+ the columns request_id, PO, buyer …),
 **response** = `SAP_DECISION_LOG.Response_Json` (+ verdict columns), one row per item in `SAP_DECISION_ITEMS`; the final

@@ -335,6 +335,8 @@ namespace Domain.Entities.Sap
         public const string NotFound = "NOT_FOUND";
         /// <summary>POST /documents: no answered decision for the request_id.</summary>
         public const string RequestNotFound = "REQUEST_NOT_FOUND";
+        /// <summary>GET /verdict-url: no decision stored for this MRA number (POST /documents).</summary>
+        public const string MraNotFound = "MRA_NOT_FOUND";
         /// <summary>POST /documents: another document is already stored for the request_id (send replace = true).</summary>
         public const string DocumentConflict = "DOCUMENT_CONFLICT";
         public const string InternalError = "INTERNAL_ERROR";

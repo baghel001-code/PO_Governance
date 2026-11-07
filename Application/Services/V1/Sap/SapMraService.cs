@@ -159,6 +159,31 @@ namespace Application.Services.V1.Sap
             if (resp.Parked > 0) _log.LogWarning("SAP {Kind} events {BatchId}: {Count} message(s) set aside (parked) - see the SAP Feed page", kind, resp.BatchId, resp.Parked);
             return new SapCallResult { Status = 200, Json = SapJson.Serialize(resp) };
         }
+
+        private static readonly System.Text.RegularExpressions.Regex MraNoRx = new(@"^[A-Za-z0-9_-]{1,40}$");
+
+        public async Task<SapCallResult> VerdictUrlAsync(string? mraNo, SapCallContext caller, CancellationToken ct = default)
+        {
+            if (!_repo.Available)
+                throw new SapApiException(503, SapErrorCodes.StorageNotSupported, _repo.UnavailableReason ?? "SAP interface requires SQL Server storage");
+            var raw = (mraNo ?? "").Trim();
+            if (raw.Length == 0) throw new SapApiException(400, SapErrorCodes.ValidationFailed, "mra_no is required");
+            if (!MraNoRx.IsMatch(raw)) throw new SapApiException(400, SapErrorCodes.ValidationFailed, "mra_no is not valid (letters, digits, - and _, max 40)");
+            var no = MraNorm.NoZeros(raw);
+            var url = await _repo.VerdictUrlAsync(no, ct);
+            if (url == null || !(url.StartsWith("http://", StringComparison.OrdinalIgnoreCase) || url.StartsWith("https://", StringComparison.OrdinalIgnoreCase)))
+                throw new SapApiException(404, SapErrorCodes.MraNotFound,
+                    "No verdict for MRA " + no + " - send it as document_no to POST /documents with the request_id of the checked PO");
+            _log.LogInformation("SAP verdict-url: MRA {Mra} (by {TechUser})", no, caller.TechUser);
+            return new SapCallResult { Status = 200, Json = SapJson.Serialize(new SapVerdictUrlResponse { MraNo = no, ViewUrl = url }) };
+        }
+    }
+
+    /// <summary>Answer of GET /api/sap/v1/verdict-url.</summary>
+    public sealed class SapVerdictUrlResponse
+    {
+        [JsonPropertyName("mra_no")] public string MraNo { get; set; } = "";
+        [JsonPropertyName("view_url")] public string ViewUrl { get; set; } = "";
     }
 
     /// <summary>

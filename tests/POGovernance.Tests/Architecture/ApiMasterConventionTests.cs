@@ -39,9 +39,10 @@ namespace POGovernance.Tests.Architecture
                         paths.Add(h.HttpMethods.Single() + " /" + prefix + "/" + h.Template);
             }
             // the four v1.4 spec paths + POST /documents (final SAP document / MRN of a request_id) and POST /mra-events, /po-events
-            // (v1.1.7 live MRA / PO changes) — additions to the spec
+            // (v1.1.7 live MRA / PO changes), GET/POST /mra-verdict (decision and verdict link of an MRA) — additions to the spec
             Assert.Equal(new[] { "GET /api/sap/v1/ping", "GET /api/sap/v1/reason-codes", "POST /api/sap/v1/decisions", "POST /api/sap/v1/events",
-                                 "POST /api/sap/v1/documents", "POST /api/sap/v1/mra-events", "POST /api/sap/v1/po-events" }.OrderBy(x => x),
+                                 "POST /api/sap/v1/documents", "POST /api/sap/v1/mra-events", "POST /api/sap/v1/po-events",
+                                 "GET /api/sap/v1/mra-verdict", "POST /api/sap/v1/mra-verdict" }.OrderBy(x => x),
                          paths.OrderBy(x => x));
         }
 

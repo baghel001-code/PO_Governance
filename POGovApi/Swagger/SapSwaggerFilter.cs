@@ -70,6 +70,9 @@ namespace POGovApi.Swagger
               "colour": "LGY", "delivery_date": "2026-12-20", "msg_id": "SAP-PO-5512", "occurred_at": "2026-11-05T12:00:00+05:30" }
             """;
 
+        private const string MraVerdictOne = """{ "mra_no": "0000348404" }""";
+        private const string MraVerdictMany = """{ "mra_nos": ["0000348404", "321062", "900201"] }""";
+
         public void Apply(OpenApiOperation operation, OperationFilterContext context)
         {
             var path = context.ApiDescription.RelativePath ?? "";
@@ -93,6 +96,11 @@ namespace POGovApi.Swagger
                     "One MRA change or {\"messages\": [...]} (max 5,000). Required: mra_no, level (1-9, X or the description); a new MRA also " +
                     "generic_article, colour, qty, delivery_date. Optional: action_by, remark, po_no, po_status, occurred_at, msg_id, decision fields.",
                     ("new", "A new MRA (first level)", MraNew), ("batch", "Self reject, final with released PO, decision", MraBatch));
+            else if (path.EndsWith("/mra-verdict", StringComparison.OrdinalIgnoreCase) && context.ApiDescription.HttpMethod == "POST")
+                operation.RequestBody = Body(context, typeof(object),
+                    "MRA number(s) whose decision and verdict page (view_url) SAP wants: {\"mra_no\": \"...\"} or {\"mra_nos\": [...]} (max 200). " +
+                    "Linked by the MRA number SAP sent as document_no to POST /documents. Always 200, one result per MRA (found true / false).",
+                    ("one", "One MRA", MraVerdictOne), ("many", "Several MRAs", MraVerdictMany));
             else if (path.EndsWith("/po-events", StringComparison.OrdinalIgnoreCase))
                 operation.RequestBody = Body(context, typeof(object),
                     "One PO change or {\"messages\": [...]}. Required: po_no, po_status (Released / Unreleased / 1 / 2 / 3 / Closed); mra_no for a PO made from an MRA.",

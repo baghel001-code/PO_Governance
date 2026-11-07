@@ -101,6 +101,45 @@ namespace Application.Services.V1.Sap
         [JsonPropertyName("po_no")] public string? PoNo { get; set; }
     }
 
+    /// <summary>Answer of GET/POST /api/sap/v1/mra-verdict: one result per asked MRA number, in the asked order.</summary>
+    public sealed class SapMraVerdictResponse
+    {
+        [JsonPropertyName("asked")] public int Asked { get; set; }
+        [JsonPropertyName("found")] public int Found { get; set; }
+        [JsonPropertyName("results")] public List<SapMraVerdict> Results { get; set; } = new();
+    }
+
+    public sealed class SapMraVerdict
+    {
+        [JsonPropertyName("mra_no")] public string MraNo { get; set; } = "";
+        /// <summary>False: SAP has not sent this MRA number as document_no to POST /documents (no decision to show).</summary>
+        [JsonPropertyName("found")] public bool Found { get; set; }
+        [JsonPropertyName("message")] public string? Message { get; set; }
+        [JsonPropertyName("decision_id")] public string? DecisionId { get; set; }
+        [JsonPropertyName("request_id")] public string? RequestId { get; set; }
+        [JsonPropertyName("po_number")] public string? PoNumber { get; set; }
+        [JsonPropertyName("document_no")] public string? DocumentNo { get; set; }
+        [JsonPropertyName("overall_verdict")] public string? OverallVerdict { get; set; }
+        [JsonPropertyName("mode")] public string? Mode { get; set; }
+        [JsonPropertyName("decided_at")] public string? DecidedAt { get; set; }
+        /// <summary>The verdict page (same link as view_url of the /decisions answer).</summary>
+        [JsonPropertyName("view_url")] public string? ViewUrl { get; set; }
+        [JsonPropertyName("items")] public List<SapMraVerdictItem>? Items { get; set; }
+    }
+
+    public sealed class SapMraVerdictItem
+    {
+        [JsonPropertyName("po_item")] public int? PoItem { get; set; }
+        [JsonPropertyName("generic_article")] public string? GenericArticle { get; set; }
+        [JsonPropertyName("colour")] public string? Colour { get; set; }
+        [JsonPropertyName("delivery_month")] public string? DeliveryMonth { get; set; }
+        [JsonPropertyName("order_qty")] public double OrderQty { get; set; }
+        [JsonPropertyName("verdict")] public string? Verdict { get; set; }
+        [JsonPropertyName("decision")] public string? Decision { get; set; }
+        [JsonPropertyName("reason_text")] public string? ReasonText { get; set; }
+        [JsonPropertyName("max_permissible")] public double? MaxPermissible { get; set; }
+    }
+
     /// <summary>
     /// POST /api/sap/v1/mra-events and /po-events (v1.1.7 SAP-MRA-INTERFACE.txt §2): one message or {"messages": [...]}
     /// (max <see cref="SapInterfaceSettings.MaxMraMessagesPerBatch"/>). Every message is stored as received, also a bad one
@@ -157,6 +196,64 @@ namespace Application.Services.V1.Sap
                 kind.ToUpperInvariant(), resp.BatchId, resp.Received, resp.Applied, resp.NoChange, resp.Duplicate, resp.Older, resp.Parked, resp.Stored,
                 resp.Pending, caller.TechUser);
             if (resp.Parked > 0) _log.LogWarning("SAP {Kind} events {BatchId}: {Count} message(s) set aside (parked) - see the SAP Feed page", kind, resp.BatchId, resp.Parked);
+            return new SapCallResult { Status = 200, Json = SapJson.Serialize(resp) };
+        }
+
+        /// <summary>Most MRA numbers in one GET/POST /mra-verdict call.</summary>
+        public const int MaxVerdictMras = 200;
+
+        private static readonly System.Text.RegularExpressions.Regex MraNoRx = new(@"^[A-Za-z0-9_-]{1,40}$");
+
+        public async Task<SapCallResult> VerdictAsync(string? mraNo, string? body, SapCallContext caller, CancellationToken ct = default)
+        {
+            if (!_repo.Available)
+                throw new SapApiException(503, SapErrorCodes.StorageNotSupported, _repo.UnavailableReason ?? "SAP interface requires SQL Server storage");
+            var asked = new List<string>();
+            if (!string.IsNullOrWhiteSpace(mraNo)) asked.Add(mraNo.Trim());
+            else if (!string.IsNullOrWhiteSpace(body))
+            {
+                JsonNode? node;
+                try { node = JsonNode.Parse(body); }
+                catch (JsonException ex) { throw new SapApiException(400, SapErrorCodes.InvalidJson, "Invalid JSON: " + ex.Message); }
+                if (node is not JsonObject o) throw new SapApiException(400, SapErrorCodes.ValidationFailed, "body must be {\"mra_no\": \"...\"} or {\"mra_nos\": [...]}");
+                static string? Str(JsonNode? n) => n is JsonValue v ? (v.TryGetValue<string>(out var t) ? t : v.TryGetValue<long>(out var l) ? l.ToString(System.Globalization.CultureInfo.InvariantCulture) : null) : null;
+                if (Str(o["mra_no"]) is { } one) asked.Add(one.Trim());
+                if (o["mra_nos"] is JsonArray arr) asked.AddRange(arr.Select(Str).Where(x => x != null).Select(x => x!.Trim()));
+            }
+            asked = asked.Where(x => x.Length > 0).ToList();
+            if (asked.Count == 0) throw new SapApiException(400, SapErrorCodes.ValidationFailed, "mra_no is required");
+            if (asked.Count > MaxVerdictMras) throw new SapApiException(413, SapErrorCodes.BatchTooLarge, $"{asked.Count} MRA numbers in one call - at most {MaxVerdictMras}");
+            if (asked.FirstOrDefault(x => !MraNoRx.IsMatch(x)) is { } bad)
+                throw new SapApiException(400, SapErrorCodes.ValidationFailed, $"mra_no '{(bad.Length > 40 ? bad[..40] : bad)}' is not valid (letters, digits, - and _, max 40)");
+
+            var keys = asked.Select(MraNorm.NoZeros).Distinct(StringComparer.Ordinal).ToList();
+            var rows = await _repo.DecisionsForMrasAsync(keys, ct);
+            var byMra = rows.Where(r => r.DocumentNo != null).GroupBy(r => MraNorm.NoZeros(r.DocumentNo!)).ToDictionary(g => g.Key, g => g.ToList(), StringComparer.Ordinal);
+            var resp = new SapMraVerdictResponse { Asked = asked.Count };
+            foreach (var a in asked)
+            {
+                var k = MraNorm.NoZeros(a);
+                if (!byMra.TryGetValue(k, out var items) || items.Count == 0)
+                {
+                    resp.Results.Add(new SapMraVerdict { MraNo = k, Found = false, Message = "No decision for MRA " + k + " - send it as document_no to POST /documents with the request_id of the checked PO" });
+                    continue;
+                }
+                var latest = items.OrderByDescending(i => i.DecidedAt).First();
+                var its = items.Where(i => i.DecisionId == latest.DecisionId).OrderBy(i => i.PoItem ?? int.MaxValue).ThenBy(i => i.ItemId).ToList();
+                resp.Results.Add(new SapMraVerdict
+                {
+                    MraNo = k, Found = true, DecisionId = latest.DecisionId, RequestId = latest.RequestId, PoNumber = latest.PoNumber, DocumentNo = latest.DocumentNo,
+                    OverallVerdict = latest.OverallVerdict, Mode = latest.Mode, DecidedAt = SapJson.Timestamp(latest.DecidedAt),
+                    ViewUrl = latest.ViewUrl is { } u && (u.StartsWith("http://", StringComparison.OrdinalIgnoreCase) || u.StartsWith("https://", StringComparison.OrdinalIgnoreCase)) ? u : null,
+                    Items = its.Select(i => new SapMraVerdictItem
+                    {
+                        PoItem = i.PoItem, GenericArticle = i.Gm, Colour = i.Colour, DeliveryMonth = i.DeliveryMonth, OrderQty = i.OrderQty,
+                        Verdict = i.Verdict, Decision = i.Decision, ReasonText = i.Reason, MaxPermissible = i.MaxPermissible
+                    }).ToList()
+                });
+            }
+            resp.Found = resp.Results.Count(r => r.Found);
+            _log.LogInformation("SAP mra-verdict: {Asked} MRA number(s), {Found} found (by {TechUser})", resp.Asked, resp.Found, caller.TechUser);
             return new SapCallResult { Status = 200, Json = SapJson.Serialize(resp) };
         }
     }

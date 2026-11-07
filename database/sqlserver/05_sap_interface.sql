@@ -1177,11 +1177,14 @@ BEGIN
                    CAST(CASE WHEN i.Working_Json IS NULL THEN 0 ELSE 1 END AS BIT) AS HasWorking,
                    l.Decision_Id AS DecisionId, l.Request_Id AS RequestId, l.Po_Number AS PoNumber, l.Decided_At AS DecidedAt, l.Mode,
                    JSON_VALUE(l.Response_Json, '$.view_url') AS ViewUrl,
-                   doc.Document_No AS DocumentNo
+                   doc.Document_No AS DocumentNo, l.Overall_Verdict AS OverallVerdict, i.Po_Item AS PoItem
               FROM dbo.SAP_DECISION_ITEMS i
               JOIN dbo.SAP_DECISION_LOG l ON l.Id = i.Decision_Log_Id
               JOIN dbo.SAP_DECISION_DOCUMENTS doc ON doc.Decision_Log_Id = l.Id AND doc.Is_Current = 1   -- only the link: MRA number = document_no
              WHERE l.Http_Status = 200 AND l.Is_Test = 0 AND i.Engine_Decision IS NOT NULL
+               -- @Rows = JSON array of MRA numbers (GET/POST /api/sap/v1/mra-verdict): only these, leading zeros ignored
+               AND (@Rows IS NULL OR SUBSTRING(doc.Document_No, PATINDEX(N'%[^0]%', doc.Document_No + N'.'), 40) IN
+                    (SELECT SUBSTRING(r.value, PATINDEX(N'%[^0]%', r.value + N'.'), 40) FROM OPENJSON(@Rows) r))
              ORDER BY l.Decided_At DESC, i.Id DESC;
             RETURN;
         END

@@ -1,6 +1,6 @@
 @page "/mra"
 @* MRA Queues (v1.1.7 app/mra.js): every MRA from the morning file + SAP's live changes, where it waits, whether it takes
-   capacity and why, the decision SAP sent (shown only), its level history; "By colour", "Today's changes" and (with the
+   capacity and why, the tool's decision linked by the MRA number SAP sent to /documents, its level history; "By colour", "Today's changes" and (with the
    switch "Live PO changes") the PO queue. Buyers / category heads see their own MCs (the API filters). PO_MRA_STATE. *@
 @using ClosedXML.Excel
 @using DecisionEngine.Mra
@@ -202,8 +202,8 @@ else
             if (!skipDec && _dec.Length > 0 && x.DecGroup != _dec) return false;
             if (q.Length > 0)
             {
-                var hay = string.Join(" ", x.No, x.M.Ga, x.M.Colour, x.M.GaDesc, x.M.CreatedBy, x.M.CreatedById, x.M.PoNo, x.M.Decision.Decision,
-                                      x.M.Decision.DecisionId, x.C.Info?.McDesc, x.C.Info?.Desc).ToLowerInvariant();
+                var hay = string.Join(" ", x.No, x.M.Ga, x.M.Colour, x.M.GaDesc, x.M.CreatedBy, x.M.CreatedById, x.M.PoNo, x.ToolDecision?.Decision,
+                                      x.ToolDecision?.DecisionId, x.C.Info?.McDesc, x.C.Info?.Desc).ToLowerInvariant();
                 if (!hay.Contains(q)) return false;
             }
             return true;
@@ -329,7 +329,7 @@ else
                 @if (x.DecGroup == "Not sent") { <span class="mq-d d-ns">not found</span> }
                 else
                 {
-                    var dec = td?.Decision ?? m.Decision.Decision; var why = td?.Reason ?? m.Decision.DecisionReason;
+                    var dec = td?.Decision; var why = td?.Reason;
                     <span class="mq-d @DecCls(x.DecGroup)">@dec</span>
                     <div class="mq-sub" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="@why">@why</div>
                 }
@@ -364,7 +364,6 @@ else
     {
         var m = x.M; var c = x.C;
         var td = _detail?.Decision ?? x.ToolDecision;
-        var sent = m.Decision;
         var w = _detail?.Working;
         <div class="mq-panel" data-testid="mq-panel">
             <div style="display:flex;align-items:flex-start;gap:8px">
@@ -393,18 +392,9 @@ else
                     <tr><td>Linked by</td><td class="mq-sub">@td.MatchedBy</td></tr>
                 </table>
             }
-            else if (sent.Decision != null)
-            {
-                <div class="mq-pbox @DecCls(x.DecGroup)"><div style="font-size:15px;font-weight:800">@sent.Decision</div>@if (!string.IsNullOrEmpty(sent.DecisionReason)) { <div style="margin-top:4px">@sent.DecisionReason</div> }</div>
-                <table class="mq-kv">
-                    @if (sent.DecisionId != null) { <tr><td>Decision ID</td><td>@sent.DecisionId</td></tr> }
-                    @if (sent.DecisionMaxPerm != null) { <tr><td>Max Permissible at the decision</td><td>@Nf(sent.DecisionMaxPerm)</td></tr> }
-                    @if (sent.DecisionUrl != null) { <tr><td>Verdict page</td><td><a href="@sent.DecisionUrl" target="_blank" rel="noopener noreferrer">open ↗</a></td></tr> }
-                </table>
-            }
             else
             {
-                <div class="mq-pbox d-ns">No check of the tool was found for this MRA (same PO, or same Generic Article, colour and delivery month, in the last @Application.Services.V1.Sap.MraService.DecisionDays days, made before the MRA).</div>
+                <div class="mq-pbox d-ns">No decision found for this MRA: SAP has not sent MRA @x.No as <code>document_no</code> to <code>POST /documents</code> for a checked PO.</div>
             }
 
             @if (_detailBusy)
@@ -651,8 +641,8 @@ else
         {
             var m = x.M; var c = x.C;
             object?[] v = { x.No, m.Ga, c.Info?.Desc ?? m.GaDesc, m.Colour, m.Dd, MonL(c.Mon), m.Qty, m.Level, Lvl(m.Level), c.Queue, c.Owner, c.Counted ? "Yes" : "No", c.Why,
-                            x.ToolDecision?.Decision ?? m.Decision.Decision, x.ToolDecision?.Reason ?? m.Decision.DecisionReason, x.ToolDecision?.DecisionId ?? m.Decision.DecisionId,
-                            x.ToolDecision?.MaxPermissible ?? (double?)m.Decision.DecisionMaxPerm, x.ToolDecision?.ViewUrl ?? m.Decision.DecisionUrl, m.PoNo, PoStatusText(m.PoStatus),
+                            x.ToolDecision?.Decision, x.ToolDecision?.Reason, x.ToolDecision?.DecisionId,
+                            x.ToolDecision?.MaxPermissible, x.ToolDecision?.ViewUrl, m.PoNo, PoStatusText(m.PoStatus),
                             c.Info?.Brand, c.Info?.McCd, c.Info?.Mrp, c.Info?.Flag, Who(c.DhEmail), Who(c.ChEmail), m.CreatedBy ?? m.CreatedById,
                             m.Src == "live" ? "live" : "morning file", m.ChangedAt?.ToString("yyyy-MM-dd HH:mm") };
             for (var i = 0; i < v.Length; i++) ws.Cell(r, i + 1).Value = XLCellValue.FromObject(v[i]);

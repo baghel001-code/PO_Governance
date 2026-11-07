@@ -52,8 +52,8 @@ Tool 2, Recommendation); their expected values changed only where v1.1.6 changes
 - **Morning file:** replaces the list (as Python). This undoes the "merge" behaviour of 4 Nov; the v5 MRA status
   tables and endpoints are dropped.
 - **MRA decision and working (schema v8):** in Python SAP sends the decision fields in the MRA message. Here SAP
-  does not: the tool links each MRA to its own saved `/decisions` answer (MRA number stored by `/documents`, else PO
-  number, else article + colour + month;
+  does not: the tool links each MRA to its own saved `/decisions` answer only by the MRA number SAP stores as
+  `document_no` with `POST /documents` (no document → "Not found";
   `Application/Services/V1/Sap/MraDecisionLinker.cs`). Each answered decision item now saves its working
   (`SAP_DECISION_ITEMS.Working_Json`); the panel reads it through `PO_MRA_DECISION`. Decisions made before v8 show
   the decision and verdict link but no working.

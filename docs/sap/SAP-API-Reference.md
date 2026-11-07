@@ -632,8 +632,8 @@ Other answers: `400` for a malformed envelope (e.g. `{"error_code":"VALIDATION_F
 
 Called when the PO is **really created in SAP** (e.g. after release / goods receipt, whatever document the business
 names "final", normally the MRN). When an MRA is raised from the checked PO, send the **MRA number as `document_no`**:
-the MRA Queues page then links that MRA exactly to this decision (its verdict, Max Permissible, verdict page and
-working). It saves the document number against the `request_id` of the `/decisions` call, so the
+this is the **only** link between an MRA and the tool's decision — the MRA Queues page then shows that decision (its
+verdict, Max Permissible, verdict page and working). An MRA whose number was never sent here shows "Not found". It saves the document number against the `request_id` of the `/decisions` call, so the
 tool can report which checked POs were actually generated — not only which ones were asked about.
 
 ### Rules
@@ -767,7 +767,7 @@ message with status 3 for the same MRA makes it count.
 | `po_status` | with level 5 | `Released` / `Unreleased` / `1` / `2` / `3` / `Closed` — decides whether a level 5 MRA counts |
 | `occurred_at` | recommended | Time of the change in SAP |
 | `msg_id` | recommended | Unique per message |
-| `decision`, `decision_reason`, `decision_id`, `decision_at`, `max_permissible`, `decision_url`, `working` | no | **Not needed — SAP can leave them out.** The tool links each MRA to its own saved `/decisions` answer: first by the **MRA number SAP sent as `document_no` to `POST /documents`** for that `request_id` (exact link — please send it), then by the PO number (when the MRA carries it), else by Generic Article + colour + delivery month (the latest answered, non-test check made before the MRA, same qty preferred, last 180 days). The MRA Queues panel then shows that decision, its reason, Max Permissible, the verdict page (`view_url`) and the working saved with it. If SAP still sends these fields they are stored and shown only when no saved decision matches; **never used to count** |
+| `decision`, `decision_reason`, `decision_id`, `decision_at`, `max_permissible`, `decision_url`, `working` | no | **Not needed — leave them out.** Accepted for compatibility but not shown and never used to count. The MRA Queues page shows only the tool's own saved `/decisions` answer, linked **only by the MRA number**: send the MRA number as `document_no` to `POST /documents` (§7) with the `request_id` of the checked PO. Without that document the MRA shows **"Not found"** |
 
 Examples:
 

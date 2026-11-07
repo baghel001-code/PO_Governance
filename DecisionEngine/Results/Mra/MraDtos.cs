@@ -87,9 +87,8 @@ namespace DecisionEngine.Results.Mra
     }
 
     /// <summary>
-    /// v8: the tool's own SAP /decisions check the MRA was raised from (SAP does not send it back): linked by the MRA number
-    /// SAP stored against the decision with POST /documents, else by the PO number when known, else by Generic Article +
-    /// colour + delivery month — the latest answered check made before the MRA.
+    /// v8: the tool's own SAP /decisions check of the MRA (SAP does not send it back): linked only by the MRA number SAP
+    /// stored as document_no against the decision with POST /documents.
     /// </summary>
     public sealed class MraToolDecision
     {
@@ -112,7 +111,7 @@ namespace DecisionEngine.Results.Mra
         public bool HasWorking { get; set; }
         /// <summary>The final document (MRN = MRA number) SAP stored against the decision with POST /documents.</summary>
         public string? DocumentNo { get; set; }
-        /// <summary>"MRA number (/documents)", "PO number" or "article · colour · month".</summary>
+        /// <summary>How it was linked: "MRA number (/documents)".</summary>
         public string MatchedBy { get; set; } = "";
 
         // key of the decided item (for the link)
@@ -140,7 +139,7 @@ namespace DecisionEngine.Results.Mra
         public string No { get; set; } = "";
         public MraState M { get; set; } = new();
         public MraClass C { get; set; } = new();
-        /// <summary>Decision group (Allow, Reduce, Watch List, Hold, Block, No Plan, Other, Not sent): of the tool's decision, else of the one SAP sent.</summary>
+        /// <summary>Decision group (Allow, Reduce, Watch List, Hold, Block, No Plan, Other) of the tool's linked decision; "Not sent" (shown "Not found") when none.</summary>
         public string DecGroup { get; set; } = "Not sent";
         /// <summary>v8: the tool's own decision for this MRA (null when no saved check matches).</summary>
         public MraToolDecision? ToolDecision { get; set; }

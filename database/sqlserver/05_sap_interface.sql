@@ -1180,9 +1180,8 @@ BEGIN
                    doc.Document_No AS DocumentNo
               FROM dbo.SAP_DECISION_ITEMS i
               JOIN dbo.SAP_DECISION_LOG l ON l.Id = i.Decision_Log_Id
-              LEFT JOIN dbo.SAP_DECISION_DOCUMENTS doc ON doc.Decision_Log_Id = l.Id AND doc.Is_Current = 1
+              JOIN dbo.SAP_DECISION_DOCUMENTS doc ON doc.Decision_Log_Id = l.Id AND doc.Is_Current = 1   -- only the link: MRA number = document_no
              WHERE l.Http_Status = 200 AND l.Is_Test = 0 AND i.Engine_Decision IS NOT NULL
-               AND (l.Decided_At >= ISNULL(@Since, DATEADD(DAY, -180, @t)) OR doc.Id IS NOT NULL)
              ORDER BY l.Decided_At DESC, i.Id DESC;
             RETURN;
         END

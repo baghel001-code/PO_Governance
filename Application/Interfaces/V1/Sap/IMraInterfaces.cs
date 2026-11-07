@@ -49,7 +49,7 @@ namespace Application.Interfaces.V1.Sap
         Task<List<MraFeedStored>> AddFeedAsync(IReadOnlyList<MraFeedRow> rows, string by, string? sourceSystem, string? traceId, DateTimeOffset receivedAt,
                                       CancellationToken ct = default);
 
-        /// <summary>v8: the tool's answered SAP decision items since <paramref name="since"/> (newest first) — linked to the MRAs.</summary>
+        /// <summary>v8: the tool's answered SAP decision items that have a document (MRA number) stored by POST /documents (newest first). <paramref name="since"/> is not used (kept for the call shape).</summary>
         Task<List<MraToolDecision>> DecisionsAsync(DateTime since, CancellationToken ct = default);
 
         /// <summary>v8: the working saved with decision item <paramref name="itemId"/> (JSON), or null.</summary>

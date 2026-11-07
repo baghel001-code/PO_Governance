@@ -106,13 +106,15 @@ namespace POGovernance.Tests.SqlServer
                     SELECT Id, Request_Id, Decision_Id, N'900777', 1 FROM dbo.SAP_DECISION_LOG WHERE Request_Id = N'R-MRA-3';
                     INSERT INTO dbo.SAP_DECISION_DOCUMENTS (Decision_Log_Id, Request_Id, Decision_Id, Document_No, Is_Current)
                     SELECT Id, Request_Id, Decision_Id, N'900111', 1 FROM dbo.SAP_DECISION_LOG WHERE Request_Id = N'R-MRA-1';
+                    INSERT INTO dbo.SAP_DECISION_DOCUMENTS (Decision_Log_Id, Request_Id, Decision_Id, Document_No, Is_Current)
+                    SELECT Id, Request_Id, Decision_Id, N'900222', 1 FROM dbo.SAP_DECISION_LOG WHERE Request_Id = N'R-MRA-2';
                     """);
             }
             var r = Repo();
             var d = (await r.DecisionsAsync(new DateTime(2026, 10, 1))).Where(x => x.RequestId?.StartsWith("R-MRA") == true).ToList();
-            var old = Assert.Single(d, x => x.RequestId == "R-MRA-3");    // older than @Since, but SAP stored its document
+            var old = Assert.Single(d, x => x.RequestId == "R-MRA-3");    // any age, SAP stored its document
             Assert.Equal("900777", old.DocumentNo);
-            Assert.DoesNotContain(d, x => x.RequestId is "R-MRA-2" or "R-MRA-4");   // test decision / old without document
+            Assert.DoesNotContain(d, x => x.RequestId is "R-MRA-2" or "R-MRA-4");   // test decision / no document: never linked
             var one = Assert.Single(d, x => x.RequestId == "R-MRA-1");
             Assert.Equal("900111", one.DocumentNo);
             Assert.Equal(("D-20261106-000001", "Auto Allow", 22803d, "http://portal/verdict/tok1", true),

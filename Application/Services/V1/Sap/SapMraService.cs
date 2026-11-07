@@ -330,7 +330,7 @@ namespace Application.Services.V1.Sap
                 if (OkInfo(c.Info))
                 {
                     var td = MraDecisionLinker.Link(m, no, c.Mon, decisions);
-                    resp.Rows.Add(new MraRowDto { No = no, M = m, C = c, ToolDecision = td, DecGroup = MraCapacity.DecisionGroup(td?.Decision ?? m.Decision.Decision) });
+                    resp.Rows.Add(new MraRowDto { No = no, M = m, C = c, ToolDecision = td, DecGroup = td == null ? "Not sent" : MraCapacity.DecisionGroup(td.Decision) });
                 }
             var visibleMras = new HashSet<string>(resp.Rows.Select(r => r.No), StringComparer.Ordinal);
             var effects = cap.PoEffects.ToDictionary(e => e.Po, StringComparer.Ordinal);
@@ -421,7 +421,7 @@ namespace Application.Services.V1.Sap
             LivePo = p?[MraSwitches.LivePoKey] is JsonValue l && l.GetValueKind() == JsonValueKind.True
         };
 
-        /// <summary>Decision items of the last <see cref="DecisionDays"/> days; none (logged) when the lookup fails.</summary>
+        /// <summary>Decision items SAP stored an MRA number for (POST /documents); none (logged) when the lookup fails.</summary>
         private async Task<List<MraToolDecision>> DecisionsSafeAsync(CancellationToken ct)
         {
             try
@@ -446,8 +446,6 @@ namespace Application.Services.V1.Sap
             var res = new MraDecisionDetail { MraNo = no, Decision = row.ToolDecision };
             if (row.ToolDecision is { HasWorking: true } td && await _repo.WorkingAsync(td.ItemId, ct) is { Length: > 0 } json)
                 res.Working = JsonNode.Parse(json) as JsonObject;
-            else if (row.ToolDecision == null && row.M.Decision.Working != null)
-                res.Working = (JsonObject)row.M.Decision.Working.DeepClone();   // a working SAP sent (optional field)
             return res;
         }
 

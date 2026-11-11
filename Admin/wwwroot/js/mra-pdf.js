@@ -21,17 +21,22 @@
         var name = btn.getAttribute('data-pdf-name') || 'MRA.pdf';
         var label = btn.textContent;
         btn.disabled = true; btn.textContent = 'Preparing PDF…';
+        // html2canvas offsets the capture by the page scroll: with the MRA Queues list scrolled down the PDF came out
+        // shifted down and cut off. Capture from the top of the page, then put the scroll back.
+        var sx = window.scrollX, sy = window.scrollY;
         lib().then(function (html2pdf) {
+            window.scrollTo(0, 0);
             return html2pdf().set({
                 margin: [8, 8, 10, 8],
                 filename: name,
                 image: { type: 'jpeg', quality: 0.95 },
-                html2canvas: { scale: 2, backgroundColor: '#ffffff', useCORS: true },
+                html2canvas: { scale: 2, backgroundColor: '#ffffff', useCORS: true, scrollX: 0, scrollY: 0,
+                               windowWidth: document.documentElement.clientWidth, windowHeight: Math.max(window.innerHeight, el.scrollHeight + 100) },
                 jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
                 pagebreak: { mode: ['css', 'legacy'], avoid: ['tr', '.mq-pbox'] }
             }).from(el).save();
         }).catch(function (e) {
             alert('The PDF could not be made: ' + (e && e.message ? e.message : e));
-        }).then(function () { btn.disabled = false; btn.textContent = label; });
+        }).then(function () { window.scrollTo(sx, sy); btn.disabled = false; btn.textContent = label; });
     };
 })();

@@ -23,6 +23,10 @@ namespace Admin.Services.Platform
         public static Task<ApiDataResponse<MraDecisionDetail>> MraDecisionAsync(this IAPICall api, string mraNo) =>
             Call<MraDecisionDetail, MraNoReq>(api, AllApiNames.PO_MRA_DECISION, new MraNoReq { MraNo = mraNo });
 
+        /// <summary>The MRA page behind the SAP verdict-url link (no sign-in).</summary>
+        public static Task<ApiDataResponse<MraVerdictView>> MraVerdictViewAsync(this IAPICall api, string token, string mraNo) =>
+            Call<MraVerdictView, MraVerdictViewReq>(api, AllApiNames.PO_MRA_VERDICT_VIEW, new MraVerdictViewReq { Token = token, MraNo = mraNo });
+
         public static Task<ApiDataResponse<MraFeedResponse>> MraTestSendAsync(this IAPICall api, MraTestSendReq req) =>
             Call<MraFeedResponse, MraTestSendReq>(api, AllApiNames.PO_MRA_TEST_SEND, req);
     }

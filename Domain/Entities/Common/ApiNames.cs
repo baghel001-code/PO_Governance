@@ -105,5 +105,6 @@ namespace Domain.Entities.Common
         public string? PO_SAP_DOCUMENT_REPORT { get; set; }
         public string? PO_SAP_DOCUMENT_REPORT_EXPORT { get; set; }
         public string? PO_SAP_VERDICT_VIEW { get; set; }
+        public string? PO_MRA_VERDICT_VIEW { get; set; }
     }
 }

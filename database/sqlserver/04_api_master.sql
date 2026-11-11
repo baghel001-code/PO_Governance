@@ -334,7 +334,8 @@ INSERT INTO @seed (Api_Name, Task_Name, Action_Name, Api_Http_Method, Api_Conten
         (N'SapSampleRequest', N'PO_SAP_SAMPLE_REQUEST', N'SapSampleRequest', N'POST', N'application/json', 60, N'SAP interface: sample /decisions request'),
         (N'SapDocumentReport', N'PO_SAP_DOCUMENT_REPORT', N'SapDocumentReport', N'POST', N'application/json', 120, N'SAP interface: PO document report (decisions + MRN)'),
         (N'SapDocumentReportExport', N'PO_SAP_DOCUMENT_REPORT_EXPORT', N'SapDocumentReportExport', N'POST', N'application/json', 300, N'SAP interface: PO document report as Excel'),
-        (N'SapVerdictView', N'PO_SAP_VERDICT_VIEW', N'SapVerdictView', N'POST', N'application/json', 60, N'SAP verdict link page (no sign-in, token)');
+        (N'SapVerdictView', N'PO_SAP_VERDICT_VIEW', N'SapVerdictView', N'POST', N'application/json', 60, N'SAP verdict link page (no sign-in, token)'),
+        (N'MraVerdictView', N'PO_MRA_VERDICT_VIEW', N'MraVerdictView', N'POST', N'application/json', 120, N'MRA verdict page of verdict-url (no sign-in, token)');
 
 -- one-time move of full URLs (a database from before API_BASE_URL: no portal row has a Base_Url_Key yet): their most common
 -- base URL becomes the @ApiEnv base URL. Later runs leave rows that were given a full URL on purpose alone.

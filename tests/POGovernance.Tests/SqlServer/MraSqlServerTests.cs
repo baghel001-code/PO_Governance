@@ -139,16 +139,17 @@ namespace POGovernance.Tests.SqlServer
                     """);
             }
             var r = Repo();
-            Assert.Equal("http://portal/verdict/new", await r.VerdictUrlAsync("348404"));       // latest, test decision left out
-            Assert.Equal("http://portal/verdict/new", await r.VerdictUrlAsync("0000348404"));   // leading zeros ignored
-            Assert.Null(await r.VerdictUrlAsync("348405"));
+            Assert.Equal("http://portal/verdict/new", (await r.VerdictLinkAsync("348404"))!.ViewUrl);       // latest, test decision left out
+            Assert.Equal("D-VU-2", (await r.VerdictLinkAsync("0000348404"))!.DecisionId);                 // leading zeros ignored
+            Assert.Null(await r.VerdictLinkAsync("348405"));
 
             var svc = new Application.Services.V1.Sap.SapMraFeedService(r, null!, new POGovernance.Tests.Tool1.FakeAppClock(),
                 Microsoft.Extensions.Options.Options.Create(new Domain.Entities.AppSettings.SapInterfaceSettings()),
                 Microsoft.Extensions.Logging.Abstractions.NullLogger<Application.Services.V1.Sap.SapMraFeedService>.Instance);
             var ctx = new SapCallContext("sap_ecq", "ECQ", "127.0.0.1", "T-1");
             var ok = await svc.VerdictUrlAsync("0000348404", ctx);
-            Assert.Equal((200, """{"mra_no":"348404","view_url":"http://portal/verdict/new"}"""), (ok.Status, ok.Json));
+            // the MRA page (same content as the MRA Queues panel), on the portal and with the token of the decision's link
+            Assert.Equal((200, """{"mra_no":"348404","view_url":"http://portal/mra-verdict/new/348404"}"""), (ok.Status, ok.Json));
             var nf = await Assert.ThrowsAsync<Domain.Exceptions.SapApiException>(() => svc.VerdictUrlAsync("348405", ctx));
             Assert.Equal((404, "MRA_NOT_FOUND"), (nf.Status, nf.ErrorCode));
             Assert.Equal(400, (await Assert.ThrowsAsync<Domain.Exceptions.SapApiException>(() => svc.VerdictUrlAsync(" ", ctx))).Status);

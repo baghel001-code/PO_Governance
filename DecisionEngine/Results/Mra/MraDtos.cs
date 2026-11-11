@@ -133,6 +133,23 @@ namespace DecisionEngine.Results.Mra
         public string MraNo { get; set; } = "";
     }
 
+    /// <summary>The MRA verdict page (no sign-in): the token of the decision's verdict link and the MRA number.</summary>
+    public sealed class MraVerdictViewReq
+    {
+        public string Token { get; set; } = "";
+        public string MraNo { get; set; } = "";
+    }
+
+    /// <summary>The MRA verdict page: the same content as the MRA Queues side panel.</summary>
+    public sealed class MraVerdictView
+    {
+        public MraRowDto Row { get; set; } = new();
+        public MraDecisionDetail Detail { get; set; } = new();
+        /// <summary>Names of the MRA's Division Head / Category Head only (e-mail → name).</summary>
+        public Dictionary<string, string> Owners { get; set; } = new(StringComparer.OrdinalIgnoreCase);
+        public DateTimeOffset? ExpiresAt { get; set; }
+    }
+
     /// <summary>One MRA on the dashboard: its replayed state and where it is / whether it counts.</summary>
     public sealed class MraRowDto
     {

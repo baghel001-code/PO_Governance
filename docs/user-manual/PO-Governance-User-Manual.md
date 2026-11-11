@@ -422,7 +422,8 @@ the **single concept** Max Permissible, like a released PO (multi concept MRAs a
    closed), the tool's decision for each MRA, filters, **Waiting with me**, group by, **⬇ Excel**. Click **Level /
    waiting with** (or the row) for the side panel: the tool's decision for this PO (Decision ID, date, PO checked,
    request ID, Max Permissible, **Verdict page open ↗**), the working saved with it (stock, colour share, window,
-   month by month, incoming by month), where the MRA is now and its level history. SAP does not send the decision:
+   month by month, incoming by month), where the MRA is now and its level history. **⬇ Download PDF** saves the panel
+   as an A4 PDF. SAP approvers open the same page without sign-in from the link SAP gets with `GET /verdict-url`. SAP does not send the decision:
    the tool links its own saved `/decisions` check **only by the MRA number** SAP stored with `/documents`
    (`document_no`). No such document → **Not found**. **By colour** shows what the MRAs take per colour and month; **Today's
    changes** shows each live change and its effect on Max Permissible.

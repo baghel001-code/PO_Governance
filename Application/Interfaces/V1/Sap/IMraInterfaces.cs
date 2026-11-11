@@ -9,6 +9,9 @@ namespace Application.Interfaces.V1.Sap
     /// <summary>A stored feed message to add (one per received message, also a bad one).</summary>
     public sealed record MraFeedRow(string Kind, string RawJson, string? MsgJson, string? Error);
 
+    /// <summary>The decision's verdict link (view_url) of an MRA number and when it expires.</summary>
+    public sealed record MraVerdictLink(string ViewUrl, string? DecisionId, DateTimeOffset? ExpiresAt);
+
     /// <summary>A stored message: its number, and whether it waits in the pending table (today's file not uploaded yet).</summary>
     public sealed record MraFeedStored(long Seq, bool Pending);
 
@@ -55,8 +58,8 @@ namespace Application.Interfaces.V1.Sap
         /// <summary>v8: the working saved with decision item <paramref name="itemId"/> (JSON), or null.</summary>
         Task<string?> WorkingAsync(long itemId, CancellationToken ct = default);
 
-        /// <summary>The verdict page (view_url) of the latest decision SAP stored MRA <paramref name="mraNo"/> for (POST /documents), or null.</summary>
-        Task<string?> VerdictUrlAsync(string mraNo, CancellationToken ct = default);
+        /// <summary>The verdict link (view_url) of the latest decision SAP stored MRA <paramref name="mraNo"/> for (POST /documents), or null.</summary>
+        Task<MraVerdictLink?> VerdictLinkAsync(string mraNo, CancellationToken ct = default);
     }
 
     /// <summary>
@@ -93,5 +96,11 @@ namespace Application.Interfaces.V1.Sap
         Task<MraFeedResponse> TestSendAsync(MraTestSendReq req, AppUserContext user, CancellationToken ct = default);
         /// <summary>v8: the tool's decision of one MRA with the working saved with it (side panel of MRA Queues).</summary>
         Task<MraDecisionDetail> DecisionAsync(string mraNo, AppUserContext user, CancellationToken ct = default);
+        /// <summary>
+        /// The MRA page behind GET /api/sap/v1/verdict-url (portal /mra-verdict/&lt;token&gt;/&lt;mra&gt;, no sign-in): the same
+        /// content as the MRA Queues panel. Valid only when <paramref name="token"/> is the verdict link token of the decision
+        /// SAP stored this MRA number for; 404 otherwise, 410 when the link expired.
+        /// </summary>
+        Task<MraVerdictView> VerdictViewAsync(string token, string mraNo, CancellationToken ct = default);
     }
 }

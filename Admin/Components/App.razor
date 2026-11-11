@@ -19,6 +19,7 @@
     <script src="_framework/blazor.web.js"></script>
     <script src="_content/MudBlazor/MudBlazor.min.js"></script>
     <script src="js/pogov.js"></script>
+    <script src="js/mra-pdf.js"></script>
 </body>
 
 </html>
@@ -27,7 +28,8 @@
     [CascadingParameter] private HttpContext HttpContext { get; set; } = default!;
 
     // Sign-in pages are plain server-rendered forms (they set the auth cookie) and the public SAP verdict page
-    // (/verdict/<token>) is read-only; everything else is interactive.
+    // (/verdict/<token>) and MRA page (/mra-verdict/<token>/<mra>) are read-only; everything else is interactive.
     private IComponentRenderMode? RenderModeForPage =>
-        HttpContext.Request.Path.StartsWithSegments("/Account") || HttpContext.Request.Path.StartsWithSegments("/verdict") ? null : InteractiveServer;
+        HttpContext.Request.Path.StartsWithSegments("/Account") || HttpContext.Request.Path.StartsWithSegments("/verdict") ||
+        HttpContext.Request.Path.StartsWithSegments("/mra-verdict") ? null : InteractiveServer;
 }

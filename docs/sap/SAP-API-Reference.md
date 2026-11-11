@@ -67,7 +67,7 @@ today. All examples below were captured from the running interface.
 | 5 | `POST /documents` | After the PO is really created / received in SAP | **Final document number (MRN) against the `request_id`** of the decision — feeds the "PO generated" report |
 | 6 | `POST /mra-events` | Every time an MRA changes level in SAP during the day (new, approved, self rejected, rejected, final …) | **Open MRAs take capacity** in the next decision; the morning MRA file in Data Setup replaces the list first |
 | 7 | `POST /po-events` | Every PO release / unrelease | Stored; moves capacity only with the admin switch "Live PO changes" |
-| 8 | `GET /verdict-url` | SAP MRA approvers at any level | **Verdict page link of an MRA** by its MRA number |
+| 8 | `GET /verdict-url` | SAP MRA approvers at any level | **Link to the MRA verdict page** (decision, working, level history, PDF) by its MRA number |
 
 ---
 
@@ -863,12 +863,24 @@ A PO message:
 
 ## 9. `GET /verdict-url` — verdict link of an MRA
 
-SAP users at every MRA approval level pass the **MRA number** and get the **verdict page link** (`view_url`, the same
-link as in the `/decisions` answer; it opens in a browser without sign-in).
+SAP users at every MRA approval level pass the **MRA number** and get a **link to the MRA verdict page**
+(`view_url`). The page opens in a browser **without sign-in** and shows the same content as the MRA pop-up of the
+tool's MRA Queues page:
+
+- the tool's decision for the PO behind the MRA (decision, reason, Decision ID, PO checked, request ID, qty checked,
+  SAP verdict, Max Permissible at the decision, link to the PO verdict page);
+- the working saved with the decision (stock today, colour share, window, daily sale, limit days, stock needed,
+  Max Permissible, month by month, incoming by month, open MRAs counted);
+- where the MRA is now (level, waiting with, counted or not, qty, delivery, group, Division / Category Head, created
+  by) and its level changes;
+- a **⬇ Download PDF** button (the same content as an A4 PDF).
 
 The MRA is found by the MRA number SAP sent as `document_no` to `POST /documents` (§7) with the `request_id` of the
 checked PO. Leading zeros are ignored (`0000348404` = `348404`). When the same MRA number was sent for several
-decisions, the link of the latest decision is returned. Read only — safe to call any number of times.
+decisions, the latest decision is used. The link is
+`<portal>/mra-verdict/<token>/<mra_no>`: it uses the unguessable token of that decision's verdict link and is valid
+as long as that link (`View_Expires_At`; afterwards the page says the link expired). The MRA must be in the tool's
+current MRA list (morning file + live changes) for the page to open. Read only — safe to call any number of times.
 
 ### Request
 
@@ -883,7 +895,7 @@ GET /api/sap/v1/verdict-url?mra_no=0000348404
 ### Response `200` (captured)
 
 ```json
-{ "mra_no": "990888", "view_url": "http://localhost:5090/verdict/EQJnCvEGrHg9-PNPreztNL4epNmCkbve4I7aEwLkBd4" }
+{ "mra_no": "990888", "view_url": "http://localhost:5090/mra-verdict/EQJnCvEGrHg9-PNPreztNL4epNmCkbve4I7aEwLkBd4/990888" }
 ```
 
 ### Error answers (captured)

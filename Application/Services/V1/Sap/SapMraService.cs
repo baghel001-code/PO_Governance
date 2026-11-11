@@ -170,8 +170,10 @@ namespace Application.Services.V1.Sap
             if (raw.Length == 0) throw new SapApiException(400, SapErrorCodes.ValidationFailed, "mra_no is required");
             if (!MraNoRx.IsMatch(raw)) throw new SapApiException(400, SapErrorCodes.ValidationFailed, "mra_no is not valid (letters, digits, - and _, max 40)");
             var no = MraNorm.NoZeros(raw);
-            var url = await _repo.VerdictUrlAsync(no, ct);
-            if (url == null || !(url.StartsWith("http://", StringComparison.OrdinalIgnoreCase) || url.StartsWith("https://", StringComparison.OrdinalIgnoreCase)))
+            var link = await _repo.VerdictLinkAsync(no, ct);
+            // the MRA page (same content as the MRA Queues panel) on the portal of the decision's verdict link
+            var url = MraVerdictLinks.PageUrl(link?.ViewUrl, no);
+            if (url == null)
                 throw new SapApiException(404, SapErrorCodes.MraNotFound,
                     "No verdict for MRA " + no + " - send it as document_no to POST /documents with the request_id of the checked PO");
             _log.LogInformation("SAP verdict-url: MRA {Mra} (by {TechUser})", no, caller.TechUser);
@@ -472,6 +474,47 @@ namespace Application.Services.V1.Sap
             if (row.ToolDecision is { HasWorking: true } td && await _repo.WorkingAsync(td.ItemId, ct) is { Length: > 0 } json)
                 res.Working = JsonNode.Parse(json) as JsonObject;
             return res;
+        }
+
+        public async Task<MraVerdictView> VerdictViewAsync(string token, string mraNo, CancellationToken ct = default)
+        {
+            RequireAvailable();
+            const string invalid = "This MRA verdict link is not valid.";
+            var t = (token ?? "").Trim();
+            var raw = (mraNo ?? "").Trim();
+            if (!System.Text.RegularExpressions.Regex.IsMatch(t, @"^[A-Za-z0-9_\-]{20,64}$") || !System.Text.RegularExpressions.Regex.IsMatch(raw, @"^[A-Za-z0-9_-]{1,40}$"))
+                throw new NotFoundException(invalid);
+            var no = MraNorm.NoZeros(raw);
+            // valid only with the token of the decision SAP stored this MRA number for (POST /documents)
+            var link = await _repo.VerdictLinkAsync(no, ct);
+            var expected = MraVerdictLinks.Token(link?.ViewUrl);
+            if (expected == null || !System.Security.Cryptography.CryptographicOperations.FixedTimeEquals(
+                    System.Text.Encoding.UTF8.GetBytes(expected), System.Text.Encoding.UTF8.GetBytes(t)))
+                throw new NotFoundException(invalid);
+            if (link!.ExpiresAt is { } until && until < _clock.Now)
+                throw new AppException(410, "This MRA verdict link expired on " + until.ToOffset(_clock.Now.Offset).ToString("dd-MMM-yyyy") + ".");
+
+            var data = await _cache.GetCurrentAsync(ct);
+            var full = await _source.GetFullAsync(data, ct) ?? throw new ServiceUnavailableException(_repo.UnavailableReason ?? "SAP MRAs require SQL Server storage");
+            var (_, cap) = full;
+            var hit = cap.Rows.FirstOrDefault(r => r.No == no);
+            if (hit.No == null) throw new NotFoundException("MRA " + no + " is not in the current MRA list.");
+            var (_, m, c) = hit;
+            var td = MraDecisionLinker.Link(m, no, c.Mon, MraDecisionLinker.Index(await DecisionsSafeAsync(ct)));
+            var view = new MraVerdictView
+            {
+                Row = new MraRowDto { No = no, M = m, C = c, ToolDecision = td, DecGroup = td == null ? "Not sent" : MraCapacity.DecisionGroup(td.Decision) },
+                Detail = new MraDecisionDetail { MraNo = no, Decision = td },
+                ExpiresAt = link.ExpiresAt
+            };
+            if (td is { HasWorking: true } && await _repo.WorkingAsync(td.ItemId, ct) is { Length: > 0 } json)
+                view.Detail.Working = JsonNode.Parse(json) as JsonObject;
+            // only the names this MRA shows (Division Head, Category Head) - not the user list
+            var users = (await _acc.GetUsersAsync(ct)).ToDictionary(u => u.Email, StringComparer.OrdinalIgnoreCase);
+            foreach (var e in new[] { c.DhEmail, c.ChEmail }.Where(e => !string.IsNullOrEmpty(e)))
+                view.Owners[e] = users.TryGetValue(e, out var u) && !string.IsNullOrEmpty(u.Name) ? u.Name : e.Split('@')[0];
+            _log.LogInformation("MRA verdict page: MRA {Mra} opened (decision {Decision})", no, link.DecisionId);
+            return view;
         }
 
         public async Task<MraFeedResponse> TestSendAsync(MraTestSendReq req, AppUserContext user, CancellationToken ct = default)

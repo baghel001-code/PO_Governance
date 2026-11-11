@@ -48,11 +48,6 @@
     .mq-eff.dn { background: #FEE2E2; color: #B91C1C; } .mq-eff.up { background: #DCFCE7; color: #00873E; } .mq-eff.zr { background: #F3F4F6; color: #6B7280; }
     .mq-chip { border-radius: 14px; padding: 3px 10px; font-size: 11px; font-weight: 700; }
     .mq-chip.on { background: #DCFCE7; color: #00873E; } .mq-chip.off { background: #FEE2E2; color: #B91C1C; }
-    .mq-panel { position: fixed; top: 0; right: 0; bottom: 0; width: min(560px, 100vw); background: #fff; box-shadow: -10px 0 40px rgba(0,0,0,.18); z-index: 1300; overflow: auto; padding: 18px 20px; }
-    .mq-ph { font-size: 10.5px; font-weight: 800; text-transform: uppercase; letter-spacing: .05em; color: var(--ink2); margin: 14px 0 6px; }
-    .mq-kv { width: 100%; font-size: 12px; border-collapse: collapse; } .mq-kv td { padding: 4px 6px; border-bottom: 1px solid #F0F2F6; vertical-align: top; }
-    .mq-kv td:first-child { color: var(--ink2); width: 42%; }
-    .mq-pbox { border-radius: 10px; padding: 10px 12px; font-size: 12.5px; }
     .mq-open { cursor: pointer; border-bottom: 1px dashed #1A4FAF; }
     .mq-open:hover { color: #1A4FAF; }
 </style>
@@ -112,7 +107,7 @@ else
 
     @if (_open is { } x)
     {
-        @Panel(x)
+        <MraPanel Row="x" Detail="_detail" DetailBusy="_detailBusy" Owners="_s?.Owners" OnClose="() => _open = null" />
     }
 }
 
@@ -354,169 +349,6 @@ else
         _detailBusy = false;
         if (res.IsSuccess && res.Data != null && _open?.No == x.No) _detail = res.Data;
         else if (!res.IsSuccess) Snackbar.Warn(res.responseMessage);
-    }
-
-    private static string? Str(System.Text.Json.Nodes.JsonNode? n) => n == null ? null : n is System.Text.Json.Nodes.JsonValue v && v.TryGetValue<string>(out var s) ? s : n.ToJsonString();
-    private static double? Dbl(System.Text.Json.Nodes.JsonNode? n) => n is System.Text.Json.Nodes.JsonValue v && v.TryGetValue<double>(out var d) ? d : null;
-    private static string NfD(double? v) => v == null ? "—" : DecisionEngine.Common.Js.Fmt(v.Value);
-
-    private RenderFragment Panel(MraRowDto x) => __builder =>
-    {
-        var m = x.M; var c = x.C;
-        var td = _detail?.Decision ?? x.ToolDecision;
-        var w = _detail?.Working;
-        <div class="mq-panel" data-testid="mq-panel">
-            <div style="display:flex;align-items:flex-start;gap:8px">
-                <div>
-                    <div class="mq-sub" style="font-weight:800;letter-spacing:.06em">MRA – DECISION, WORKING AND HISTORY</div>
-                    <div style="font-size:17px;font-weight:800;color:#13254A">MRA @x.No · @m.Ga @m.Colour</div>
-                    <div class="mq-sub">@(c.Info?.Desc ?? m.GaDesc) · @Nf(m.Qty) pcs · @MraCapacity.DayLabel(m.Dd)</div>
-                </div>
-                <button class="btn-sec btn-sm" style="margin-left:auto" @onclick="() => _open = null" aria-label="Close">✕</button>
-            </div>
-
-            <div class="mq-ph">Decision (the tool's check of this PO)</div>
-            @if (td != null)
-            {
-                var g = MraCapacity.DecisionGroup(td.Decision);
-                <div class="mq-pbox @DecCls(g)" data-testid="mq-decision"><div style="font-size:15px;font-weight:800">@td.Decision</div>@if (!string.IsNullOrEmpty(td.Reason)) { <div style="margin-top:4px">@td.Reason</div> }</div>
-                <table class="mq-kv">
-                    <tr><td>Decision ID</td><td>@td.DecisionId</td></tr>
-                    <tr><td>Decided at</td><td>@Time(td.DecidedAt)@(td.Mode != null ? " · " + td.Mode : "")</td></tr>
-                    @if (!string.IsNullOrEmpty(td.PoNumber)) { <tr><td>PO checked</td><td>@td.PoNumber</td></tr> }
-                    @if (!string.IsNullOrEmpty(td.RequestId)) { <tr><td>Request ID</td><td>@td.RequestId</td></tr> }
-                    @if (!string.IsNullOrEmpty(td.DocumentNo)) { <tr><td>Document (MRN) from SAP</td><td>@td.DocumentNo</td></tr> }
-                    <tr><td>Qty checked</td><td>@NfD(td.OrderQty)@(td.Verdict != null ? " · SAP verdict " + td.Verdict : "")</td></tr>
-                    @if (td.MaxPermissible != null) { <tr><td>Max Permissible at the decision</td><td><b>@NfD(td.MaxPermissible)</b></td></tr> }
-                    <tr><td>Verdict page</td><td>@if (td.ViewUrl != null) { <a href="@td.ViewUrl" target="_blank" rel="noopener noreferrer" data-testid="mq-verdict-link">open ↗</a> } else { <span class="mq-sub">no link for this decision</span> }</td></tr>
-                    <tr><td>Linked by</td><td class="mq-sub">@td.MatchedBy</td></tr>
-                </table>
-            }
-            else
-            {
-                <div class="mq-pbox d-ns">No decision found for this MRA: SAP has not sent MRA @x.No as <code>document_no</code> to <code>POST /documents</code> for a checked PO.</div>
-            }
-
-            @if (_detailBusy)
-            {
-                <div class="mq-sub" style="margin-top:10px">Loading the working…</div>
-            }
-            else if (w != null)
-            {
-                @Working(w)
-            }
-            else if (td != null)
-            {
-                <div class="mq-sub" style="margin-top:6px">No working was saved with this decision (decisions before 7 Nov 2026 have none).</div>
-            }
-
-            <div class="mq-ph">Where it is now</div>
-            <table class="mq-kv">
-                <tr><td>Level</td><td><span class="mq-lv">@m.Level</span> @Lvl(m.Level)</td></tr>
-                <tr><td>Waiting with</td><td>@(c.Queue.Length > 0 ? c.Queue + (c.Owner.Length > 0 && c.Owner != c.Queue ? " – " + c.Owner : "") : "—")</td></tr>
-                <tr><td>Capacity</td><td><b>@(c.Counted ? "Counted" : "Not counted")</b> – @c.Why</td></tr>
-                <tr><td>Qty</td><td>@Nf(m.Qty)@if (m.FileQty != null && m.FileQty != m.Qty) { <span class="mq-sub"> (morning file @Nf(m.FileQty))</span> }</td></tr>
-                <tr><td>Delivery</td><td>@MraCapacity.DayLabel(m.Dd) · counts in @MonL(c.Mon)</td></tr>
-                @if (!string.IsNullOrEmpty(m.PoNo)) { <tr><td>PO</td><td>@m.PoNo · @PoStatusText(m.PoStatus)@(m.PoSrc == "live" ? " · live" : "")</td></tr> }
-                <tr><td>Group</td><td>@Group(c.Info)</td></tr>
-                @if (c.DhEmail.Length > 0) { <tr><td>Division Head</td><td>@Who(c.DhEmail)</td></tr> }
-                @if (c.ChEmail.Length > 0) { <tr><td>Category Head</td><td>@Who(c.ChEmail)</td></tr> }
-                @if (!string.IsNullOrEmpty(m.CreatedBy) || !string.IsNullOrEmpty(m.CreatedById)) { <tr><td>Created by</td><td>@string.Join(" · ", new[] { m.CreatedBy, m.CreatedById }.Where(s => !string.IsNullOrEmpty(s)))</td></tr> }
-                @if (!string.IsNullOrEmpty(m.Inspiration)) { <tr><td>Inspiration</td><td>@m.Inspiration</td></tr> }
-                @if (m.Lines > 0) { <tr><td>Item lines</td><td>@m.Lines</td></tr> }
-                @if (!string.IsNullOrEmpty(m.ActionBy)) { <tr><td>Last change by (SAP)</td><td>@m.ActionBy</td></tr> }
-                @if (!string.IsNullOrEmpty(m.Remark)) { <tr><td>Last remark (SAP)</td><td>@m.Remark</td></tr> }
-            </table>
-            <div class="mq-ph">Level changes since the morning file</div>
-            @if (m.History.Count == 0)
-            {
-                <div class="mq-sub">None – level from the morning file.</div>
-            }
-            else
-            {
-                <table class="mq-tbl"><thead><tr><th>Time</th><th>Change</th><th class="n">Qty</th><th>By (SAP)</th><th>Remark</th></tr></thead><tbody>
-                    @foreach (var h in m.History)
-                    {
-                        <tr><td>@Time(h.At)</td><td>@(h.From != null ? "Level " + h.From + " → " : "created at ")Level @h.To @Lvl(h.To)</td><td class="n">@Nf(h.Qty)</td><td>@(h.By ?? "—")</td><td>@(h.Remark ?? "")</td></tr>
-                    }
-                </tbody></table>
-            }
-            <div style="border-top:1px solid #EEF0F4;margin-top:14px;padding-top:10px">
-                <button class="btn-sec btn-sm" @onclick="() => DownloadMraAsync(x)" data-testid="mq-download">Download this MRA (JSON)</button>
-            </div>
-        </div>
-    };
-
-    /// <summary>The working saved with the decision, as the Python page shows it (app/mra.js workingHtml).</summary>
-    private RenderFragment Working(System.Text.Json.Nodes.JsonObject w) => __builder =>
-    {
-        var share = Dbl(w["colourShare"]);
-        var ws = Str(w["windowStart"]); var wd = Dbl(w["windowDays"]);
-        <div class="mq-ph">Working saved with the decision</div>
-        <table class="mq-kv" data-testid="mq-working">
-            <tr><td>Decision</td><td style="text-align:right">@Str(w["decision"])</td></tr>
-            <tr><td>Article · colour · month</td><td style="text-align:right">@string.Join(" · ", new[] { Str(w["article"]), Str(w["colour"]), Str(w["deliveryMonth"]) }.Where(s => !string.IsNullOrEmpty(s)))</td></tr>
-            <tr><td>Qty asked</td><td style="text-align:right">@NfD(Dbl(w["askedQty"]))</td></tr>
-            @if (Dbl(w["stockToday"]) is { } st) { <tr><td>Stock today</td><td style="text-align:right">@NfD(st)</td></tr> }
-            @if (share != null) { <tr><td>Colour share</td><td style="text-align:right">@((share.Value * (share.Value <= 1 ? 100 : 1)).ToString("0.0"))%</td></tr> }
-            @if (ws != null) { <tr><td>Window</td><td style="text-align:right">from @ws, @(wd?.ToString("0")) days</td></tr> }
-            @if (Dbl(w["windowDailyRate"]) is { } rate) { <tr><td>Daily sale in the window</td><td style="text-align:right">@NfD(rate)/day</td></tr> }
-            @if (Dbl(w["limitDays"]) is { } ld) { <tr><td>Limit (days)</td><td style="text-align:right">@ld.ToString("0.00")</td></tr> }
-            @if (Dbl(w["stockNeededAtWindowStart"]) is { } need) { <tr><td>Stock needed at window start</td><td style="text-align:right">@NfD(need)</td></tr> }
-            @if (Dbl(w["stockAtWindowStart"]) is { } at) { <tr><td>Stock at window start</td><td style="text-align:right">@NfD(at)</td></tr> }
-            @if (w.ContainsKey("maxPermissible")) { <tr><td>Max Permissible</td><td style="text-align:right"><b>@NfD(Dbl(w["maxPermissible"]))</b></td></tr> }
-        </table>
-        @if (w["monthByMonth"] is System.Text.Json.Nodes.JsonArray mbm && mbm.Count > 0)
-        {
-            <div class="mq-ph">Month by month</div>
-            <table class="mq-tbl"><thead><tr><th>Month</th><th class="n">Open</th><th class="n">Incoming</th><th class="n">Asked</th><th class="n">Plan sale</th><th class="n">Close</th></tr></thead><tbody>
-                @foreach (var r in mbm.OfType<System.Text.Json.Nodes.JsonObject>())
-                {
-                    <tr><td>@Str(r["month"])</td><td class="n">@NfD(Dbl(r["open"]))</td><td class="n">@NfD(Dbl(r["incoming"]))</td>
-                        <td class="n">@(r.ContainsKey("asked") ? NfD(Dbl(r["asked"])) : "—")</td><td class="n">@NfD(Dbl(r["planSale"]))</td><td class="n">@NfD(Dbl(r["close"]))</td></tr>
-                }
-            </tbody></table>
-        }
-        @if (w["incomingParts"] is System.Text.Json.Nodes.JsonObject ip)
-        {
-            var parts = new[] { "releasedPOs", "openMRAs", "approvedInToolToday" }.Select(k => ip[k] as System.Text.Json.Nodes.JsonObject).ToArray();
-            var months = parts.Where(p => p != null).SelectMany(p => p!.Select(kv => kv.Key)).Distinct().OrderBy(MonOrd).ToList();
-            @if (months.Count > 0)
-            {
-                <div class="mq-ph">Incoming by month</div>
-                <table class="mq-tbl"><thead><tr><th>Month</th><th class="n">Released POs</th><th class="n">Open MRAs</th><th class="n">Approved in tool today</th></tr></thead><tbody>
-                    @foreach (var k in months)
-                    {
-                        <tr><td>@MonL(k)</td>@foreach (var p in parts) { <td class="n">@NfD(Dbl(p?[k]) ?? 0)</td> }</tr>
-                    }
-                </tbody></table>
-            }
-        }
-        @if (w["openMRAsCounted"] is System.Text.Json.Nodes.JsonArray om && om.Count > 0)
-        {
-            <div class="mq-sub" style="margin-top:6px">Open MRAs counted then: @string.Join(" · ", om.OfType<System.Text.Json.Nodes.JsonObject>().Take(10).Select(o => Str(o["type"]) + " " + Str(o["no"]) + " " + NfD(Dbl(o["qty"]))))</div>
-        }
-        @if (w["caution"] is System.Text.Json.Nodes.JsonObject)
-        {
-            <div class="mq-sub" style="margin-top:6px">A later-PO caution was shown with this decision.</div>
-        }
-    };
-
-    private async Task DownloadMraAsync(MraRowDto x)
-    {
-        var o = new System.Text.Json.Nodes.JsonObject
-        {
-            ["mraNo"] = x.No,
-            ["mra"] = System.Text.Json.JsonSerializer.SerializeToNode(x.M),
-            ["position"] = new System.Text.Json.Nodes.JsonObject { ["counted"] = x.C.Counted, ["why"] = x.C.Why, ["queue"] = x.C.Queue, ["owner"] = x.C.Owner, ["deliveryMonth"] = x.C.Mon },
-            ["decision"] = System.Text.Json.JsonSerializer.SerializeToNode(_detail?.Decision ?? x.ToolDecision),
-            ["working"] = _detail?.Working?.DeepClone()
-        };
-        await Files.SaveAsync(new Domain.Entities.Response.ApiFileResponse
-        {
-            FileName = "MRA_" + x.No + ".json", ContentType = "application/json",
-            FileBytes = System.Text.Encoding.UTF8.GetBytes(o.ToJsonString(new System.Text.Json.JsonSerializerOptions { WriteIndented = true }))
-        });
     }
 
     private RenderFragment ColourTab() => __builder =>

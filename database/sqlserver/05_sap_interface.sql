@@ -1187,11 +1187,12 @@ BEGIN
             RETURN;
         END
 
-        /* GET /api/sap/v1/verdict-url?mra_no=: the verdict page of the latest answered decision SAP stored this MRA number
-           for as document_no (POST /documents); leading zeros ignored. No row = not found. */
+        /* GET /api/sap/v1/verdict-url?mra_no= and the MRA verdict page (/mra-verdict/<token>/<mra>): the verdict link of the
+           latest answered decision SAP stored this MRA number for as document_no (POST /documents); leading zeros
+           ignored. No row = not found. */
         IF @Cmd = N'VERDICT_URL'
         BEGIN
-            SELECT TOP (1) JSON_VALUE(l.Response_Json, '$.view_url') AS ViewUrl, l.Decision_Id AS DecisionId
+            SELECT TOP (1) JSON_VALUE(l.Response_Json, '$.view_url') AS ViewUrl, l.Decision_Id AS DecisionId, l.View_Expires_At AS ExpiresAt
               FROM dbo.SAP_DECISION_DOCUMENTS doc
               JOIN dbo.SAP_DECISION_LOG l ON l.Id = doc.Decision_Log_Id
              WHERE doc.Is_Current = 1 AND l.Http_Status = 200 AND l.Is_Test = 0

@@ -219,6 +219,8 @@ namespace Domain.Entities.Common
         public static string PO_SAP_DOCUMENT_REPORT_EXPORT { get; set; } = nameof(PO_SAP_DOCUMENT_REPORT_EXPORT);
         /// <summary>The verdict behind a SAP view_url (no sign-in) — api/v1/SapVerdictView (POST).</summary>
         public static string PO_SAP_VERDICT_VIEW { get; set; } = nameof(PO_SAP_VERDICT_VIEW);
+        /// <summary>The MRA page behind GET /api/sap/v1/verdict-url (no sign-in) — api/v1/MraVerdictView (POST).</summary>
+        public static string PO_MRA_VERDICT_VIEW { get; set; } = nameof(PO_MRA_VERDICT_VIEW);
 
         /// <summary>Copies every non-empty ApiNamesSettings value onto the property of the same name (QPS Initialize).</summary>
         public static void Initialize(ApiNames apiNames)

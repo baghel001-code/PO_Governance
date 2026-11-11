@@ -1,0 +1,37 @@
+@page "/mra-verdict/{Token}/{MraNo}"
+@layout VerdictLayout
+@attribute [AllowAnonymous]
+@* The page behind GET /api/sap/v1/verdict-url (SAP MRA approvers at any level, no sign-in, read-only): the same content
+   as the MRA Queues side panel — the tool's decision, the working saved with it, where the MRA is now and its level
+   history — with "Download PDF". Valid only with the verdict link token of the decision SAP stored this MRA number for
+   (POST /documents); the API answers 404 (not valid) or 410 (expired). Static server rendering.
+   API: AllApiNames.PO_MRA_VERDICT_VIEW. *@
+@using DecisionEngine.Results.Mra
+@using Admin.Services.Platform
+
+<PageTitle>MRA @(_v?.Row.No ?? MraNo) · VMM PO Governance</PageTitle>
+<PlatformStyles />
+
+@if (_error != null)
+{
+    <div class="card pf-err" style="padding:18px;max-width:760px;margin:0 auto" data-testid="mv-error">@_error</div>
+}
+else if (_v != null)
+{
+    <MraPanel Row="_v.Row" Detail="_v.Detail" Owners="_v.Owners" Standalone="true" ExpiresAt="_v.ExpiresAt" />
+}
+
+@code {
+    [Parameter] public string Token { get; set; } = "";
+    [Parameter] public string MraNo { get; set; } = "";
+
+    private MraVerdictView? _v;
+    private string? _error;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var res = await ApiMasterService.MraVerdictViewAsync(Token, MraNo);
+        if (res.IsSuccess && res.Data != null) _v = res.Data;
+        else _error = res.responseMessage ?? "This MRA verdict link cannot be opened.";
+    }
+}

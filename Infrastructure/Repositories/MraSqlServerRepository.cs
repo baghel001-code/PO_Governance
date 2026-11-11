@@ -237,15 +237,20 @@ namespace Infrastructure.Repositories
             }).ToList();
         }
 
-        private sealed class VerdictUrlRow { public string? ViewUrl { get; set; } public string? DecisionId { get; set; } }
+        private sealed class VerdictUrlRow
+        {
+            public string? ViewUrl { get; set; }
+            public string? DecisionId { get; set; }
+            public DateTimeOffset? ExpiresAt { get; set; }
+        }
 
-        public async Task<string?> VerdictUrlAsync(string mraNo, CancellationToken ct = default)
+        public async Task<MraVerdictLink?> VerdictLinkAsync(string mraNo, CancellationToken ct = default)
         {
             var p = P("VERDICT_URL");
             p.Add("@Mra_No", mraNo, DbType.String, size: 40);
             var rows = (await _db.ExecuteStoredProcedureListAsync<VerdictUrlRow>(Sp, p, commandTimeout: null, ct: ct)).AsList();
             Check(p);
-            return rows.FirstOrDefault()?.ViewUrl;
+            return rows.FirstOrDefault() is { ViewUrl: { } u } r ? new MraVerdictLink(u, r.DecisionId, r.ExpiresAt) : null;
         }
 
         private sealed class WorkingRow { public string? WorkingJson { get; set; } }
@@ -273,6 +278,6 @@ namespace Infrastructure.Repositories
         public Task<List<MraFeedStored>> AddFeedAsync(IReadOnlyList<MraFeedRow> rows, string by, string? sourceSystem, string? traceId, DateTimeOffset receivedAt, CancellationToken ct = default) => throw Fail();
         public Task<List<MraToolDecision>> DecisionsAsync(DateTime since, CancellationToken ct = default) => throw Fail();
         public Task<string?> WorkingAsync(long itemId, CancellationToken ct = default) => throw Fail();
-        public Task<string?> VerdictUrlAsync(string mraNo, CancellationToken ct = default) => throw Fail();
+        public Task<MraVerdictLink?> VerdictLinkAsync(string mraNo, CancellationToken ct = default) => throw Fail();
     }
 }

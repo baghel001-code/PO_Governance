@@ -12,6 +12,8 @@
     <PackageReference Include="Serilog.AspNetCore" Version="8.0.3" />
     <!-- GDI+ for VmmCaptcha.dll (System.Drawing; Windows only on .NET 8) -->
     <PackageReference Include="System.Drawing.Common" Version="8.0.10" />
+    <!-- PDFsharp 6.2.4 (MIT): the drawing library under the company PDFKit.dll (MRA PDF) -->
+    <PackageReference Include="PDFsharp" Version="6.2.4" />
   </ItemGroup>
 
   <ItemGroup>
@@ -19,6 +21,11 @@
          servers; elsewhere the portal falls back to the built-in PngCaptchaGenerator (Auth/Captcha). -->
     <Reference Include="VmmCaptcha">
       <HintPath>Dlls\VmmCaptcha.dll</HintPath>
+    </Reference>
+    <!-- QPS: the company PDF library (PDFKit.PdfBuilder: letterhead, gradient section bars, tables; on PDFsharp 6.2.4).
+         Used for the MRA PDF (MRA Queues pop-up and the SAP verdict-url page). -->
+    <Reference Include="PDFKit">
+      <HintPath>Dlls\PDFKit.dll</HintPath>
     </Reference>
   </ItemGroup>
 
@@ -28,4 +35,8 @@
     <ImplicitUsings>enable</ImplicitUsings>
   </PropertyGroup>
 
+  <ItemGroup>
+    <!-- PDF fonts: Liberation Sans (SIL OFL 1.1, same widths as Arial) when the server has no Arial (Linux) -->
+    <None Include="Fonts\*.ttf;Fonts\*.txt" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+  </ItemGroup>
 </Project>

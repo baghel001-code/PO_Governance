@@ -1,8 +1,12 @@
 @* One MRA: the tool's decision (linked by the MRA number SAP sent to /documents), the working saved with it, where the
    MRA is now and its level history. Used as the MRA Queues side panel and as the page behind SAP's verdict-url link
-   (/mra-verdict/<token>/<mra>, Standalone). "Download PDF" saves exactly this content (js/mra-pdf.js, html2pdf.js). *@
+   (/mra-verdict/<token>/<mra>, Standalone). "Download PDF": the same content drawn with the company PDFKit
+   (MraPdfReport) - built here in the pop-up, by GET <page>/pdf on the standalone page. *@
 @using DecisionEngine.Mra
 @using DecisionEngine.Results.Mra
+@inject FileDownloadService Files
+@inject IWebHostEnvironment Env
+@inject ISnackbar Snackbar
 
 <style>
     .mq-panel { position: fixed; top: 0; right: 0; bottom: 0; width: min(560px, 100vw); background: #fff; box-shadow: -10px 0 40px rgba(0,0,0,.18); z-index: 1300; overflow: auto; padding: 18px 20px; }
@@ -112,7 +116,14 @@
         }
     </div>
     <div style="border-top:1px solid #EEF0F4;margin-top:14px;padding-top:10px;display:flex;gap:10px;align-items:center">
-        <button type="button" class="btn-sec btn-sm" data-pdf-target="@pdfId" data-pdf-name="MRA_@(x.No).pdf" onclick="pogovMraPdf(this)" data-testid="mq-download">⬇ Download PDF</button>
+        @if (PdfUrl != null)
+        {
+            <a class="btn-sec btn-sm" href="@PdfUrl" download="@MraPdfReport.FileName(x.No)" style="text-decoration:none" data-testid="mq-download">⬇ Download PDF</a>
+        }
+        else
+        {
+            <button type="button" class="btn-sec btn-sm" @onclick="DownloadPdfAsync" disabled="@_pdfBusy" data-testid="mq-download">@(_pdfBusy ? "Preparing PDF…" : "⬇ Download PDF")</button>
+        }
         @if (Standalone && ExpiresAt is { } until)
         {
             <span class="mq-sub" style="margin-left:auto">Link valid until @Time(until)</span>
@@ -132,6 +143,29 @@
     /// <summary>The page of SAP's verdict-url link instead of the fixed side panel.</summary>
     [Parameter] public bool Standalone { get; set; }
     [Parameter] public DateTimeOffset? ExpiresAt { get; set; }
+    /// <summary>Standalone page (no interactive session): "Download PDF" is a link to this URL (GET …/pdf).</summary>
+    [Parameter] public string? PdfUrl { get; set; }
+
+    private bool _pdfBusy;
+
+    /// <summary>MRA Queues pop-up: the PDF of what the panel shows (company PDFKit).</summary>
+    private async Task DownloadPdfAsync()
+    {
+        _pdfBusy = true;
+        try
+        {
+            var bytes = await Task.Run(() => MraPdfReport.Build(Row, Detail, Owners, Path.Combine(Env.WebRootPath, "img", "logo.png"), DateTimeOffset.Now));
+            await Files.SaveAsync(new ApiFileResponse { FileName = MraPdfReport.FileName(Row.No), ContentType = "application/pdf", FileBytes = bytes });
+        }
+        catch (Exception e)
+        {
+            Snackbar.Add("The PDF could not be made: " + e.Message, Severity.Error);
+        }
+        finally
+        {
+            _pdfBusy = false;
+        }
+    }
 
     private static readonly string[] Mn = { "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec" };
     private static string MonL(string? mk) { var p = (mk ?? "").Split('.'); return p.Length == 2 && int.TryParse(p[0], out var mo) && mo is >= 1 and <= 12 ? Mn[mo - 1] + " " + p[1] : mk ?? ""; }

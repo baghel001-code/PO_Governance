@@ -18,7 +18,8 @@
 }
 else if (_v != null)
 {
-    <MraPanel Row="_v.Row" Detail="_v.Detail" Owners="_v.Owners" Standalone="true" ExpiresAt="_v.ExpiresAt" />
+    <MraPanel Row="_v.Row" Detail="_v.Detail" Owners="_v.Owners" Standalone="true" ExpiresAt="_v.ExpiresAt"
+              PdfUrl="@($"mra-verdict/{Uri.EscapeDataString(Token)}/{Uri.EscapeDataString(MraNo)}/pdf")" />
 }
 
 @code {

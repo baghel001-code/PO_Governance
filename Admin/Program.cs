@@ -36,6 +36,10 @@ ConfigurationInitializer.InitializeApiSettings(builder.Configuration);
 builder.Services.AddPortal(builder.Configuration, builder.Environment);
 
 var app = builder.Build();
+// PDFKit (company PDF library on PDFsharp) draws in "Arial": Arial from PortalSettings:PdfFontsFolder / Windows, else the bundled Liberation Sans
+var pdfFonts = new Admin.Services.Platform.PdfFontResolver(builder.Configuration["PortalSettings:PdfFontsFolder"], builder.Environment.ContentRootPath);
+if (PdfSharp.Fonts.GlobalFontSettings.FontResolver == null) PdfSharp.Fonts.GlobalFontSettings.FontResolver = pdfFonts;
+app.Logger.LogInformation("PDF fonts: {Files}", pdfFonts.Files);
 
 // The portal's environment picks appsettings.<Environment>.json (e.g. MasterApiSettings:Api_Url of staging); every other URL
 // comes from the API master of POGovApi's own environment. Source: ASPNETCORE_ENVIRONMENT (DOTNET_ENVIRONMENT), else Production.
@@ -82,6 +86,7 @@ app.UseAntiforgery();
 // Sign-in, password change, sign-out and the "/" start page are plain HTTP endpoints (Auth/AccountEndpoints.cs):
 // they set the cookie and redirect without going through a Blazor page.
 app.MapAccountEndpoints();
+Admin.Services.Platform.MraPdfEndpoints.MapMraPdfEndpoints(app);   // GET /mra-verdict/{token}/{mra}/pdf (no sign-in)
 
 app.MapRazorComponents<App>().AddInteractiveServerRenderMode();
 app.Lifetime.ApplicationStopped.Register(Log.CloseAndFlush);

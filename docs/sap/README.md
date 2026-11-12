@@ -240,10 +240,12 @@ head maintains them on `/admin/sap` → *Reason codes* (code ≤ 4, text ≤ 60 
 
 ## 4b. Verdict link (`view_url`) and final document (`POST /documents`)
 
-* Every answered decision carries `view_url` = `<portal base URL>verdict/<token>` + `view_url_expires_at`. The token is 32
-  random bytes (base64url), stored with the decision (`SAP_DECISION_LOG.View_Token`, `View_Expires_At`); the portal page
-  `/verdict/<token>` shows the verdict read-only **without sign-in** (anyone with the link), via `api/v1/SapVerdictView`
-  (static API token only). Unknown token → "not valid", past the expiry → "expired". The portal base URL is the
+* Every answered decision carries `view_url` = `<portal base URL>mra-verdict/<token>` + `view_url_expires_at` (since
+  12 Nov 2026; before: `verdict/<token>`, still served). The token is 32 random bytes (base64url), stored with the
+  decision (`SAP_DECISION_LOG.View_Token`, `View_Expires_At`). `/mra-verdict/<token>` is the MRA page (the MRA Queues
+  pop-up: decision, working and — once `/documents` stored the MRA number — where the MRA is and its level changes; PDF
+  at `/mra-verdict/<token>/pdf`), via `api/v1/MraVerdictView` (`PRO_SAP_MRA BY_TOKEN`); `/verdict/<token>` is the PO
+  verdict page via `api/v1/SapVerdictView`. Both read-only **without sign-in** (anyone with the link, static API token only). Unknown token → "not valid", past the expiry → "expired". The portal base URL is the
   `API_BASE_URL` row `POGOV_PORTAL` of the API's environment (or `SapInterface:VerdictLink:PortalBaseUrl`).
 * `POST /api/sap/v1/documents` stores the final SAP document (MRN) against the `request_id`
   (`SAP_DECISION_DOCUMENTS`, procedure `PRO_SAP_DOCUMENT_SAVE`): one current document per request_id, the same one again =

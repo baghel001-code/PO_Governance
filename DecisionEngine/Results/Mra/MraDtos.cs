@@ -111,6 +111,11 @@ namespace DecisionEngine.Results.Mra
         public bool HasWorking { get; set; }
         /// <summary>The final document (MRN = MRA number) SAP stored against the decision with POST /documents.</summary>
         public string? DocumentNo { get; set; }
+        /// <summary>Overall verdict of the decision and the PO item of this line.</summary>
+        public string? OverallVerdict { get; set; }
+        public int? PoItem { get; set; }
+        /// <summary>When the decision's verdict link expires.</summary>
+        public DateTimeOffset? ViewExpiresAt { get; set; }
         /// <summary>How it was linked: "MRA number (/documents)".</summary>
         public string MatchedBy { get; set; } = "";
 
@@ -140,10 +145,16 @@ namespace DecisionEngine.Results.Mra
         public string MraNo { get; set; } = "";
     }
 
-    /// <summary>The MRA verdict page: the same content as the MRA Queues side panel.</summary>
+    /// <summary>
+    /// The MRA verdict page (view_url of a decision, GET /verdict-url): the same content as the MRA Queues side panel.
+    /// <see cref="Row"/> is null while SAP has not stored the MRA number with POST /documents, or the MRA is not in the
+    /// current MRA list - the page then shows the decision and its working with <see cref="Note"/>.
+    /// </summary>
     public sealed class MraVerdictView
     {
-        public MraRowDto Row { get; set; } = new();
+        public string? MraNo { get; set; }
+        public MraRowDto? Row { get; set; }
+        public string? Note { get; set; }
         public MraDecisionDetail Detail { get; set; } = new();
         /// <summary>Names of the MRA's Division Head / Category Head only (e-mail → name).</summary>
         public Dictionary<string, string> Owners { get; set; } = new(StringComparer.OrdinalIgnoreCase);

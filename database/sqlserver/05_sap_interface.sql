@@ -1058,6 +1058,7 @@ CREATE OR ALTER PROCEDURE dbo.PRO_SAP_MRA
     @Since           DATE          = NULL,
     @Item_Id         BIGINT        = NULL,
     @Mra_No          NVARCHAR(40)  = NULL,
+    @View_Token      NVARCHAR(64)  = NULL,
     @Moved_Count     INT = NULL OUTPUT,
     @Error_Code      INT = NULL OUTPUT,
     @Error_Message   NVARCHAR(500) = NULL OUTPUT
@@ -1199,6 +1200,25 @@ BEGIN
                AND SUBSTRING(doc.Document_No, PATINDEX(N'%[^0]%', doc.Document_No + N'.'), 40)
                  = SUBSTRING(@Mra_No, PATINDEX(N'%[^0]%', @Mra_No + N'.'), 40)
              ORDER BY l.Decided_At DESC, doc.Id DESC;
+            RETURN;
+        END
+
+        /* The MRA page of a decision link (view_url = /mra-verdict/<token>): the items of the answered decision with this
+           verdict link token, its current document (the MRA number SAP stored with POST /documents, if any) and expiry. */
+        IF @Cmd = N'BY_TOKEN'
+        BEGIN
+            SELECT i.Id AS ItemId, i.Gm, i.Colour, i.Delivery_Month AS DeliveryMonth, i.Order_Qty AS OrderQty, i.Group_Qty AS GroupQty,
+                   i.Verdict, i.Engine_Decision AS EngineDecision, i.Reason_Text AS ReasonText,
+                   TRY_CAST(JSON_VALUE(i.Metrics_Json, '$.headroom_qty') AS FLOAT) AS MaxPermissible,
+                   CAST(CASE WHEN i.Working_Json IS NULL THEN 0 ELSE 1 END AS BIT) AS HasWorking,
+                   l.Decision_Id AS DecisionId, l.Request_Id AS RequestId, l.Po_Number AS PoNumber, l.Decided_At AS DecidedAt, l.Mode,
+                   JSON_VALUE(l.Response_Json, '$.view_url') AS ViewUrl,
+                   doc.Document_No AS DocumentNo, l.Overall_Verdict AS OverallVerdict, i.Po_Item AS PoItem, l.View_Expires_At AS ViewExpiresAt
+              FROM dbo.SAP_DECISION_LOG l
+              JOIN dbo.SAP_DECISION_ITEMS i ON i.Decision_Log_Id = l.Id
+              LEFT JOIN dbo.SAP_DECISION_DOCUMENTS doc ON doc.Decision_Log_Id = l.Id AND doc.Is_Current = 1
+             WHERE l.View_Token = @View_Token AND l.Http_Status = 200
+             ORDER BY i.Po_Item, i.Id;
             RETURN;
         END
 

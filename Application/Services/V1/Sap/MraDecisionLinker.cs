@@ -38,21 +38,36 @@ namespace Application.Services.V1.Sap
         public static MraToolDecision? Link(MraState m, string mno, string mon, Dictionary<string, List<MraToolDecision>> idx)
         {
             if (string.IsNullOrWhiteSpace(mno) || !idx.TryGetValue(NoZeros(mno), out var docs) || docs.Count == 0) return null;
-            var key = Key(m.Ga, m.Colour, mon);
             var latest = docs.OrderByDescending(c => c.DecidedAt).First().DecisionId;
-            var items = docs.Where(c => c.DecisionId == latest).ToList();
-            var item = items.FirstOrDefault(c => Key(c.Gm, c.Colour, c.DeliveryMonth) == key)
+            return ForDecision(docs.Where(c => c.DecisionId == latest).ToList(), m, mon);
+        }
+
+        /// <summary>
+        /// The item of one decision to show for an MRA: the item of the MRA's article · colour · month when the PO had several,
+        /// else same article and colour, else same qty, else the largest (also without an MRA: the largest). Null when none.
+        /// </summary>
+        public static MraToolDecision? ForDecision(IReadOnlyList<MraToolDecision> items, MraState? m, string? mon)
+        {
+            if (items.Count == 0) return null;
+            MraToolDecision? item = null;
+            if (m != null)
+            {
+                var key = Key(m.Ga, m.Colour, mon);
+                item = items.FirstOrDefault(c => Key(c.Gm, c.Colour, c.DeliveryMonth) == key)
                     ?? items.FirstOrDefault(c => Key(c.Gm, c.Colour, "") == Key(m.Ga, m.Colour, ""))
-                    ?? items.OrderByDescending(c => Math.Abs(c.OrderQty - m.Qty) < 0.5 ? 1 : 0).ThenByDescending(c => c.OrderQty).First();
-            return With(item, ByMraNumber);
+                    ?? items.FirstOrDefault(c => Math.Abs(c.OrderQty - m.Qty) < 0.5);
+            }
+            item ??= items.OrderByDescending(c => c.OrderQty).First();
+            return With(item, string.IsNullOrEmpty(item.DocumentNo) ? "verdict link (MRA number not sent to /documents yet)" : ByMraNumber);
         }
 
         private static MraToolDecision With(MraToolDecision d, string by) => new()
         {
             ItemId = d.ItemId, DecisionId = d.DecisionId, RequestId = d.RequestId, PoNumber = d.PoNumber, DecidedAt = d.DecidedAt, Mode = d.Mode,
             Decision = d.Decision, Verdict = d.Verdict, Reason = d.Reason, MaxPermissible = d.MaxPermissible, OrderQty = d.OrderQty,
-            ViewUrl = d.ViewUrl is { } u && Regex.IsMatch(u, @"^https?://") ? u : null, HasWorking = d.HasWorking, DocumentNo = d.DocumentNo, MatchedBy = by,
-            Gm = d.Gm, Colour = d.Colour, DeliveryMonth = d.DeliveryMonth
+            // the PO verdict page (view_url of new decisions is the MRA page itself)
+            ViewUrl = MraVerdictLinks.PoVerdictUrl(d.ViewUrl), HasWorking = d.HasWorking, DocumentNo = d.DocumentNo, MatchedBy = by,
+            Gm = d.Gm, Colour = d.Colour, DeliveryMonth = d.DeliveryMonth, OverallVerdict = d.OverallVerdict, PoItem = d.PoItem, ViewExpiresAt = d.ViewExpiresAt
         };
     }
 }

@@ -264,7 +264,7 @@ namespace Application.Services.V1.Sap
             {
                 viewToken = NewViewToken();
                 viewExpires = now.AddDays(Math.Max(1, _cfg.VerdictLink.ValidDays));
-                response.ViewUrl = linkBase + "verdict/" + viewToken;
+                response.ViewUrl = MraVerdictLinks.DecisionPage(linkBase, viewToken);   // the MRA page (decision, working, MRA once /documents links it)
                 response.ViewUrlExpiresAt = SapJson.Timestamp(viewExpires.Value);
             }
             var json = SapJson.Serialize(response);
@@ -346,7 +346,7 @@ namespace Application.Services.V1.Sap
                 {
                     if (k == "items")
                     {
-                        withLink["view_url"] = linkBase + "verdict/" + token;
+                        withLink["view_url"] = MraVerdictLinks.DecisionPage(linkBase, token);
                         withLink["view_url_expires_at"] = SapJson.Timestamp(expires);
                     }
                     old.Remove(k);

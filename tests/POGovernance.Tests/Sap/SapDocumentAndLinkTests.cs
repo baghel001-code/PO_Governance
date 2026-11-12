@@ -61,8 +61,9 @@ namespace POGovernance.Tests.Sap
             var k = new Kit();
             var a = await k.DecideAsync("WI-LINK-1");
             var url = a["view_url"]!.GetValue<string>();
-            Assert.StartsWith("http://portal:5090/verdict/", url);
-            var token = url["http://portal:5090/verdict/".Length..];
+            // view_url is the MRA page of the decision (decision, working; the MRA once /documents links it)
+            Assert.StartsWith("http://portal:5090/mra-verdict/", url);
+            var token = url["http://portal:5090/mra-verdict/".Length..];
             Assert.Matches("^[A-Za-z0-9_-]{43}$", token);
             var row = k.Repo.Decisions.Single().Row;
             Assert.Equal(token, row.ViewToken);
@@ -99,7 +100,7 @@ namespace POGovernance.Tests.Sap
             var j = Parse(replay);
             Assert.Equal(before["decision_id"]!.GetValue<string>(), j["decision_id"]!.GetValue<string>());
             var url = j["view_url"]!.GetValue<string>();
-            Assert.StartsWith("http://portal:5090/verdict/", url);
+            Assert.StartsWith("http://portal:5090/mra-verdict/", url);
             var keys = j.Select(kv => kv.Key).ToList();
             Assert.Equal(keys.IndexOf("items") - 2, keys.IndexOf("view_url"));    // same place as in a new answer
             var row = k.Repo.Decisions.Single().Row;
@@ -123,7 +124,7 @@ namespace POGovernance.Tests.Sap
 
             var fixedBase = new Kit();
             fixedBase.Cfg.VerdictLink.PortalBaseUrl = "https://pogov.example";
-            Assert.StartsWith("https://pogov.example/verdict/", (await fixedBase.DecideAsync("WI-FIXED"))["view_url"]!.GetValue<string>());
+            Assert.StartsWith("https://pogov.example/mra-verdict/", (await fixedBase.DecideAsync("WI-FIXED"))["view_url"]!.GetValue<string>());
             Assert.Equal(0, fixedBase.Api.Calls);
         }
 

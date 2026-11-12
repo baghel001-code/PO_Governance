@@ -29,24 +29,39 @@
 </style>
 
 @{
-    var x = Row; var m = x.M; var c = x.C;
-    var td = Detail?.Decision ?? x.ToolDecision;
+    var x = Row; var m = x?.M; var c = x?.C;
+    var td = Detail?.Decision ?? x?.ToolDecision;
     var w = Detail?.Working;
-    var pdfId = "mq-pdf-" + x.No;
+    var mraNo = x?.No ?? (string.IsNullOrEmpty(Detail?.MraNo) ? null : Detail!.MraNo);
+    var pdfId = "mq-pdf-" + (mraNo ?? td?.DecisionId ?? "x");
+    var fileName = MraPdfReport.FileName(mraNo, td?.DecisionId);
 }
 <div class="@(Standalone ? "mq-page" : "mq-panel")" data-testid="mq-panel">
     <div id="@pdfId" class="mq-pdfbox">
         <div style="display:flex;align-items:flex-start;gap:8px">
             <div>
                 <div class="mq-sub" style="font-weight:800;letter-spacing:.06em">MRA – DECISION, WORKING AND HISTORY</div>
-                <div style="font-size:17px;font-weight:800;color:#13254A">MRA @x.No · @m.Ga @m.Colour</div>
-                <div class="mq-sub">@(c.Info?.Desc ?? m.GaDesc) · @Nf(m.Qty) pcs · @MraCapacity.DayLabel(m.Dd)</div>
+                @if (m != null && c != null)
+                {
+                    <div style="font-size:17px;font-weight:800;color:#13254A">MRA @mraNo · @m.Ga @m.Colour</div>
+                    <div class="mq-sub">@(c.Info?.Desc ?? m.GaDesc) · @Nf(m.Qty) pcs · @MraCapacity.DayLabel(m.Dd)</div>
+                }
+                else
+                {
+                    <div style="font-size:17px;font-weight:800;color:#13254A">MRA @(mraNo ?? "not linked yet")@(td != null ? " · " + td.Gm + " " + td.Colour : "")</div>
+                    @if (td != null) { <div class="mq-sub">PO @(td.PoNumber ?? "—") · @NfD(td.OrderQty) pcs checked · delivery @MonL(td.DeliveryMonth)</div> }
+                }
             </div>
             @if (OnClose.HasDelegate)
             {
                 <button class="btn-sec btn-sm" style="margin-left:auto" @onclick="OnClose" aria-label="Close" data-html2canvas-ignore="true">✕</button>
             }
         </div>
+
+        @if (!string.IsNullOrEmpty(Note))
+        {
+            <div class="mq-pbox d-ns" style="margin-top:10px;color:#374151" data-testid="mq-note">@Note</div>
+        }
 
         <div class="mq-ph">Decision (the tool's check of this PO)</div>
         @if (td != null)
@@ -67,7 +82,7 @@
         }
         else
         {
-            <div class="mq-pbox d-ns">No decision found for this MRA: SAP has not sent MRA @x.No as <code>document_no</code> to <code>POST /documents</code> for a checked PO.</div>
+            <div class="mq-pbox d-ns">No decision found for this MRA: SAP has not sent MRA @mraNo as <code>document_no</code> to <code>POST /documents</code> for a checked PO.</div>
         }
 
         @if (DetailBusy)
@@ -83,6 +98,8 @@
             <div class="mq-sub" style="margin-top:6px">No working was saved with this decision (decisions before 7 Nov 2026 have none).</div>
         }
 
+        @if (m != null && c != null)
+        {
         <div class="mq-ph">Where it is now</div>
         <table class="mq-kv">
             <tr><td>Level</td><td><span class="mq-lv">@m.Level</span> @Lvl(m.Level)</td></tr>
@@ -114,11 +131,12 @@
                 }
             </tbody></table>
         }
+        }
     </div>
     <div style="border-top:1px solid #EEF0F4;margin-top:14px;padding-top:10px;display:flex;gap:10px;align-items:center">
         @if (PdfUrl != null)
         {
-            <a class="btn-sec btn-sm" href="@PdfUrl" download="@MraPdfReport.FileName(x.No)" style="text-decoration:none" data-testid="mq-download">⬇ Download PDF</a>
+            <a class="btn-sec btn-sm" href="@PdfUrl" download="@fileName" style="text-decoration:none" data-testid="mq-download">⬇ Download PDF</a>
         }
         else
         {
@@ -132,7 +150,10 @@
 </div>
 
 @code {
-    [Parameter, EditorRequired] public MraRowDto Row { get; set; } = new();
+    /// <summary>The MRA (null on the verdict page while SAP has not linked the MRA number, or the MRA is not in the list).</summary>
+    [Parameter] public MraRowDto? Row { get; set; }
+    /// <summary>Shown under the heading (verdict page: why the MRA part is missing).</summary>
+    [Parameter] public string? Note { get; set; }
     /// <summary>The decision and working loaded for the MRA (null while loading or when none).</summary>
     [Parameter] public MraDecisionDetail? Detail { get; set; }
     [Parameter] public bool DetailBusy { get; set; }
@@ -154,8 +175,9 @@
         _pdfBusy = true;
         try
         {
-            var bytes = await Task.Run(() => MraPdfReport.Build(Row, Detail, Owners, Path.Combine(Env.WebRootPath, "img", "logo.png"), DateTimeOffset.Now));
-            await Files.SaveAsync(new ApiFileResponse { FileName = MraPdfReport.FileName(Row.No), ContentType = "application/pdf", FileBytes = bytes });
+            var bytes = await Task.Run(() => MraPdfReport.Build(Row, Detail, Owners, Path.Combine(Env.WebRootPath, "img", "logo.png"), DateTimeOffset.Now, Note));
+            var td = Detail?.Decision ?? Row?.ToolDecision;
+            await Files.SaveAsync(new ApiFileResponse { FileName = MraPdfReport.FileName(Row?.No ?? Detail?.MraNo, td?.DecisionId), ContentType = "application/pdf", FileBytes = bytes });
         }
         catch (Exception e)
         {

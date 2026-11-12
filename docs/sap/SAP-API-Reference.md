@@ -269,7 +269,7 @@ repeat), otherwise the answer is `400 VALIDATION_FAILED`. The answer always echo
   "data_delayed": false,
   "data_as_of": { "bw_snapshot": "2026-10-22T14:24:36+05:30", "events_lag_seconds": 0 },
   "decided_at": "2026-10-22T14:24:58+05:30",
-  "view_url": "http://192.168.0.175:8177/verdict/R_LVm2VaqeZN94W6EOgf44SuA27lJ9VQr5rUyQx5hb0",
+  "view_url": "http://192.168.0.175:8177/mra-verdict/R_LVm2VaqeZN94W6EOgf44SuA27lJ9VQr5rUyQx5hb0",
   "view_url_expires_at": "2027-01-20T14:24:58+05:30",
   "items": [
     {
@@ -301,10 +301,19 @@ repeat), otherwise the answer is `400 VALIDATION_FAILED`. The answer always echo
 | `data_as_of.bw_snapshot` | date-time | Time of the stock data the decision used |
 | `data_as_of.events_lag_seconds` | integer | How far behind the event feed is |
 | `decided_at` | date-time | When the tool decided |
-| `view_url` | string (URL) | **Link to the verdict page** on the PO Governance portal. Show it to the buyer / approver (work item, PO note, e-mail): clicking it opens the verdict with its items and reasons — read-only, **no sign-in needed**. The token in the link is random and cannot be guessed; anyone who has the link can open it, so keep it inside the company. Omitted if the link is switched off |
+| `view_url` | string (URL) | **Link to the MRA verdict page** on the PO Governance portal (`<portal>/mra-verdict/<token>`, the same page as `GET /verdict-url`, §9). Show it to the buyer / approvers at every level (work item, MRA note, e-mail): clicking it opens the tool's decision and its working — and, once SAP has sent the MRA number with `POST /documents`, where the MRA is and its level changes — read-only, **no sign-in needed**, with Download PDF. The token in the link is random and cannot be guessed; anyone who has the link can open it, so keep it inside the company. Omitted if the link is switched off |
 | `view_url_expires_at` | date-time | Until when the link works (90 days by default) |
 
-**The verdict page** (`view_url`) shows the complete verdict: what happens next for this verdict, the decision details
+**The MRA verdict page** (`view_url`, since 12 Nov 2026) shows the same content as the MRA pop-up of the tool's MRA
+Queues page: the decision for the PO (decision, reason, Decision ID, PO, request ID, qty checked, SAP verdict, Max
+Permissible), the working saved with it (month by month, incoming by month), and — when SAP has stored the MRA number
+for this `request_id` with `POST /documents` and the MRA is in the tool's MRA list — where the MRA is now and its level
+changes. Until then the page says that the MRA is not linked yet. When the PO had several items the page shows the
+item of the MRA's article · colour · month (without an MRA: the largest item). Its "Verdict page" row opens the PO
+verdict page below.
+
+**The PO verdict page** (`<portal>/verdict/<token>`, the `view_url` of decisions before 12 Nov 2026 — those links keep
+working) shows the complete verdict: what happens next for this verdict, the decision details
 (decision / request ID, decided at, route, mode, buyer, division, SAP system, rules version, stock data date, final
 document), every item with its reason, rule and the figures behind it (plan, stock, open PO, headroom, cover days or
 sell-through), totals, and a print button. A decision answered before the link existed gets its `view_url` the first
@@ -915,7 +924,7 @@ GET /api/sap/v1/verdict-url?mra_no=0000348404
 |---|---|
 | `ping`, `reason-codes`, `decisions`, `events`, `documents`, `mra-events`, `po-events`, `verdict-url` | **Available for testing** on staging |
 | Open MRAs in the verdicts | Counted in `/decisions` (single concept): levels 1, 2, 4 and level 5 reached live today lower Max Permissible of their colour and delivery month |
-| Verdict link (`view_url`) | Available; the portal page `/verdict/<token>` opens without sign-in |
+| Verdict link (`view_url`) | Available; the MRA page `/mra-verdict/<token>` (and the PO verdict page `/verdict/<token>`) open without sign-in |
 | Decision logic | Same rules as the tool's New Request screen (Single Concept, Multi Concept, Watch List, Max Permissible) |
 | Data used for decisions | Uploaded BW / SAP extracts (stock, pending PO, sales, plan, BSR) + the day's approved requests |
 | Events → live open-PO / stock position | **In development**: events are received and stored now, and will feed the live position. Until then decisions use the uploaded files, so run **SHADOW** mode |

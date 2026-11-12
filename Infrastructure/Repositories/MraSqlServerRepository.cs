@@ -220,6 +220,9 @@ namespace Infrastructure.Repositories
             public string? Mode { get; set; }
             public string? ViewUrl { get; set; }
             public string? DocumentNo { get; set; }
+            public string? OverallVerdict { get; set; }
+            public int? PoItem { get; set; }
+            public DateTimeOffset? ViewExpiresAt { get; set; }
         }
 
         public async Task<List<MraToolDecision>> DecisionsAsync(DateTime since, CancellationToken ct = default)
@@ -228,13 +231,24 @@ namespace Infrastructure.Repositories
             p.Add("@Since", since.Date, DbType.Date);
             var rows = (await _db.ExecuteStoredProcedureListAsync<DecisionRow>(Sp, p, commandTimeout: 120, ct: ct)).AsList();
             Check(p);
-            return rows.Select(r => new MraToolDecision
-            {
-                ItemId = r.ItemId, Gm = r.Gm ?? "", Colour = r.Colour ?? "", DeliveryMonth = r.DeliveryMonth ?? "", OrderQty = r.OrderQty,
-                Verdict = r.Verdict, Decision = r.EngineDecision ?? "", Reason = r.ReasonText, MaxPermissible = r.MaxPermissible, HasWorking = r.HasWorking,
-                DecisionId = r.DecisionId, RequestId = r.RequestId, PoNumber = r.PoNumber, DecidedAt = r.DecidedAt, Mode = r.Mode, ViewUrl = r.ViewUrl,
-                DocumentNo = r.DocumentNo
-            }).ToList();
+            return rows.Select(ToDecision).ToList();
+        }
+
+        private static MraToolDecision ToDecision(DecisionRow r) => new()
+        {
+            ItemId = r.ItemId, Gm = r.Gm ?? "", Colour = r.Colour ?? "", DeliveryMonth = r.DeliveryMonth ?? "", OrderQty = r.OrderQty,
+            Verdict = r.Verdict, Decision = r.EngineDecision ?? "", Reason = r.ReasonText, MaxPermissible = r.MaxPermissible, HasWorking = r.HasWorking,
+            DecisionId = r.DecisionId, RequestId = r.RequestId, PoNumber = r.PoNumber, DecidedAt = r.DecidedAt, Mode = r.Mode, ViewUrl = r.ViewUrl,
+            DocumentNo = r.DocumentNo, OverallVerdict = r.OverallVerdict, PoItem = r.PoItem, ViewExpiresAt = r.ViewExpiresAt
+        };
+
+        public async Task<List<MraToolDecision>> DecisionByTokenAsync(string viewToken, CancellationToken ct = default)
+        {
+            var p = P("BY_TOKEN");
+            p.Add("@View_Token", viewToken, DbType.String, size: 64);
+            var rows = (await _db.ExecuteStoredProcedureListAsync<DecisionRow>(Sp, p, commandTimeout: null, ct: ct)).AsList();
+            Check(p);
+            return rows.Select(ToDecision).ToList();
         }
 
         private sealed class VerdictUrlRow
@@ -279,5 +293,6 @@ namespace Infrastructure.Repositories
         public Task<List<MraToolDecision>> DecisionsAsync(DateTime since, CancellationToken ct = default) => throw Fail();
         public Task<string?> WorkingAsync(long itemId, CancellationToken ct = default) => throw Fail();
         public Task<MraVerdictLink?> VerdictLinkAsync(string mraNo, CancellationToken ct = default) => throw Fail();
+        public Task<List<MraToolDecision>> DecisionByTokenAsync(string viewToken, CancellationToken ct = default) => throw Fail();
     }
 }

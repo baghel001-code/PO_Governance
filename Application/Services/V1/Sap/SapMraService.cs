@@ -482,38 +482,52 @@ namespace Application.Services.V1.Sap
             const string invalid = "This MRA verdict link is not valid.";
             var t = (token ?? "").Trim();
             var raw = (mraNo ?? "").Trim();
-            if (!System.Text.RegularExpressions.Regex.IsMatch(t, @"^[A-Za-z0-9_\-]{20,64}$") || !System.Text.RegularExpressions.Regex.IsMatch(raw, @"^[A-Za-z0-9_-]{1,40}$"))
+            if (!System.Text.RegularExpressions.Regex.IsMatch(t, @"^[A-Za-z0-9_\-]{20,64}$") ||
+                (raw.Length > 0 && !System.Text.RegularExpressions.Regex.IsMatch(raw, @"^[A-Za-z0-9_-]{1,40}$")))
                 throw new NotFoundException(invalid);
-            var no = MraNorm.NoZeros(raw);
-            // valid only with the token of the decision SAP stored this MRA number for (POST /documents)
-            var link = await _repo.VerdictLinkAsync(no, ct);
-            var expected = MraVerdictLinks.Token(link?.ViewUrl);
-            if (expected == null || !System.Security.Cryptography.CryptographicOperations.FixedTimeEquals(
-                    System.Text.Encoding.UTF8.GetBytes(expected), System.Text.Encoding.UTF8.GetBytes(t)))
-                throw new NotFoundException(invalid);
-            if (link!.ExpiresAt is { } until && until < _clock.Now)
-                throw new AppException(410, "This MRA verdict link expired on " + until.ToOffset(_clock.Now.Offset).ToString("dd-MMM-yyyy") + ".");
 
-            var data = await _cache.GetCurrentAsync(ct);
-            var full = await _source.GetFullAsync(data, ct) ?? throw new ServiceUnavailableException(_repo.UnavailableReason ?? "SAP MRAs require SQL Server storage");
-            var (_, cap) = full;
-            var hit = cap.Rows.FirstOrDefault(r => r.No == no);
-            if (hit.No == null) throw new NotFoundException("MRA " + no + " is not in the current MRA list.");
-            var (_, m, c) = hit;
-            var td = MraDecisionLinker.Link(m, no, c.Mon, MraDecisionLinker.Index(await DecisionsSafeAsync(ct)));
-            var view = new MraVerdictView
+            // the decision of this verdict link token (view_url of the /decisions answer)
+            var items = await _repo.DecisionByTokenAsync(t, ct);
+            if (items.Count == 0) throw new NotFoundException(invalid);
+            if (items[0].ViewExpiresAt is { } until && until < _clock.Now)
+                throw new AppException(410, "This MRA verdict link expired on " + until.ToOffset(_clock.Now.Offset).ToString("dd-MMM-yyyy") + ".");
+            // the MRA: the number SAP stored for this decision with POST /documents; a number in the link must be that one
+            var doc = items.Select(i => i.DocumentNo).FirstOrDefault(d => !string.IsNullOrWhiteSpace(d));
+            var docNo = doc == null ? null : MraNorm.NoZeros(doc.Trim());
+            if (raw.Length > 0 && docNo != MraNorm.NoZeros(raw)) throw new NotFoundException(invalid);
+            var no = docNo;
+
+            var view = new MraVerdictView { MraNo = no, ExpiresAt = items[0].ViewExpiresAt };
+            MraToolDecision? td;
+            (string No, MraState M, MraClass C) hit = default;
+            if (no != null)
             {
-                Row = new MraRowDto { No = no, M = m, C = c, ToolDecision = td, DecGroup = td == null ? "Not sent" : MraCapacity.DecisionGroup(td.Decision) },
-                Detail = new MraDecisionDetail { MraNo = no, Decision = td },
-                ExpiresAt = link.ExpiresAt
-            };
+                var data = await _cache.GetCurrentAsync(ct);
+                if (await _source.GetFullAsync(data, ct) is { } full) hit = full.Capacity.Rows.FirstOrDefault(r => r.No == no);
+            }
+            if (hit.No != null)
+            {
+                var (_, m, c) = hit;
+                td = MraDecisionLinker.ForDecision(items, m, c.Mon);
+                view.Row = new MraRowDto { No = no!, M = m, C = c, ToolDecision = td, DecGroup = td == null ? "Not sent" : MraCapacity.DecisionGroup(td.Decision) };
+                // only the names this MRA shows (Division Head, Category Head) - not the user list
+                var users = (await _acc.GetUsersAsync(ct)).ToDictionary(u => u.Email, StringComparer.OrdinalIgnoreCase);
+                foreach (var e in new[] { c.DhEmail, c.ChEmail }.Where(e => !string.IsNullOrEmpty(e)))
+                    view.Owners[e] = users.TryGetValue(e, out var u) && !string.IsNullOrEmpty(u.Name) ? u.Name : e.Split('@')[0];
+            }
+            else
+            {
+                td = MraDecisionLinker.ForDecision(items, null, null);
+                view.Note = no == null
+                    ? "SAP has not sent the MRA number of this PO check yet (POST /documents). The MRA's level and history show here once it does."
+                    : "MRA " + no + " is not in the tool's current MRA list (morning file + live changes): the tool's decision only.";
+                if (items.Count > 1 && td != null)
+                    view.Note += " This check had " + items.Count + " items; shown: item " + (td.PoItem?.ToString() ?? "") + " " + td.Gm + " " + td.Colour + " (the largest).";
+            }
+            view.Detail = new MraDecisionDetail { MraNo = no ?? "", Decision = td };
             if (td is { HasWorking: true } && await _repo.WorkingAsync(td.ItemId, ct) is { Length: > 0 } json)
                 view.Detail.Working = JsonNode.Parse(json) as JsonObject;
-            // only the names this MRA shows (Division Head, Category Head) - not the user list
-            var users = (await _acc.GetUsersAsync(ct)).ToDictionary(u => u.Email, StringComparer.OrdinalIgnoreCase);
-            foreach (var e in new[] { c.DhEmail, c.ChEmail }.Where(e => !string.IsNullOrEmpty(e)))
-                view.Owners[e] = users.TryGetValue(e, out var u) && !string.IsNullOrEmpty(u.Name) ? u.Name : e.Split('@')[0];
-            _log.LogInformation("MRA verdict page: MRA {Mra} opened (decision {Decision})", no, link.DecisionId);
+            _log.LogInformation("MRA verdict page: decision {Decision} opened (MRA {Mra})", td?.DecisionId, no ?? "not linked yet");
             return view;
         }
 

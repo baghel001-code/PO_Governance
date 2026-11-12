@@ -1,3 +1,4 @@
+@page "/mra-verdict/{Token}"
 @page "/mra-verdict/{Token}/{MraNo}"
 @layout VerdictLayout
 @attribute [AllowAnonymous]
@@ -9,7 +10,7 @@
 @using DecisionEngine.Results.Mra
 @using Admin.Services.Platform
 
-<PageTitle>MRA @(_v?.Row.No ?? MraNo) · VMM PO Governance</PageTitle>
+<PageTitle>MRA @(_v?.MraNo ?? MraNo ?? "verdict") · VMM PO Governance</PageTitle>
 <PlatformStyles />
 
 @if (_error != null)
@@ -18,20 +19,20 @@
 }
 else if (_v != null)
 {
-    <MraPanel Row="_v.Row" Detail="_v.Detail" Owners="_v.Owners" Standalone="true" ExpiresAt="_v.ExpiresAt"
-              PdfUrl="@($"mra-verdict/{Uri.EscapeDataString(Token)}/{Uri.EscapeDataString(MraNo)}/pdf")" />
+    <MraPanel Row="_v.Row" Detail="_v.Detail" Owners="_v.Owners" Note="@_v.Note" Standalone="true" ExpiresAt="_v.ExpiresAt"
+              PdfUrl="@(string.IsNullOrEmpty(MraNo) ? $"mra-verdict/{Uri.EscapeDataString(Token)}/pdf" : $"mra-verdict/{Uri.EscapeDataString(Token)}/{Uri.EscapeDataString(MraNo)}/pdf")" />
 }
 
 @code {
     [Parameter] public string Token { get; set; } = "";
-    [Parameter] public string MraNo { get; set; } = "";
+    [Parameter] public string? MraNo { get; set; }
 
     private MraVerdictView? _v;
     private string? _error;
 
     protected override async Task OnInitializedAsync()
     {
-        var res = await ApiMasterService.MraVerdictViewAsync(Token, MraNo);
+        var res = await ApiMasterService.MraVerdictViewAsync(Token, MraNo ?? "");
         if (res.IsSuccess && res.Data != null) _v = res.Data;
         else _error = res.responseMessage ?? "This MRA verdict link cannot be opened.";
     }

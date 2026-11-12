@@ -15,13 +15,16 @@ namespace Admin.Services.Platform
         private static readonly string[] Mn = { "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec" };
         private static readonly TimeSpan Ist = TimeSpan.FromMinutes(330);
 
-        public static string FileName(string mraNo) => "MRA_" + mraNo + ".pdf";
+        public static string FileName(string? mraNo, string? decisionId = null) =>
+            !string.IsNullOrEmpty(mraNo) ? "MRA_" + mraNo + ".pdf" : "MRA_verdict_" + (decisionId ?? "decision") + ".pdf";
 
-        public static byte[] Build(MraRowDto x, MraDecisionDetail? detail, IReadOnlyDictionary<string, string>? owners, string? logoPath, DateTimeOffset now)
+        /// <param name="x">The MRA; null when SAP has not linked the MRA number yet (decision and working only, with <paramref name="note"/>).</param>
+        public static byte[] Build(MraRowDto? x, MraDecisionDetail? detail, IReadOnlyDictionary<string, string>? owners, string? logoPath, DateTimeOffset now,
+                                   string? note = null)
         {
-            var m = x.M; var c = x.C;
-            var td = detail?.Decision ?? x.ToolDecision;
+            var td = detail?.Decision ?? x?.ToolDecision;
             var w = detail?.Working;
+            var mraNo = x?.No ?? (string.IsNullOrEmpty(detail?.MraNo) ? null : detail!.MraNo);
             using var pdf = new PdfBuilder(new PageSettings { MarginTop = 32, MarginBottom = 50 });
             pdf.AddLetterhead(new LetterheadInfo
             {
@@ -29,12 +32,22 @@ namespace Admin.Services.Platform
                 Tagline = "PO Governance",
                 LogoPath = logoPath != null && File.Exists(logoPath) ? logoPath : null,
                 DateOfInspection = "Printed " + When(now),
-                ReferenceNumber = "MRA " + x.No,
+                ReferenceNumber = mraNo != null ? "MRA " + mraNo : td?.DecisionId,
                 DocumentTitle = "MRA – Decision, Working and History",
-                FooterInfo = "VMM PO Governance · MRA " + x.No + " · " + m.Ga + " " + m.Colour
+                FooterInfo = "VMM PO Governance · " + (mraNo != null ? "MRA " + mraNo : "decision " + td?.DecisionId) +
+                             (x != null ? " · " + x.M.Ga + " " + x.M.Colour : td != null ? " · " + td.Gm + " " + td.Colour : "")
             });
-            pdf.AddText("MRA " + x.No + " · " + m.Ga + " " + m.Colour, TextStyle.SubHeading);
-            pdf.AddText((c.Info?.Desc ?? m.GaDesc ?? "") + " · " + Nf(m.Qty) + " pcs · " + MraCapacity.DayLabel(m.Dd), TextStyle.Small);
+            if (x != null)
+            {
+                pdf.AddText("MRA " + x.No + " · " + x.M.Ga + " " + x.M.Colour, TextStyle.SubHeading);
+                pdf.AddText((x.C.Info?.Desc ?? x.M.GaDesc ?? "") + " · " + Nf(x.M.Qty) + " pcs · " + MraCapacity.DayLabel(x.M.Dd), TextStyle.Small);
+            }
+            else
+            {
+                pdf.AddText("MRA " + (mraNo ?? "not linked yet") + (td != null ? " · " + td.Gm + " " + td.Colour : ""), TextStyle.SubHeading);
+                if (td != null) pdf.AddText("PO " + (td.PoNumber ?? "—") + " · " + NfD(td.OrderQty) + " pcs checked · delivery " + MonL(td.DeliveryMonth), TextStyle.Small);
+            }
+            if (!string.IsNullOrEmpty(note)) pdf.AddText(note, TextStyle.Small);
 
             // decision
             pdf.AddSectionBar("DECISION (THE TOOL'S CHECK OF THIS PO)");
@@ -55,12 +68,19 @@ namespace Admin.Services.Platform
             }
             else
             {
-                pdf.AddText("No decision found for this MRA: SAP has not sent MRA " + x.No + " as document_no to POST /documents for a checked PO.");
+                pdf.AddText("No decision found for this MRA: SAP has not sent MRA " + mraNo + " as document_no to POST /documents for a checked PO.");
             }
 
             // working saved with the decision
             if (w != null) Working(pdf, w);
             else if (td != null) pdf.AddText("No working was saved with this decision (decisions before 7 Nov 2026 have none).", TextStyle.Small);
+
+            if (x == null)
+            {
+                pdf.WithPageNumbers();
+                return pdf.ToBytes();
+            }
+            var m = x.M; var c = x.C;
 
             // where it is now
             pdf.AddSpacing(6);

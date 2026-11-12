@@ -156,6 +156,37 @@ namespace POGovernance.Tests.SqlServer
         }
 
         [SqlServerFact]
+        public async Task The_mra_page_of_a_decision_link_reads_the_decision_by_its_token()
+        {
+            await using (var c = new SqlConnection(_fx.ConnectionString))
+            {
+                await c.ExecuteAsync("""
+                    INSERT INTO dbo.SAP_DECISION_LOG (Decision_Id, Request_Id, Http_Status, Is_Test, Po_Number, Overall_Verdict, Decided_At, View_Token, View_Expires_At, Response_Json)
+                    VALUES (N'D-TK-1', N'R-TK-1', 200, 0, N'4500077001', N'ALLOW', '2026-11-12T10:00:00+05:30', N'TokTokTokTokTokTokTok1', '2027-02-10T10:00:00+05:30',
+                            N'{"view_url":"http://portal/mra-verdict/TokTokTokTokTokTokTok1"}');
+                    INSERT INTO dbo.SAP_DECISION_ITEMS (Decision_Log_Id, Po_Item, Gm, Colour, Delivery_Month, Order_Qty, Verdict, Engine_Decision)
+                    SELECT Id, 20, N'1101000101', N'WHT', N'12.2026', 1500, N'ALLOW', N'Auto Allow' FROM dbo.SAP_DECISION_LOG WHERE Request_Id = N'R-TK-1'
+                    UNION ALL SELECT Id, 10, N'1101000101', N'BLK', N'12.2026', 500, N'ALLOW', N'Auto Allow' FROM dbo.SAP_DECISION_LOG WHERE Request_Id = N'R-TK-1';
+                    """);
+            }
+            var r = Repo();
+            var items = await r.DecisionByTokenAsync("TokTokTokTokTokTokTok1");
+            Assert.Equal(new int?[] { 10, 20 }, items.Select(i => i.PoItem));
+            Assert.All(items, i => Assert.Null(i.DocumentNo));                       // no /documents yet
+            Assert.Equal(("D-TK-1", "ALLOW", DateTimeOffset.Parse("2027-02-10T10:00:00+05:30")), (items[0].DecisionId, items[0].OverallVerdict, items[0].ViewExpiresAt!.Value));
+            var pick = Application.Services.V1.Sap.MraDecisionLinker.ForDecision(items, null, null)!;
+            Assert.Equal((20, "http://portal/verdict/TokTokTokTokTokTokTok1"), (pick.PoItem!.Value, pick.ViewUrl));   // largest; panel links the PO verdict page
+
+            await using (var c = new SqlConnection(_fx.ConnectionString))
+                await c.ExecuteAsync("""
+                    INSERT INTO dbo.SAP_DECISION_DOCUMENTS (Decision_Log_Id, Request_Id, Decision_Id, Document_No, Is_Current)
+                    SELECT Id, Request_Id, Decision_Id, N'0000990901', 1 FROM dbo.SAP_DECISION_LOG WHERE Request_Id = N'R-TK-1';
+                    """);
+            Assert.All(await r.DecisionByTokenAsync("TokTokTokTokTokTokTok1"), i => Assert.Equal("0000990901", i.DocumentNo));
+            Assert.Empty(await r.DecisionByTokenAsync("NoSuchTokenNoSuchToken1"));
+        }
+
+        [SqlServerFact]
         public async Task Schema_is_v8_and_the_v5_tables_are_gone()
         {
             await using var c = new SqlConnection(_fx.ConnectionString);

@@ -60,6 +60,9 @@ namespace Application.Interfaces.V1.Sap
 
         /// <summary>The verdict link (view_url) of the latest decision SAP stored MRA <paramref name="mraNo"/> for (POST /documents), or null.</summary>
         Task<MraVerdictLink?> VerdictLinkAsync(string mraNo, CancellationToken ct = default);
+
+        /// <summary>The items of the answered decision with this verdict link token (+ its current document = MRA number, expiry); empty when none.</summary>
+        Task<List<MraToolDecision>> DecisionByTokenAsync(string viewToken, CancellationToken ct = default);
     }
 
     /// <summary>

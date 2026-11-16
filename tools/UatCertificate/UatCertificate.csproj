@@ -1,0 +1,16 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- Draws docs/uat/PO-Governance-UAT-Certificate.pdf with the company PDFKit (same design as the MRA "Download PDF").
+       Run from the repository root: dotnet run with the project tools/UatCertificate and the output path as argument. -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="PDFsharp" Version="6.2.4" />
+    <Reference Include="PDFKit">
+      <HintPath>..\..\Admin\Dlls\PDFKit.dll</HintPath>
+    </Reference>
+  </ItemGroup>
+</Project>

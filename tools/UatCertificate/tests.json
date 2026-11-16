@@ -1,0 +1,334 @@
+[
+ {
+  "title": "3.1 SIGN-IN AND SECURITY",
+  "rows": [
+   {
+    "f": "Sign in with Employee ID, company password and security code",
+    "e": "Registered, active employee signs in; 3-character code (not case-sensitive); new code after every attempt"
+   },
+   {
+    "f": "Only registered employees",
+    "e": "A valid company account that is not registered is refused (\"Employee ID or password is incorrect\"); e-mail is refused as sign-in ID"
+   },
+   {
+    "f": "Lock-out",
+    "e": "5 wrong passwords lock the account for 15 minutes; admin can unlock earlier"
+   },
+   {
+    "f": "One device at a time",
+    "e": "Signing in on another device signs out the first session with a message"
+   },
+   {
+    "f": "Idle time-out",
+    "e": "Warning one minute before; signed out after 30 minutes idle and after 12 hours"
+   },
+   {
+    "f": "Role / status change",
+    "e": "When admin changes roles or deactivates, the user is signed out within a minute with the reason"
+   },
+   {
+    "f": "Built-in admin and change password",
+    "e": "Admin e-mail sign-in while local login is on; password rules (8+ chars, letter and number)"
+   }
+  ]
+ },
+ {
+  "title": "3.2 COMMON TO ALL USERS",
+  "rows": [
+   {
+    "f": "Pages by role",
+    "e": "Each role sees only its tabs (section 2.2 of the user manual); buyers / category heads only their Brand x MC x MRP (SCR)"
+   },
+   {
+    "f": "View switch and status",
+    "e": "Planner / admin switch Category view <-> Planner view; status pill shows server date; \"New data on the server\" banner reloads"
+   },
+   {
+    "f": "Feedback",
+    "e": "User sends feedback (type, screen, article, rating) and sees the admin's reply"
+   },
+   {
+    "f": "How it works and How-to video",
+    "e": "Rule explanations with current parameter values; videos open"
+   }
+  ]
+ },
+ {
+  "title": "3.3 BUYER – NEW PO REQUEST (TOOL 1)",
+  "rows": [
+   {
+    "f": "Validate a request",
+    "e": "GM shows the article strip; colour list; delivery month; quantity; Validate gives a result card with request number"
+   },
+   {
+    "f": "Engines",
+    "e": "Single Concept (Colour STR), Multi Concept (Peer BSR) or New Product chosen by the masters"
+   },
+   {
+    "f": "Decisions",
+    "e": "Auto Allow / Allow, Watch List, Hold – Don't Raise, Block, Cannot Validate with reason and Max Permissible"
+   },
+   {
+    "f": "Confirm final quantity",
+    "e": "Single Concept: final quantity pre-filled with Max Permissible; Confirm or Don't Raise; counted for the day"
+   },
+   {
+    "f": "Step-by-step computation",
+    "e": "Op stock, mix %, month-by-month stock roll, STR and Max Permissible explained"
+   },
+   {
+    "f": "View Recommendation",
+    "e": "Alternative colours / attributes with Max Permissible per month; Download Excel"
+   },
+   {
+    "f": "Open MRAs counted",
+    "e": "Box \"Open MRAs from SAP counted in this colour\"; incoming = released POs + open MRAs + approved today"
+   },
+   {
+    "f": "Check-only mode",
+    "e": "With switch \"Tool requests use capacity\" OFF: no pop-up, nothing saved, \"Raise the request in SAP\""
+   }
+  ]
+ },
+ {
+  "title": "3.4 REQUESTS, INSIGHTS AND HISTORY",
+  "rows": [
+   {
+    "f": "Requests – today's list",
+    "e": "Today's requests with decision, approval status and approved qty; Only mine; updates when a category head decides"
+   },
+   {
+    "f": "Insights dashboard",
+    "e": "Totals, decision mix, drivers, risk by MC, flagged requests; filters by brand, division, MC, month, engine, date"
+   },
+   {
+    "f": "History – Tool 1 requests",
+    "e": "Date range, search, decision filter, request details, Download Excel; cleared requests shown faded"
+   }
+  ]
+ },
+ {
+  "title": "3.5 CATEGORY HEAD – APPROVALS",
+  "rows": [
+   {
+    "f": "Waiting for me",
+    "e": "Watch List requests on own MCs with reason; red count on the tab"
+   },
+   {
+    "f": "Approve / reject",
+    "e": "Approve with quantity 0..requested; reject needs a comment; buyer sees it at once; approved qty counts for the day"
+   },
+   {
+    "f": "Rules",
+    "e": "Own requests never shown; a decided request cannot be decided again; Decided tab shows the last 120 days"
+   }
+  ]
+ },
+ {
+  "title": "3.6 PLANNER – DATA SETUP, PARAMETERS AND SEASONS",
+  "rows": [
+   {
+    "f": "Upload ZIP bundle",
+    "e": "Files recognised by name or columns; report of loaded and missing files; data shared with everyone"
+   },
+   {
+    "f": "Raw export files and file slots",
+    "e": "SAP/BW exports converted; one slot per file; BSR several files; .xlsx/.xls/.xlsb/.csv up to 400 MB"
+   },
+   {
+    "f": "Data status and Clear",
+    "e": "Required / optional files shown green, red, amber; Clear removes a file for everyone (History keeps it)"
+   },
+   {
+    "f": "Parameters",
+    "e": "Each parameter saves at once (STR T, window D, mix %, WOF gate, peer min, buffers, late PO day ...)"
+   },
+   {
+    "f": "Season selection",
+    "e": "Current and fallback seasons from the Article Master"
+   },
+   {
+    "f": "SCR products file",
+    "e": "Creates buyer / category head mapping and logins"
+   }
+  ]
+ },
+ {
+  "title": "3.7 PLANNER – PO ASSESSMENT (TOOL 2), GRC AND HISTORY",
+  "rows": [
+   {
+    "f": "Run assessment",
+    "e": "Every F2 line assessed; Run ID saved; KPIs (Retain, Reduce, Cancel, Watch, qty and value at risk)"
+   },
+   {
+    "f": "Brand summary and detail view",
+    "e": "Drill down Brand > Division > MC > MRP > PO; why this action; STR steps; PO-wise allocation"
+   },
+   {
+    "f": "Exports",
+    "e": "Excel / CSV per category head or one ZIP; charts by division and month"
+   },
+   {
+    "f": "GRC Back Testing",
+    "e": "Assess as of, by week or month; filters; Export Row Detail; Article Trace"
+   },
+   {
+    "f": "History – runs and uploads",
+    "e": "Open a saved run as it was; delete a run; view upload files; Make current to go back to earlier data"
+   },
+   {
+    "f": "Clear All requests",
+    "e": "Clears today's requests for everyone, resets the day's ledger; kept in History as cleared"
+   }
+  ]
+ },
+ {
+  "title": "3.8 MRA – SAP MERCHANDISE REQUESTS",
+  "rows": [
+   {
+    "f": "Morning MRA file",
+    "e": "Two-sheet workbook (items + header) replaces yesterday's list; summary per level, counted and skipped"
+   },
+   {
+    "f": "Capacity rules",
+    "e": "Levels 1, 2, 4 (and 5 reached live today, PO not unreleased) count in Single Concept Max Permissible; others, expired, multi concept not"
+   },
+   {
+    "f": "Changes before the morning file",
+    "e": "SAP changes received before today's file wait as pending and are applied when the file is uploaded (data version)"
+   },
+   {
+    "f": "MRA Queues",
+    "e": "Tiles per queue, decision chips, filters, Waiting with me, group by, Download Excel; buyers / category heads see own MCs"
+   },
+   {
+    "f": "MRA pop-up",
+    "e": "Click Level / waiting with: tool decision (linked by the MRA number from /documents), working, month by month, where it is now, level changes"
+   },
+   {
+    "f": "Download PDF",
+    "e": "Pop-up saved as A4 PDF in the company report design"
+   },
+   {
+    "f": "By colour, Today's changes, PO queue",
+    "e": "Capacity per colour and month; each live change and its effect; PO queue with switch Live PO changes ON"
+   }
+  ]
+ },
+ {
+  "title": "3.9 ADMINISTRATOR",
+  "rows": [
+   {
+    "f": "Users – add / bulk add",
+    "e": "Fetch employee by ID (resigned / inactive / already registered refused); roles; bulk add \"ID, role\" lines"
+   },
+   {
+    "f": "Users – edit, link, unlock, delete",
+    "e": "Change roles, active, refresh details, link Employee ID, unlock, delete; last active admin protected"
+   },
+   {
+    "f": "Import from SCR",
+    "e": "Choose Buyer / Category Head / Skip per e-mail column; Save & create logins; nobody removed"
+   },
+   {
+    "f": "Audit log",
+    "e": "Sign-ins, lock-outs, user changes, uploads, requests, approvals, parameter changes, runs, backups"
+   },
+   {
+    "f": "Backups",
+    "e": "Nightly backup after 02:00 kept 30 days; Back up now"
+   },
+   {
+    "f": "All feedback",
+    "e": "Filter by status, reply to the user, average rating"
+   }
+  ]
+ },
+ {
+  "title": "3.10 SAP INTERFACE – PORTAL PAGES",
+  "rows": [
+   {
+    "f": "Overview",
+    "e": "Interface on/off, rules version, verdict link address, allowed IPs, today's decisions, verdict counts, response times, event lag"
+   },
+   {
+    "f": "Decisions and PO documents",
+    "e": "Filter decisions; open one with items, request / response JSON, MRN, verdict link; PO documents with / without MRN; Excel"
+   },
+   {
+    "f": "Events",
+    "e": "PO / GR / return events with status (parked with reason), order and lag"
+   },
+   {
+    "f": "Technical users",
+    "e": "Add (password shown once), reset password, disable / enable, unlock"
+   },
+   {
+    "f": "Reason codes",
+    "e": "Add, activate, deactivate exception reasons"
+   },
+   {
+    "f": "Test decision",
+    "e": "Sample request through the real rules, logged as TEST-"
+   },
+   {
+    "f": "SAP Feed",
+    "e": "Every MRA / PO message with outcome; test sender; switches Tool requests use capacity and Live PO changes"
+   }
+  ]
+ },
+ {
+  "title": "3.11 SAP INTERFACE – API /api/sap/v1 (SAP TEAM)",
+  "rows": [
+   {
+    "f": "Connection",
+    "e": "HTTP Basic technical user and IP allow-list; wrong credentials / IP give 401; GET /ping and GET /reason-codes answer"
+   },
+   {
+    "f": "POST /decisions",
+    "e": "Verdict per PO item (ALLOW / REDUCE / WATCH / HOLD) within 3 s; same request_id + body gives the same answer; other body gives REQUEST_ID_CONFLICT"
+   },
+   {
+    "f": "view_url of /decisions",
+    "e": "Opens the MRA verdict page without sign-in; shows the MRA once /documents has its number"
+   },
+   {
+    "f": "POST /events",
+    "e": "Batch stored once (duplicates by msg_id); invalid events parked with reason"
+   },
+   {
+    "f": "POST /documents",
+    "e": "MRA number stored against the request_id: STORED / UNCHANGED / REPLACED; unknown request_id gives 404 REQUEST_NOT_FOUND"
+   },
+   {
+    "f": "POST /mra-events",
+    "e": "New MRA and level changes applied; action_by and remark optional; duplicate = same msg_id for the same MRA; pending before the morning file"
+   },
+   {
+    "f": "POST /po-events",
+    "e": "PO release / unrelease stored; moves capacity only with switch Live PO changes ON"
+   },
+   {
+    "f": "GET /verdict-url",
+    "e": "MRA number returns the MRA verdict page link; unknown MRA gives 404 MRA_NOT_FOUND"
+   }
+  ]
+ },
+ {
+  "title": "3.12 VERDICT PAGES (NO SIGN-IN)",
+  "rows": [
+   {
+    "f": "MRA verdict page",
+    "e": "Decision, working, where the MRA is, level changes; note when the MRA is not linked yet; Download PDF"
+   },
+   {
+    "f": "PO verdict page",
+    "e": "Verdict, what happens next, decision details, items with figures; Print"
+   },
+   {
+    "f": "Link validity",
+    "e": "Wrong token shows \"not valid\"; after expiry (90 days) shows \"expired\""
+   }
+  ]
+ }
+]

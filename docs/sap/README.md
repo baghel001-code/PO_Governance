@@ -152,8 +152,8 @@ up to Max Permissible).
 | Allow — Q3 at / near the peer average (border zone) | ALLOW | PEER_Q3 | PEER-Q3-OK |
 | Watch List — Q3 beyond the border zone | WATCH | PEER_Q3 | PEER-Q3-GAP |
 | Watch List — Q4 softened (at / near average) | WATCH | PEER_Q4 | PEER-Q4-WATCH |
-| **Block** — Q4 beyond the border zone | **HOLD** (or BLOCK, see below) | BLOCK | BLOCK-Q4 |
-| **Block** — absolute block (sell-thru < 1 %/day after ≥ 4 weeks) | **HOLD** (or BLOCK) | BLOCK | BLOCK-ABS |
+| **Block** — Q4 beyond the border zone | **BLOCK** (or HOLD, see below) | BLOCK | BLOCK-Q4 |
+| **Block** — absolute block (sell-thru < 1 %/day after ≥ 4 weeks) | **BLOCK** (or HOLD) | BLOCK | BLOCK-ABS |
 | Allow — BOBs: all sibling colours Q1/Q2 | ALLOW | BOBS_SIBLINGS_OK | BOBS-01 |
 | Watch List — BOBs: a sibling colour Q3/Q4 | WATCH | BOBS_SIBLING_LOW | BOBS-02 |
 | Allow — too little selling history (WOF gate) | ALLOW | LOW_HISTORY | WOF-00 |
@@ -161,10 +161,10 @@ up to Max Permissible).
 | Auto Allow — new article (not in Universe Master or BSR) | ALLOW | NEW_ARTICLE | NEW-00 |
 | Cannot Validate / article unknown to the tool / no colour / no delivery date | **422** `CANNOT_DECIDE` (SAP: NOT_CHECKED) — or WATCH `CANNOT_VALIDATE` (CV-00) with `UnknownItemPolicy = WATCH` | | |
 
-* **Block → HOLD / BLOCK**: spec v1.4 has no BLOCK value, so the tool's Block is sent as **HOLD with reason_code BLOCK**.
-  When SAP is ready for a new value (a breaking change for the workflow's domain values), set
-  `SapInterface:BlockVerdict = BLOCK`: those items (and the overall verdict) are then `BLOCK` / code `B`, most severe,
-  routed like HOLD. Nothing else changes.
+* **Block → BLOCK** (since 17 Nov 2026): the tool's Block is sent as verdict **BLOCK** / code `B` with reason_code
+  BLOCK — most severe, routed like HOLD (CATHEAD, or BMHEAD with `bm_head_required`). An addition to spec v1.4 (which had
+  no BLOCK value; before, Block was sent as HOLD + reason BLOCK). For an SAP side that does not accept BLOCK set
+  `SapInterface:BlockVerdict = HOLD`. Nothing else changes.
 * **Unknown items**: the spec defines no item-level "not checked" verdict. Default `UnknownItemPolicy = REJECT`: when any
   item cannot be decided the whole request is answered 422 with the items named in `message` (SAP records NOT_CHECKED).
   `WATCH`: those items get WATCH / CANNOT_VALIDATE and the rest is decided. If no item can be decided the answer is 422
@@ -293,7 +293,7 @@ document in `SAP_DECISION_DOCUMENTS`.
 | `DecisionTimeoutMs` | `2500` | hard cap → 503 |
 | `EventsLagLimitSeconds` | `60` | `data_delayed` |
 | `DefaultMode` | `SHADOW` | mode of the portal's test decision |
-| `BlockVerdict` | `HOLD` | `HOLD` or `BLOCK` |
+| `BlockVerdict` | `BLOCK` | `BLOCK` (verdict B) or `HOLD` (spec v1.4: HOLD + reason BLOCK) |
 | `UnknownItemPolicy` | `REJECT` | `REJECT` (422) or `WATCH` |
 | `BmHead` | off | `{Enabled, MinNetValue, IncludeWatch}` |
 | `MaxFailedLogins`, `LockoutMinutes`, `MinPasswordLength` | 5, 15, 24 | technical users |
@@ -311,7 +311,7 @@ portal screen shows the same.
 | Live open-PO / stock position from `/events` (apply PO / GRC / GRT, cut-off, double counting, GRT re-opening pending qty) | Pending — handover §8 items 6, 7, 9; events are stored with `Applied = 0` |
 | BW 04:00 feed (control file, snapshot / extraction time → `bw_snapshot`) | Pending — today `bw_snapshot` = upload time of the stock file |
 | `bm_head_required` limit, final reason-code list, SAP approval levels | Open with business (§8 item 5) — rule hook / table ready |
-| BLOCK as its own verdict | Waits for SAP (§8 item 2) — `BlockVerdict = BLOCK` |
+| BLOCK as its own verdict | **Default since 17 Nov 2026** (§8 item 2) — `BlockVerdict = BLOCK`; fallback `HOLD` |
 | Multi Concept recommended quantity per option (REDUCE / `max_qty` for Multi Concept) | Rules pending (§8 item 3) |
 | Depth-bypass resubmissions (`depth_check = BYPASSED`, `previous_decision_id`) | Accepted and logged; decided like any other request |
 | Alert e-mails for parked events / NOT_CHECKED | Logged as warnings and shown on `/admin/sap`; no mail yet |

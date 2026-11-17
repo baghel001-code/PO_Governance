@@ -32,7 +32,7 @@ namespace DecisionEngine.Sap
     }
 
     /// <summary>One row of the tool → SAP mapping: the engine decision it applies to, the SAP verdict, reason code and rule id.</summary>
-    /// <param name="Verdict">The SAP verdict. <see cref="SapVerdicts.Hold"/> on the Block rows means "HOLD or BLOCK by BlockVerdict".</param>
+    /// <param name="Verdict">The SAP verdict. <see cref="SapVerdicts.Block"/> on the Block rows (HOLD with SapInterface:BlockVerdict = HOLD).</param>
     public sealed record SapVerdictRule(SapOutcomePath Path, string EngineDecision, string Verdict, string ReasonCode, string RuleId, string ReasonCodeText, bool IsBlock = false);
 
     /// <summary>
@@ -43,8 +43,8 @@ namespace DecisionEngine.Sap
     /// <item>Max Permissible 0 (Hold — Don't Raise) → HOLD; v1.1.6 "No Plan Available" Hold (no F4 plan in the requirement
     /// window) → HOLD with reason NO_PLAN_DATA</item>
     /// <item>Watch List → WATCH (route CATHEAD)</item>
-    /// <item>Block → HOLD with reason_code BLOCK — or the new verdict BLOCK when <c>SapInterface:BlockVerdict = BLOCK</c>
-    /// (one switch, see <see cref="VerdictFor"/>)</item>
+    /// <item>Block → BLOCK (code B) with reason_code BLOCK — or HOLD with reason_code BLOCK when
+    /// <c>SapInterface:BlockVerdict = HOLD</c> (spec v1.4 without BLOCK; one switch, see <see cref="VerdictFor"/>)</item>
     /// <item>Cannot Validate / unknown article → not decidable: 422 for the request, or WATCH CANNOT_VALIDATE per item
     /// when <c>SapInterface:UnknownItemPolicy = WATCH</c></item>
     /// </list>
@@ -70,8 +70,8 @@ namespace DecisionEngine.Sap
             new SapVerdictRule(SapOutcomePath.PeerQ3WithinBorder, Decisions.Allow, SapVerdicts.Allow, "PEER_Q3", "PEER-Q3-OK", "Ranks Q3, at or near the peer average"),
             new SapVerdictRule(SapOutcomePath.PeerQ3BeyondBorder, Decisions.WatchList, SapVerdicts.Watch, "PEER_Q3", "PEER-Q3-GAP", "Ranks Q3, below the peer average beyond the border zone"),
             new SapVerdictRule(SapOutcomePath.PeerQ4Softened, Decisions.WatchList, SapVerdicts.Watch, "PEER_Q4", "PEER-Q4-WATCH", "Ranks Q4 but at or near the peer average"),
-            new SapVerdictRule(SapOutcomePath.BlockQ4, Decisions.Block, SapVerdicts.Hold, BlockReasonCode, "BLOCK-Q4", "Block: ranks Q4, confirmed slow seller", IsBlock: true),
-            new SapVerdictRule(SapOutcomePath.BlockAbsolute, Decisions.Block, SapVerdicts.Hold, BlockReasonCode, "BLOCK-ABS", "Block: sell-thru below 1 %/day after 4+ weeks on floor", IsBlock: true),
+            new SapVerdictRule(SapOutcomePath.BlockQ4, Decisions.Block, SapVerdicts.Block, BlockReasonCode, "BLOCK-Q4", "Block: ranks Q4, confirmed slow seller", IsBlock: true),
+            new SapVerdictRule(SapOutcomePath.BlockAbsolute, Decisions.Block, SapVerdicts.Block, BlockReasonCode, "BLOCK-ABS", "Block: sell-thru below 1 %/day after 4+ weeks on floor", IsBlock: true),
             new SapVerdictRule(SapOutcomePath.BobsSiblingsOk, Decisions.Allow, SapVerdicts.Allow, "BOBS_SIBLINGS_OK", "BOBS-01", "New colour: all sibling colours rank Q1/Q2"),
             new SapVerdictRule(SapOutcomePath.BobsSiblingLow, Decisions.WatchList, SapVerdicts.Watch, "BOBS_SIBLING_LOW", "BOBS-02", "New colour: a sibling colour ranks Q3/Q4"),
             new SapVerdictRule(SapOutcomePath.LowHistory, Decisions.Allow, SapVerdicts.Allow, "LOW_HISTORY", "WOF-00", "Too little selling history (weeks on floor below the gate), allowed"),
@@ -85,12 +85,12 @@ namespace DecisionEngine.Sap
         public static SapVerdictRule Rule(SapOutcomePath path) => ByPath[path];
 
         /// <summary>
-        /// The SAP verdict of a rule. Block rows answer HOLD (default, spec v1.4) or BLOCK when
-        /// <paramref name="blockVerdict"/> is "BLOCK" (SapInterface:BlockVerdict); everything else as in the table.
+        /// The SAP verdict of a rule. Block rows answer BLOCK (default) or HOLD when <paramref name="blockVerdict"/> is
+        /// "HOLD" (SapInterface:BlockVerdict, for an SAP side without BLOCK); everything else as in the table.
         /// </summary>
         public static string VerdictFor(SapVerdictRule rule, string? blockVerdict) =>
-            rule.IsBlock && string.Equals((blockVerdict ?? "").Trim(), SapVerdicts.Block, StringComparison.OrdinalIgnoreCase)
-                ? SapVerdicts.Block
+            rule.IsBlock && string.Equals((blockVerdict ?? "").Trim(), SapVerdicts.Hold, StringComparison.OrdinalIgnoreCase)
+                ? SapVerdicts.Hold
                 : rule.Verdict;
 
         /// <summary>The engine path of a Tool 1 outcome (the first Single Concept run for engine B).</summary>

@@ -2,8 +2,9 @@ namespace DecisionEngine.Sap
 {
     /// <summary>
     /// SAP verdict values of the /decisions contract (spec v1.4 §6, po-governance-sap-api.yaml DecisionResponse):
-    /// ALLOW / REDUCE / WATCH / HOLD with the one-character codes A / R / W / H. <see cref="Block"/> (code B) is the
-    /// owner-approved future value (handover §8 item 2); it is only sent when <c>SapInterface:BlockVerdict = BLOCK</c>.
+    /// ALLOW / REDUCE / WATCH / HOLD with the one-character codes A / R / W / H, plus <see cref="Block"/> (code B, most
+    /// severe): the tool's Block decisions (confirmed slow seller) are sent as BLOCK since 17 Nov 2026 (handover §8 item 2,
+    /// owner-approved addition to spec v1.4). <c>SapInterface:BlockVerdict = HOLD</c> sends them as HOLD + reason BLOCK again.
     /// </summary>
     public static class SapVerdicts
     {
@@ -11,11 +12,14 @@ namespace DecisionEngine.Sap
         public const string Reduce = "REDUCE";
         public const string Watch = "WATCH";
         public const string Hold = "HOLD";
-        /// <summary>Not in spec v1.4 (breaking change when switched on): only with BlockVerdict = BLOCK.</summary>
+        /// <summary>Addition to spec v1.4 (code B): the tool's Block (default; HOLD with SapInterface:BlockVerdict = HOLD).</summary>
         public const string Block = "BLOCK";
 
-        /// <summary>The verdicts of spec v1.4, least severe first.</summary>
+        /// <summary>The verdicts of spec v1.4 (the YAML contract file), least severe first.</summary>
         public static readonly string[] SpecValues = { Allow, Reduce, Watch, Hold };
+
+        /// <summary>Every verdict the tool sends: spec v1.4 + BLOCK, least severe first.</summary>
+        public static readonly string[] Values = { Allow, Reduce, Watch, Hold, Block };
 
         /// <summary>A / R / W / H (B for BLOCK).</summary>
         public static string Code(string verdict) => verdict switch

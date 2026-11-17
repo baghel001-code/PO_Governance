@@ -51,8 +51,8 @@ namespace Domain.Entities.AppSettings
         /// <summary>Mode of the portal's "Test decision" (SHADOW; SAP itself always sends the mode).</summary>
         public string DefaultMode { get; set; } = "SHADOW";
 
-        /// <summary>HOLD (default, spec v1.4) or BLOCK: the verdict sent for the tool's Block decisions (handover §8 item 2).</summary>
-        public string BlockVerdict { get; set; } = "HOLD";
+        /// <summary>BLOCK (default, code B) or HOLD (spec v1.4 without BLOCK, reason_code BLOCK): the verdict sent for the tool's Block decisions (handover §8 item 2).</summary>
+        public string BlockVerdict { get; set; } = "BLOCK";
 
         /// <summary>REJECT (default: 422 when any item cannot be decided) or WATCH (such items get WATCH / CANNOT_VALIDATE).</summary>
         public string UnknownItemPolicy { get; set; } = "REJECT";

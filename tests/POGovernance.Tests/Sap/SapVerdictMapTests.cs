@@ -8,7 +8,7 @@ namespace POGovernance.Tests.Sap
 {
     /// <summary>
     /// The tool → SAP verdict mapping (handover §8 item 2, owner-approved): every Tool 1 engine outcome maps to its SAP verdict,
-    /// reason code and rule id; Block → HOLD (reason BLOCK) by default and → BLOCK with SapInterface:BlockVerdict = BLOCK.
+    /// reason code and rule id; Block → BLOCK (reason BLOCK) by default and → HOLD with SapInterface:BlockVerdict = HOLD.
     /// </summary>
     public class SapVerdictMapTests
     {
@@ -72,13 +72,14 @@ namespace POGovernance.Tests.Sap
             Assert.Equal(reasonCode, rule.ReasonCode);
             Assert.Equal(ruleId, rule.RuleId);
             Assert.Equal(verdictHold, SapVerdictMap.VerdictFor(rule, "HOLD"));
-            Assert.Equal(verdictHold, SapVerdictMap.VerdictFor(rule, null));            // default
+            Assert.Equal(verdictHold, SapVerdictMap.VerdictFor(rule, " hold "));
             Assert.Equal(verdictBlock, SapVerdictMap.VerdictFor(rule, "BLOCK"));
-            Assert.Equal(verdictBlock, SapVerdictMap.VerdictFor(rule, " block "));
+            Assert.Equal(verdictBlock, SapVerdictMap.VerdictFor(rule, null));           // default
+            Assert.Equal(verdictBlock, SapVerdictMap.VerdictFor(rule, new SapDecisionOptions().BlockVerdict));
         }
 
         [Fact]
-        public void Block_is_HOLD_with_reason_BLOCK_and_switches_to_BLOCK_by_config()
+        public void Block_is_BLOCK_with_reason_BLOCK_and_switches_to_HOLD_by_config()
         {
             foreach (var r in SapVerdictMap.Table.Where(r => r.IsBlock))
             {
@@ -95,10 +96,11 @@ namespace POGovernance.Tests.Sap
         }
 
         [Fact]
-        public void The_table_has_one_row_per_path_and_only_spec_verdicts()
+        public void The_table_has_one_row_per_path_and_only_known_verdicts()
         {
             Assert.Equal(Enum.GetValues<SapOutcomePath>().OrderBy(x => x), SapVerdictMap.Table.Select(r => r.Path).OrderBy(x => x));
-            Assert.All(SapVerdictMap.Table, r => Assert.Contains(r.Verdict, SapVerdicts.SpecValues));
+            Assert.All(SapVerdictMap.Table, r => Assert.Contains(r.Verdict, SapVerdicts.Values));
+            Assert.All(SapVerdictMap.Table, r => Assert.Equal(r.IsBlock, r.Verdict == SapVerdicts.Block));   // BLOCK only for the tool's Block
             Assert.All(SapVerdictMap.Table, r => Assert.True(r.ReasonCode.Length <= 40 && r.RuleId.Length <= 30));
         }
 

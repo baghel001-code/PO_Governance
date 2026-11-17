@@ -103,6 +103,12 @@ namespace POGovernance.Tests.Sap
             ["DecisionResponse"] = new[] { "view_url", "view_url_expires_at" }
         };
 
+        /// <summary>Enum values added to the v1.4 contract on purpose: verdict BLOCK (code B) for the tool's Block decisions.</summary>
+        private static readonly Dictionary<string, string[]> EnumExtensions = new()
+        {
+            ["overall_verdict"] = new[] { "BLOCK" }, ["verdict"] = new[] { "BLOCK" }, ["verdict_code"] = new[] { "B" }
+        };
+
         [Theory]
         [MemberData(nameof(Pairs))]
         public void Contract_classes_have_exactly_the_YAML_property_names(Type type, string schema) =>
@@ -137,8 +143,11 @@ namespace POGovernance.Tests.Sap
             Assert.Equal(Enum("GovernanceOutcome", "by_role"), SapEnums.ByRoles);
             Assert.Equal(Enum("PingResponse", "environment"), SapEnums.Environments);
             Assert.Equal(new[] { "ok" }, Enum("PingResponse", "status"));
-            // the default verdict mapping only produces values of the spec (BLOCK only by SapInterface:BlockVerdict = BLOCK)
-            Assert.All(SapVerdictMap.Table, r => Assert.Contains(SapVerdictMap.VerdictFor(r, new SapInterfaceSettings().BlockVerdict), SapVerdicts.SpecValues));
+            // the tool sends the spec v1.4 verdicts plus BLOCK (code B, the tool's Block; addition documented in
+            // docs/sap/SAP-API-Reference.md); with SapInterface:BlockVerdict = HOLD only spec v1.4 values
+            Assert.Equal(SapVerdicts.SpecValues.Append(SapVerdicts.Block), SapVerdicts.Values);
+            Assert.All(SapVerdictMap.Table, r => Assert.Contains(SapVerdictMap.VerdictFor(r, new SapInterfaceSettings().BlockVerdict), SapVerdicts.Values));
+            Assert.All(SapVerdictMap.Table, r => Assert.Contains(SapVerdictMap.VerdictFor(r, "HOLD"), SapVerdicts.SpecValues));
         }
 
         /// <summary>Every key of an answer is a YAML property, every required property is present, every enum value allowed.</summary>
@@ -153,7 +162,8 @@ namespace POGovernance.Tests.Sap
                     Assert.True(props.Contains(kv.Key), where + "." + kv.Key + " is not in the YAML");
                     var ps = Resolve(Get(Get(schema, "properties"), kv.Key));
                     if (kv.Value is JsonValue v && Has(ps, "enum"))
-                        Assert.Contains(v.ToString(), ((YamlSequenceNode)Get(ps, "enum")).Children.Select(c => ((YamlScalarNode)c).Value));
+                        Assert.Contains(v.ToString(), ((YamlSequenceNode)Get(ps, "enum")).Children.Select(c => ((YamlScalarNode)c).Value)
+                                                         .Concat(EnumExtensions.GetValueOrDefault(kv.Key, Array.Empty<string>())));
                     if (kv.Value != null) AssertConforms(kv.Value, ps, where + "." + kv.Key);
                     else Assert.True(Has(ps, "nullable"), where + "." + kv.Key + " is null but not nullable");
                 }
@@ -192,7 +202,7 @@ namespace POGovernance.Tests.Sap
             Assert.Equal(200, ok.Status);
             AssertConforms(JsonNode.Parse(ok.Json), Schema("DecisionResponse"), "response");
             var verdicts = JsonNode.Parse(ok.Json)!["items"]!.AsArray().Select(i => i!["verdict"]!.GetValue<string>()).ToHashSet();
-            Assert.Equal(new[] { "ALLOW", "HOLD", "REDUCE", "WATCH" }, verdicts.OrderBy(x => x));
+            Assert.Equal(new[] { "ALLOW", "BLOCK", "HOLD", "REDUCE", "WATCH" }, verdicts.OrderBy(x => x));
 
             foreach (var bad in new[] { await svc.DecideAsync("{", SapKit.Caller), await svc.DecideAsync(SapKit.Request("WI-U", SapKit.Item(10, "999", "X", 1)).ToJsonString(), SapKit.Caller) })
                 AssertConforms(JsonNode.Parse(bad.Json), Schema("Error"), "error");

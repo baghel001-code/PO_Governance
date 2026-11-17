@@ -527,7 +527,7 @@ sign-in needed**.
 
 ![Verdict page](img/18-verdict-page.png)
 
-- **The verdict** (ALLOW, REDUCE, WATCH, HOLD) and **What happens next** — e.g. REDUCE: "the buyer reduces each REDUCE
+- **The verdict** (ALLOW, REDUCE, WATCH, HOLD, BLOCK) and **What happens next** — e.g. REDUCE: "the buyer reduces each REDUCE
   item to its max qty (or less) and resubmits the PO".
 - **Decision details** — decision and request ID, when decided, where the PO goes, mode (SHADOW = information only for
   now), buyer, division, rules version, date of the stock data, final document.
@@ -556,8 +556,8 @@ The link works for 90 days. **Anyone with the link can open the page — do not 
 
 **PO Assessment (Tool 2):** Retain · Reduce Qty · Cancel · Watch List · Cannot Validate.
 
-**SAP verdicts:** ALLOW · REDUCE (order at most the max qty) · WATCH (category head) · HOLD (do not release as is; a
-slow seller is sent as HOLD with reason BLOCK).
+**SAP verdicts:** ALLOW · REDUCE (order at most the max qty) · WATCH (category head) · HOLD (do not release as is) ·
+BLOCK (confirmed slow seller — do not release; category head decides).
 
 ### 8.2 Terms
 

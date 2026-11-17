@@ -291,8 +291,8 @@ repeat), otherwise the answer is `400 VALIDATION_FAILED`. The answer always echo
 | `decision_id` | string | e.g. `D-20261022-000002`. **Store it on the PO / workflow container** for audit and send it back in `GOV_OUTCOME` events |
 | `request_id` | string | Echo of the request |
 | `mode` | `SHADOW` \| `LIVE` | Echo of the request |
-| `overall_verdict` | `ALLOW` \| `REDUCE` \| `WATCH` \| `HOLD` | Most severe item verdict (HOLD > WATCH > REDUCE > ALLOW) |
-| `verdict_code` | `A` \| `R` \| `W` \| `H` | One-character code for SAP domain values |
+| `overall_verdict` | `ALLOW` \| `REDUCE` \| `WATCH` \| `HOLD` \| `BLOCK` | Most severe item verdict (BLOCK > HOLD > WATCH > REDUCE > ALLOW) |
+| `verdict_code` | `A` \| `R` \| `W` \| `H` \| `B` | One-character code for SAP domain values |
 | `route_to` | `NONE` \| `BUYER` \| `CATHEAD` \| `BMHEAD` | Where the workflow goes in LIVE mode (ignored in SHADOW). `NONE` = continue normal approvals |
 | `bm_head_required` | boolean | Escalation to the B&M head (business rule pending — currently always `false`) |
 | `summary_text` | string, max 255 | Short text for the work item / PO header note |
@@ -303,6 +303,13 @@ repeat), otherwise the answer is `400 VALIDATION_FAILED`. The answer always echo
 | `decided_at` | date-time | When the tool decided |
 | `view_url` | string (URL) | **Link to the MRA verdict page** on the PO Governance portal (`<portal>/mra-verdict/<token>`, the same page as `GET /verdict-url`, §9). Show it to the buyer / approvers at every level (work item, MRA note, e-mail): clicking it opens the tool's decision and its working — and, once SAP has sent the MRA number with `POST /documents`, where the MRA is and its level changes — read-only, **no sign-in needed**, with Download PDF. The token in the link is random and cannot be guessed; anyone who has the link can open it, so keep it inside the company. Omitted if the link is switched off |
 | `view_url_expires_at` | date-time | Until when the link works (90 days by default) |
+| `items[].po_item` | integer | PO item |
+| `items[].verdict` / `verdict_code` | as above | Item verdict |
+| `items[].max_qty` | number \| null | **Maximum allowed quantity when the verdict is REDUCE**; `null` otherwise |
+| `items[].reason_code` | string | Machine-readable reason (table below) |
+| `items[].reason_text` | string, max 132 | Text for the buyer / approver |
+| `items[].rule_id` | string | Rule that produced the verdict |
+| `items[].metrics` | object | Figures behind the verdict. Single Concept: `plan_qty`, `stock_qty`, `open_po_qty`, `headroom_qty`, `cover_days`. Multi Concept: `sell_through_pct`. Fields that do not apply are omitted |
 
 **The MRA verdict page** (`view_url`, since 12 Nov 2026) shows the same content as the MRA pop-up of the tool's MRA
 Queues page: the decision for the PO (decision, reason, Decision ID, PO, request ID, qty checked, SAP verdict, Max
@@ -318,13 +325,6 @@ working) shows the complete verdict: what happens next for this verdict, the dec
 document), every item with its reason, rule and the figures behind it (plan, stock, open PO, headroom, cover days or
 sell-through), totals, and a print button. A decision answered before the link existed gets its `view_url` the first
 time SAP repeats the same `request_id` (the answer is otherwise unchanged and stays the same on every later repeat).
-| `items[].po_item` | integer | PO item |
-| `items[].verdict` / `verdict_code` | as above | Item verdict |
-| `items[].max_qty` | number \| null | **Maximum allowed quantity when the verdict is REDUCE**; `null` otherwise |
-| `items[].reason_code` | string | Machine-readable reason (table below) |
-| `items[].reason_text` | string, max 132 | Text for the buyer / approver |
-| `items[].rule_id` | string | Rule that produced the verdict |
-| `items[].metrics` | object | Figures behind the verdict. Single Concept: `plan_qty`, `stock_qty`, `open_po_qty`, `headroom_qty`, `cover_days`. Multi Concept: `sell_through_pct`. Fields that do not apply are omitted |
 
 `cover_days` is the cover from the first day of the month after delivery. It can be `0`: that means current stock
 plus pending POs is sold out before the delivery window starts.
@@ -336,7 +336,8 @@ plus pending POs is sold out before the delivery window starts.
 | `ALLOW` | A | `NONE` | Continue normal approvals |
 | `REDUCE` | R | `BUYER` | Buyer reduces the item to `max_qty` or less. Depth plan bypass: store `decision_id` + `max_qty` on the item; if the quantity is reduced to `max_qty` or less, resubmit with `depth_check = BYPASSED` and `previous_decision_id` |
 | `WATCH` | W | `CATHEAD` | Category head approves or rejects (exception with reason code) |
-| `HOLD` | H | `CATHEAD` | Do not release as is; category head decides. **A blocked article (slow seller) is sent as `HOLD` with `reason_code = BLOCK`** |
+| `HOLD` | H | `CATHEAD` | Do not release as is; category head decides (no headroom, or no plan available) |
+| `BLOCK` | B | `CATHEAD` | **Blocked article — confirmed slow seller** (`reason_code = BLOCK`): do not release; category head decides. The most severe verdict |
 
 ### Reason codes per verdict
 
@@ -356,12 +357,13 @@ plus pending POs is sold out before the delivery window starts.
 | WATCH | `PEER_Q4` | PEER-Q4-WATCH | Q4 but at / near the peer average |
 | WATCH | `BOBS_SIBLING_LOW` | BOBS-02 | A sibling colour sells poorly |
 | HOLD | `COVER_NO_HEADROOM` | COVER-02 | Stock + pending already above the norm — no headroom (max 0) |
-| HOLD | `BLOCK` | BLOCK-Q4 | Q4, well below the peer average: confirmed slow seller |
-| HOLD | `BLOCK` | BLOCK-ABS | Absolute block: sell-thru below 1 %/day after 4+ weeks on floor |
+| BLOCK | `BLOCK` | BLOCK-Q4 | Q4, well below the peer average: confirmed slow seller |
+| BLOCK | `BLOCK` | BLOCK-ABS | Absolute block: sell-thru below 1 %/day after 4+ weeks on floor |
 
-The tool may later send `BLOCK` (code `B`) as its own verdict instead of `HOLD` + `BLOCK`, once SAP has added that
-domain value. This is switched in the tool's settings and will be agreed with you first. Until then, handle
-`reason_code = BLOCK` under `HOLD`.
+**BLOCK (code `B`) is an addition to spec v1.4** (since 17 Nov 2026): the tool's Block decisions used to be sent as
+`HOLD` with `reason_code = BLOCK`. SAP must accept `BLOCK` / `B` in the verdict domain and route it like HOLD (category
+head). If the SAP side is not ready, the tool's setting `SapInterface:BlockVerdict = HOLD` sends them as `HOLD` +
+`reason_code = BLOCK` again. Requests already decided keep their stored answer when SAP repeats the same `request_id`.
 
 ### More examples (captured)
 
@@ -399,12 +401,12 @@ domain value. This is switched in the tool's settings and will be agreed with yo
                "rule_id": "MIX-01", "metrics": { "stock_qty": 874, "open_po_qty": 0 } } ] }
 ```
 
-**Block** (sent as HOLD + BLOCK):
+**Block** (confirmed slow seller):
 
 ```json
-{ "...": "...", "overall_verdict": "HOLD", "verdict_code": "H", "route_to": "CATHEAD",
-  "summary_text": "Item 10: hold - Ranks Q4, sell-thru 64.4% below the peer average: confirmed slow seller",
-  "items": [ { "po_item": 10, "verdict": "HOLD", "verdict_code": "H", "max_qty": null,
+{ "...": "...", "overall_verdict": "BLOCK", "verdict_code": "B", "route_to": "CATHEAD",
+  "summary_text": "Item 10: block - Ranks Q4, sell-thru 64.4% below the peer average: confirmed slow seller",
+  "items": [ { "po_item": 10, "verdict": "BLOCK", "verdict_code": "B", "max_qty": null,
                "reason_code": "BLOCK", "reason_text": "Ranks Q4, sell-thru 64.4% below the peer average: confirmed slow seller",
                "rule_id": "BLOCK-Q4", "metrics": { "sell_through_pct": 0.97 } } ] }
 ```
@@ -928,13 +930,14 @@ GET /api/sap/v1/verdict-url?mra_no=0000348404
 | Decision logic | Same rules as the tool's New Request screen (Single Concept, Multi Concept, Watch List, Max Permissible) |
 | Data used for decisions | Uploaded BW / SAP extracts (stock, pending PO, sales, plan, BSR) + the day's approved requests |
 | Events → live open-PO / stock position | **In development**: events are received and stored now, and will feed the live position. Until then decisions use the uploaded files, so run **SHADOW** mode |
-| Separate `BLOCK` verdict, B&M head limit (`bm_head_required`), final reason-code list | To be confirmed with the business |
+| Separate `BLOCK` verdict (code B) | **Live since 17 Nov 2026** — SAP must accept BLOCK / B (fallback: `BlockVerdict = HOLD`) |
+| B&M head limit (`bm_head_required`), final reason-code list | To be confirmed with the business |
 | Multi Concept `max_qty` (REDUCE for Multi Concept items) | Rules pending from the business |
 
 **Suggested test sequence for the SAP team:**
 1. SM59 connection test (`GET /ping`).
 2. `GET /reason-codes`.
-3. `POST /decisions` in SHADOW mode for a few real POs (ALLOW, REDUCE, WATCH, HOLD cases), then the same call again to
+3. `POST /decisions` in SHADOW mode for a few real POs (ALLOW, REDUCE, WATCH, HOLD, BLOCK cases), then the same call again to
    check you get the same `decision_id`.
 4. Timeout / NOT_CHECKED handling (e.g. a wrong password gives 401 → must continue as today).
 5. `POST /events` for a PO save, a goods receipt and a GOV_OUTCOME, then the same batch again to see `duplicates`.

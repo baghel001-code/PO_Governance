@@ -300,19 +300,24 @@ namespace POGovernance.Tests.Sap
             req["mode"] = "LIVE";
             var j = Parse(await k.Service().DecideAsync(req.ToJsonString(), SapKit.Caller));
             Assert.Equal("LIVE", j["mode"]!.GetValue<string>());
-            Assert.Equal("HOLD", j["overall_verdict"]!.GetValue<string>());
+            Assert.Equal("BLOCK", j["overall_verdict"]!.GetValue<string>());
             Assert.Equal("BLOCK", j["items"]![0]!["reason_code"]!.GetValue<string>());
             Assert.Equal("LIVE", k.Repo.Decisions[0].Row.Mode);
         }
 
         [Fact]
-        public async Task BlockVerdict_BLOCK_in_the_settings_switches_the_answer()
+        public async Task A_blocked_article_is_BLOCK_and_BlockVerdict_HOLD_in_the_settings_switches_it_back()
         {
             var k = new Kit();
-            k.Cfg.BlockVerdict = "BLOCK";
             var j = Parse(await k.Service().DecideAsync(SapKit.Request("WI-B", SapKit.Item(10, "2203000201", "OWH", 100)).ToJsonString(), SapKit.Caller));
-            Assert.Equal("BLOCK", j["overall_verdict"]!.GetValue<string>());
-            Assert.Equal("B", j["verdict_code"]!.GetValue<string>());
+            Assert.Equal(("BLOCK", "B", "CATHEAD"), (j["overall_verdict"]!.GetValue<string>(), j["verdict_code"]!.GetValue<string>(), j["route_to"]!.GetValue<string>()));
+            Assert.Equal(("BLOCK", "BLOCK"), (j["items"]![0]!["verdict"]!.GetValue<string>(), j["items"]![0]!["reason_code"]!.GetValue<string>()));
+
+            var h = new Kit();
+            h.Cfg.BlockVerdict = "HOLD";
+            var o = Parse(await h.Service().DecideAsync(SapKit.Request("WI-H", SapKit.Item(10, "2203000201", "OWH", 100)).ToJsonString(), SapKit.Caller));
+            Assert.Equal(("HOLD", "H"), (o["overall_verdict"]!.GetValue<string>(), o["verdict_code"]!.GetValue<string>()));
+            Assert.Equal("BLOCK", o["items"]![0]!["reason_code"]!.GetValue<string>());
         }
 
         [Fact]

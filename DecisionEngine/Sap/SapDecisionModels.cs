@@ -17,8 +17,8 @@ namespace DecisionEngine.Sap
     /// <summary>Behaviour switches (SapInterface configuration) the pure engine needs.</summary>
     public sealed class SapDecisionOptions
     {
-        /// <summary>"HOLD" (default, spec v1.4) or "BLOCK": the verdict sent for the tool's Block decisions.</summary>
-        public string BlockVerdict { get; set; } = SapVerdicts.Hold;
+        /// <summary>"BLOCK" (default) or "HOLD" (spec v1.4 without BLOCK): the verdict sent for the tool's Block decisions.</summary>
+        public string BlockVerdict { get; set; } = SapVerdicts.Block;
 
         /// <summary>
         /// What happens when some (not all) items cannot be decided (unknown article, no colour, no delivery date):

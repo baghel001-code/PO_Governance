@@ -97,7 +97,7 @@ namespace POGovernance.Tests.Sap
         [InlineData("1101000101", "WHT", 50000, "REDUCE", "COVER_ABOVE_NORM", "COVER-01", "BUYER")]
         [InlineData("1101000101", "RED", 100, "HOLD", "COVER_NO_HEADROOM", "COVER-02", "CATHEAD")]
         [InlineData("1101000101", "GRY", 100, "WATCH", "MIX_BELOW_MIN", "MIX-01", "CATHEAD")]
-        [InlineData("2203000201", "OWH", 100, "HOLD", "BLOCK", "BLOCK-Q4", "CATHEAD")]
+        [InlineData("2203000201", "OWH", 100, "BLOCK", "BLOCK", "BLOCK-Q4", "CATHEAD")]
         [InlineData("2203000201", "BLU", 100, "ALLOW", "PEER_Q1", "PEER-Q1", "NONE")]
         [InlineData("2203000201", "BEG", 100, "ALLOW", "PEER_Q2", "PEER-Q2", "NONE")]
         [InlineData("2203000202", "BLK", 100, "WATCH", "PEER_Q3", "PEER-Q3-GAP", "CATHEAD")]
@@ -209,14 +209,17 @@ namespace POGovernance.Tests.Sap
         }
 
         [Fact]
-        public void BlockVerdict_BLOCK_sends_the_new_value()
+        public void A_blocked_article_is_BLOCK_by_default_and_HOLD_with_BlockVerdict_HOLD()
         {
-            var r = Decide(new SapDecisionOptions { BlockVerdict = "BLOCK" }, Item(10, "2203000201", "OWH", 100), Item(20, "1101000101", "RED", 100));
+            var r = Decide(null, Item(10, "2203000201", "OWH", 100), Item(20, "1101000101", "RED", 100));
             Assert.Equal("BLOCK", r.Items[0].Verdict);
             Assert.Equal("B", r.Items[0].VerdictCode);
             Assert.Equal("HOLD", r.Items[1].Verdict);
-            Assert.Equal("BLOCK", r.OverallVerdict);
+            Assert.Equal("BLOCK", r.OverallVerdict);                                   // most severe
             Assert.Equal("CATHEAD", r.RouteTo);
+
+            var h = Decide(new SapDecisionOptions { BlockVerdict = "HOLD" }, Item(10, "2203000201", "OWH", 100), Item(20, "1101000101", "RED", 100));
+            Assert.Equal(("HOLD", "H", "HOLD"), (h.Items[0].Verdict, h.Items[0].VerdictCode, h.OverallVerdict));
         }
 
         [Fact]

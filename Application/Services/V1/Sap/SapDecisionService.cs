@@ -22,7 +22,7 @@ namespace Application.Services.V1.Sap
     /// <item>idempotency: the same request_id with the same body (canonical JSON, SHA-256) returns the stored answer —
     /// same decision_id; a different body → 409 REQUEST_ID_CONFLICT;</item>
     /// <item>decide every item with the Tool 1 rules (<see cref="ISapDecisionEngine"/>) on the current data snapshot and
-    /// today's Tool 1 ledger (read only), map to ALLOW / REDUCE / WATCH / HOLD (<see cref="SapVerdictMap"/>);
+    /// today's Tool 1 ledger (read only), map to ALLOW / REDUCE / WATCH / HOLD / BLOCK (<see cref="SapVerdictMap"/>);
     /// 422 CANNOT_DECIDE when items cannot be decided (unknown article …), 503 DATA_NOT_LOADED without the data files;</item>
     /// <item>decision_id D-yyyyMMdd-000001 from SAP_DECISION_SEQ, data_delayed / data_as_of from the stock upload time and the
     /// event-feed lag, rules_version from SapInterface:RulesVersion;</item>

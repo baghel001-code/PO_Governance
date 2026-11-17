@@ -136,7 +136,7 @@ Module("3.10 SAP INTERFACE – PORTAL PAGES",
 
 Module("3.11 SAP INTERFACE – API /api/sap/v1 (SAP TEAM)",
     ("Connection", "HTTP Basic technical user and IP allow-list; wrong credentials / IP give 401; GET /ping and GET /reason-codes answer"),
-    ("POST /decisions", "Verdict per PO item (ALLOW / REDUCE / WATCH / HOLD) within 3 s; same request_id + body gives the same answer; other body gives REQUEST_ID_CONFLICT"),
+    ("POST /decisions", "Verdict per PO item (ALLOW / REDUCE / WATCH / HOLD / BLOCK for a confirmed slow seller) within 3 s; same request_id + body gives the same answer; other body gives REQUEST_ID_CONFLICT"),
     ("view_url of /decisions", "Opens the MRA verdict page without sign-in; shows the MRA once /documents has its number"),
     ("POST /events", "Batch stored once (duplicates by msg_id); invalid events parked with reason"),
     ("POST /documents", "MRA number stored against the request_id: STORED / UNCHANGED / REPLACED; unknown request_id gives 404 REQUEST_NOT_FOUND"),

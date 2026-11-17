@@ -286,7 +286,7 @@
    },
    {
     "f": "POST /decisions",
-    "e": "Verdict per PO item (ALLOW / REDUCE / WATCH / HOLD) within 3 s; same request_id + body gives the same answer; other body gives REQUEST_ID_CONFLICT"
+    "e": "Verdict per PO item (ALLOW / REDUCE / WATCH / HOLD / BLOCK for a confirmed slow seller) within 3 s; same request_id + body gives the same answer; other body gives REQUEST_ID_CONFLICT"
    },
    {
     "f": "view_url of /decisions",

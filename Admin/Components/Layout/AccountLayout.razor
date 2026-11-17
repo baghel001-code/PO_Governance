@@ -1,9 +1,10 @@
 @inherits LayoutComponentBase
+@inject IWebHostEnvironment HostEnv
 
 @* QPS AuthLayout: split screen for the account pages — brand panel with the slider on the left, the form card on the right.
    Styles: wwwroot/css/auth.css (brand colours at the top; keep them in line with PortalTheme). *@
 <HeadContent>
-    <link rel="stylesheet" href="css/auth.css?v=2026102801" />
+    <link rel="stylesheet" href="css/auth.css?v=2026111801" />
 </HeadContent>
 
 <MudThemeProvider Theme="PortalTheme.Theme" />
@@ -36,6 +37,9 @@
         <footer class="pga-footer">
             <span>Copyright © @DateTime.Now.ToString("yyyy") Vishal Mega Mart</span>
             <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined" Class="pga-version">v@(AppConstants.AppVersion)</MudChip>
+            @* the portal's environment (ASPNETCORE_ENVIRONMENT: Development / Staging / Production) *@
+            <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined" Class="@("pga-env pga-env-" + HostEnv.EnvironmentName.ToLowerInvariant())"
+                     title="Environment of this portal" data-testid="pga-env">@HostEnv.EnvironmentName</MudChip>
         </footer>
     </main>
 </div>

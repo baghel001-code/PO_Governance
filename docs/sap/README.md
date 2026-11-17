@@ -162,7 +162,7 @@ up to Max Permissible).
 | Cannot Validate / article unknown to the tool / no colour / no delivery date | **422** `CANNOT_DECIDE` (SAP: NOT_CHECKED) — or WATCH `CANNOT_VALIDATE` (CV-00) with `UnknownItemPolicy = WATCH` | | |
 
 * **Block → BLOCK** (since 17 Nov 2026): the tool's Block is sent as verdict **BLOCK** / code `B` with reason_code
-  BLOCK — most severe, routed like HOLD (CATHEAD, or BMHEAD with `bm_head_required`). An addition to spec v1.4 (which had
+  BLOCK — most severe, routed like HOLD (COMMERCIAL, or BMHEAD with `bm_head_required`). An addition to spec v1.4 (which had
   no BLOCK value; before, Block was sent as HOLD + reason BLOCK). For an SAP side that does not accept BLOCK set
   `SapInterface:BlockVerdict = HOLD`. Nothing else changes.
 * **Unknown items**: the spec defines no item-level "not checked" verdict. Default `UnknownItemPolicy = REJECT`: when any
@@ -170,7 +170,8 @@ up to Max Permissible).
   `WATCH`: those items get WATCH / CANNOT_VALIDATE and the rest is decided. If no item can be decided the answer is 422
   either way.
 * `overall_verdict` = the most severe item verdict (HOLD > WATCH > REDUCE > ALLOW; BLOCK above HOLD).
-* `route_to`: ALLOW → NONE, REDUCE → BUYER, WATCH → CATHEAD, HOLD / BLOCK → CATHEAD, or BMHEAD when `bm_head_required`.
+* `route_to`: ALLOW → NONE, REDUCE → BUYER, WATCH → CATHEAD, HOLD / BLOCK → **COMMERCIAL** (since 17 Nov 2026; was
+  CATHEAD; new value, also accepted as `governance_outcome.by_role`), or BMHEAD when `bm_head_required`.
 * `bm_head_required`: rule hook `SapInterface:BmHead` (pending business rule, handover §8 item 5) — off (always `false`);
   when enabled, HOLD / BLOCK (and WATCH with `IncludeWatch`) of a PO whose summed `net_value` ≥ `MinNetValue`.
 * `reason_text` (≤ 132) is a short text from the engine's figures; the full engine reason is kept in the decision log.

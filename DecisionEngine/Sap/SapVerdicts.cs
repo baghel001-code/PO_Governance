@@ -53,24 +53,29 @@ namespace DecisionEngine.Sap
         }
     }
 
-    /// <summary>route_to values (spec §6 "Routing in LIVE mode").</summary>
+    /// <summary>route_to values (spec §6 "Routing in LIVE mode", plus COMMERCIAL since 17 Nov 2026).</summary>
     public static class SapRoutes
     {
         public const string None = "NONE";
         public const string Buyer = "BUYER";
         public const string CatHead = "CATHEAD";
         public const string BmHead = "BMHEAD";
+        /// <summary>Addition to spec v1.4: HOLD and BLOCK go to the Commercial team (were CATHEAD).</summary>
+        public const string Commercial = "COMMERCIAL";
+
+        /// <summary>Every route_to the tool sends, in the order of the reference document.</summary>
+        public static readonly string[] Values = { None, Buyer, CatHead, BmHead, Commercial };
 
         /// <summary>
-        /// ALLOW → NONE, REDUCE → BUYER, WATCH → CATHEAD, HOLD (and BLOCK) → CATHEAD, or BMHEAD when the B&amp;M head is
-        /// required as well (spec: "HOLD → CATHEAD or BMHEAD — B&amp;M head as well when bm_head_required = true").
+        /// ALLOW → NONE, REDUCE → BUYER, WATCH → CATHEAD, HOLD and BLOCK → COMMERCIAL, or BMHEAD when the B&amp;M head is
+        /// required as well (bm_head_required = true; rule hook SapInterface:BmHead, off).
         /// </summary>
         public static string For(string overallVerdict, bool bmHeadRequired) => overallVerdict switch
         {
             SapVerdicts.Allow => None,
             SapVerdicts.Reduce => Buyer,
             SapVerdicts.Watch => CatHead,
-            SapVerdicts.Hold or SapVerdicts.Block => bmHeadRequired ? BmHead : CatHead,
+            SapVerdicts.Hold or SapVerdicts.Block => bmHeadRequired ? BmHead : Commercial,
             _ => throw new ArgumentOutOfRangeException(nameof(overallVerdict), overallVerdict, "Unknown SAP verdict")
         };
     }

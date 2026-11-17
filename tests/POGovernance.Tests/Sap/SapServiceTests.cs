@@ -310,7 +310,7 @@ namespace POGovernance.Tests.Sap
         {
             var k = new Kit();
             var j = Parse(await k.Service().DecideAsync(SapKit.Request("WI-B", SapKit.Item(10, "2203000201", "OWH", 100)).ToJsonString(), SapKit.Caller));
-            Assert.Equal(("BLOCK", "B", "CATHEAD"), (j["overall_verdict"]!.GetValue<string>(), j["verdict_code"]!.GetValue<string>(), j["route_to"]!.GetValue<string>()));
+            Assert.Equal(("BLOCK", "B", "COMMERCIAL"), (j["overall_verdict"]!.GetValue<string>(), j["verdict_code"]!.GetValue<string>(), j["route_to"]!.GetValue<string>()));
             Assert.Equal(("BLOCK", "BLOCK"), (j["items"]![0]!["verdict"]!.GetValue<string>(), j["items"]![0]!["reason_code"]!.GetValue<string>()));
 
             var h = new Kit();

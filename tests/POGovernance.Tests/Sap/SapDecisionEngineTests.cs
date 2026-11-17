@@ -95,9 +95,9 @@ namespace POGovernance.Tests.Sap
         [Theory]
         [InlineData("1101000101", "WHT", 100, "ALLOW", "COVER_WITHIN_NORM", "COVER-00", "NONE")]
         [InlineData("1101000101", "WHT", 50000, "REDUCE", "COVER_ABOVE_NORM", "COVER-01", "BUYER")]
-        [InlineData("1101000101", "RED", 100, "HOLD", "COVER_NO_HEADROOM", "COVER-02", "CATHEAD")]
+        [InlineData("1101000101", "RED", 100, "HOLD", "COVER_NO_HEADROOM", "COVER-02", "COMMERCIAL")]
         [InlineData("1101000101", "GRY", 100, "WATCH", "MIX_BELOW_MIN", "MIX-01", "CATHEAD")]
-        [InlineData("2203000201", "OWH", 100, "BLOCK", "BLOCK", "BLOCK-Q4", "CATHEAD")]
+        [InlineData("2203000201", "OWH", 100, "BLOCK", "BLOCK", "BLOCK-Q4", "COMMERCIAL")]
         [InlineData("2203000201", "BLU", 100, "ALLOW", "PEER_Q1", "PEER-Q1", "NONE")]
         [InlineData("2203000201", "BEG", 100, "ALLOW", "PEER_Q2", "PEER-Q2", "NONE")]
         [InlineData("2203000202", "BLK", 100, "WATCH", "PEER_Q3", "PEER-Q3-GAP", "CATHEAD")]
@@ -105,7 +105,7 @@ namespace POGovernance.Tests.Sap
         [InlineData("2203000201", "ZZZ", 100, "WATCH", "BOBS_SIBLING_LOW", "BOBS-02", "CATHEAD")]
         [InlineData("2203000203", "ZZZ", 100, "ALLOW", "BOBS_SIBLINGS_OK", "BOBS-01", "NONE")]
         [InlineData("2203000204", "BLK", 100, "ALLOW", "LOW_HISTORY", "WOF-00", "NONE")]
-        [InlineData("8800000001", "BLK", 100, "HOLD", "NO_PLAN_DATA", "PLAN-00", "CATHEAD")]   // v1.1.6 D1: No Plan Available → HOLD (was ALLOW)
+        [InlineData("8800000001", "BLK", 100, "HOLD", "NO_PLAN_DATA", "PLAN-00", "COMMERCIAL")]   // v1.1.6 D1: No Plan Available → HOLD (was ALLOW)
         [InlineData("8800000002", "WHT", 100, "WATCH", "MIX_BELOW_MIN", "MIX-01", "CATHEAD")]  // v1.1.6 D3: no F3 sale → Watch List
         [InlineData("5509000501", "RED", 100, "ALLOW", "NO_PEER_POOL", "PEER-00", "NONE")]
         [InlineData("5509000502", "ZZZ", 100, "ALLOW", "NEW_ARTICLE", "NEW-00", "NONE")]
@@ -216,7 +216,7 @@ namespace POGovernance.Tests.Sap
             Assert.Equal("B", r.Items[0].VerdictCode);
             Assert.Equal("HOLD", r.Items[1].Verdict);
             Assert.Equal("BLOCK", r.OverallVerdict);                                   // most severe
-            Assert.Equal("CATHEAD", r.RouteTo);
+            Assert.Equal("COMMERCIAL", r.RouteTo);
 
             var h = Decide(new SapDecisionOptions { BlockVerdict = "HOLD" }, Item(10, "2203000201", "OWH", 100), Item(20, "1101000101", "RED", 100));
             Assert.Equal(("HOLD", "H", "HOLD"), (h.Items[0].Verdict, h.Items[0].VerdictCode, h.OverallVerdict));

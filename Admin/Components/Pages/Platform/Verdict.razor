@@ -106,8 +106,8 @@ else if (_v != null)
         <b>Verdicts:</b> <span class="pf-dp dp-allow">ALLOW</span> within the norms ·
         <span class="pf-dp dp-reduce">REDUCE</span> order at most the max qty ·
         <span class="pf-dp dp-watch">WATCH</span> category head approves or rejects ·
-        <span class="pf-dp dp-hold">HOLD</span> do not release as is - no room left (stock + open POs already cover the norm) or no sales plan; the category head decides ·
-        <span class="pf-dp dp-block">BLOCK</span> confirmed slow seller - do not release; the category head decides.
+        <span class="pf-dp dp-hold">HOLD</span> do not release as is - no room left (stock + open POs already cover the norm) or no sales plan; Commercial decides ·
+        <span class="pf-dp dp-block">BLOCK</span> confirmed slow seller - do not release; Commercial decides.
         <div style="margin-top:6px"><b>Figures:</b> plan = sales plan of the delivery window, stock + open PO = what is already there or coming, headroom =
         how much more fits the cover norm, cover = days of sales covered after this PO, sell-thru = % of stock sold per day.</div>
     </div>
@@ -136,7 +136,7 @@ else if (_v != null)
         DateTime.TryParseExact(m ?? "", "MM.yyyy", null, System.Globalization.DateTimeStyles.None, out var d) ? d.ToString("MMM yyyy") : m ?? "—";
     private static string RouteText(string? r) => r switch
     {
-        "NONE" => "normal approvals", "BUYER" => "buyer (reduce quantity)", "CATHEAD" => "category head", "BMHEAD" => "B&M head", _ => r ?? "—"
+        "NONE" => "normal approvals", "BUYER" => "buyer (reduce quantity)", "CATHEAD" => "category head", "BMHEAD" => "B&M head", "COMMERCIAL" => "Commercial", _ => r ?? "—"
     };
     private static string NextStep(SapVerdictView v) => v.OverallVerdict switch
     {
@@ -145,11 +145,14 @@ else if (_v != null)
         "WATCH" => "the category head approves or rejects the PO (an exception needs a reason code).",
         // decisions before 17 Nov 2026 sent a blocked article as HOLD with reason BLOCK
         "HOLD" => v.Items.Any(i => i.ReasonCode == "BLOCK")
-            ? "do not release - a confirmed slow seller (BLOCK); the category head decides."
-            : "do not release as is - no room left within the cover norm (or no sales plan); the category head decides.",
-        "BLOCK" => "do not release - the article is a confirmed slow seller (BLOCK); the category head decides.",
+            ? "do not release - a confirmed slow seller (BLOCK); " + Who(v.RouteTo) + " decides."
+            : "do not release as is - no room left within the cover norm (or no sales plan); " + Who(v.RouteTo) + " decides.",
+        "BLOCK" => "do not release - the article is a confirmed slow seller (BLOCK); " + Who(v.RouteTo) + " decides.",
         _ => "see the items below."
     };
+    /// <summary>Who decides a HOLD / BLOCK: the route of the decision (CATHEAD before 17 Nov 2026, COMMERCIAL after, BMHEAD).</summary>
+    private static string Who(string? route) => route switch { "CATHEAD" => "the category head", "BMHEAD" => "the B&M head", _ => "Commercial" };
+
     private static string VerdictClass(string? v) => v switch
     {
         "ALLOW" => "dp-allow", "REDUCE" => "dp-reduce", "WATCH" => "dp-watch", "HOLD" => "dp-hold", "BLOCK" => "dp-block", _ => "dp-nodata"

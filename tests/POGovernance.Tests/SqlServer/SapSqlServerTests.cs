@@ -230,7 +230,7 @@ namespace POGovernance.Tests.SqlServer
             Assert.All(all, a => Assert.Equal(first.Json, a.Json));
             Assert.Equal(409, (await svc.DecideAsync(body.Replace("50000", "50001"), SapKit.Caller)).Status);
             var j = JsonNode.Parse(first.Json)!;
-            Assert.Equal("HOLD", j["overall_verdict"]!.GetValue<string>());
+            Assert.Equal(("BLOCK", "COMMERCIAL"), (j["overall_verdict"]!.GetValue<string>(), j["route_to"]!.GetValue<string>()));   // blocked article: BLOCK, to Commercial
             Assert.Matches(@"^D-20261021-\d{6,}$", j["decision_id"]!.GetValue<string>());
             var stored = (await repo.GetDecisionAsync(first.LogId!.Value));
             Assert.Equal(2, stored.Items.Count);

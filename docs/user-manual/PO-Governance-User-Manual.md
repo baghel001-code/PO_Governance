@@ -556,8 +556,8 @@ The link works for 90 days. **Anyone with the link can open the page — do not 
 
 **PO Assessment (Tool 2):** Retain · Reduce Qty · Cancel · Watch List · Cannot Validate.
 
-**SAP verdicts:** ALLOW · REDUCE (order at most the max qty) · WATCH (category head) · HOLD (do not release as is) ·
-BLOCK (confirmed slow seller — do not release; category head decides).
+**SAP verdicts:** ALLOW · REDUCE (order at most the max qty) · WATCH (category head) · HOLD (do not release as is;
+Commercial decides) · BLOCK (confirmed slow seller — do not release; Commercial decides).
 
 ### 8.2 Terms
 

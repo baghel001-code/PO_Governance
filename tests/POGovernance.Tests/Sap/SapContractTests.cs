@@ -106,7 +106,8 @@ namespace POGovernance.Tests.Sap
         /// <summary>Enum values added to the v1.4 contract on purpose: verdict BLOCK (code B) for the tool's Block decisions.</summary>
         private static readonly Dictionary<string, string[]> EnumExtensions = new()
         {
-            ["overall_verdict"] = new[] { "BLOCK" }, ["verdict"] = new[] { "BLOCK" }, ["verdict_code"] = new[] { "B" }
+            ["overall_verdict"] = new[] { "BLOCK" }, ["verdict"] = new[] { "BLOCK" }, ["verdict_code"] = new[] { "B" },
+            ["route_to"] = new[] { "COMMERCIAL" }, ["by_role"] = new[] { "COMMERCIAL" }
         };
 
         [Theory]
@@ -135,12 +136,13 @@ namespace POGovernance.Tests.Sap
             Assert.Equal(Enum("DecisionResponse.items[]", "verdict"), SapVerdicts.SpecValues);
             Assert.Equal(Enum("DecisionResponse", "verdict_code"), SapVerdicts.SpecValues.Select(SapVerdicts.Code));
             Assert.Equal(Enum("DecisionResponse.items[]", "verdict_code"), SapVerdicts.SpecValues.Select(SapVerdicts.Code));
-            Assert.Equal(Enum("DecisionResponse", "route_to"), new[] { SapRoutes.None, SapRoutes.Buyer, SapRoutes.CatHead, SapRoutes.BmHead });
+            // route_to and by_role: spec v1.4 + COMMERCIAL (HOLD / BLOCK go to Commercial; documented addition)
+            Assert.Equal(Enum("DecisionResponse", "route_to").Append("COMMERCIAL"), SapRoutes.Values);
             Assert.Equal(Enum("Event", "event_type"), SapEnums.EventTypes);
             Assert.Equal(Enum("PurchaseOrderState", "release_status"), SapEnums.ReleaseStatus);
             Assert.Equal(Enum("GoodsMovement", "debit_credit"), SapEnums.DebitCredit);
             Assert.Equal(Enum("GovernanceOutcome", "outcome"), SapEnums.Outcomes);
-            Assert.Equal(Enum("GovernanceOutcome", "by_role"), SapEnums.ByRoles);
+            Assert.Equal(Enum("GovernanceOutcome", "by_role").Append("COMMERCIAL"), SapEnums.ByRoles);
             Assert.Equal(Enum("PingResponse", "environment"), SapEnums.Environments);
             Assert.Equal(new[] { "ok" }, Enum("PingResponse", "status"));
             // the tool sends the spec v1.4 verdicts plus BLOCK (code B, the tool's Block; addition documented in

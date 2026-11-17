@@ -116,10 +116,10 @@ namespace POGovernance.Tests.Sap
             Assert.Equal("NONE", SapRoutes.For("ALLOW", false));
             Assert.Equal("BUYER", SapRoutes.For("REDUCE", false));
             Assert.Equal("CATHEAD", SapRoutes.For("WATCH", false));
-            Assert.Equal("CATHEAD", SapRoutes.For("HOLD", false));
+            Assert.Equal("COMMERCIAL", SapRoutes.For("HOLD", false));
             Assert.Equal("BMHEAD", SapRoutes.For("HOLD", true));
             Assert.Equal("BMHEAD", SapRoutes.For("BLOCK", true));
-            Assert.Equal("CATHEAD", SapRoutes.For("BLOCK", false));
+            Assert.Equal("COMMERCIAL", SapRoutes.For("BLOCK", false));
         }
 
         [Fact]

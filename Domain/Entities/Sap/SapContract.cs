@@ -312,7 +312,8 @@ namespace Domain.Entities.Sap
             "BUYER_ACCEPTED_REDUCTION", "EXCEPTION_REQUESTED", "EXCEPTION_APPROVED", "EXCEPTION_REJECTED",
             "PO_RELEASED", "PO_WITHDRAWN", "NOT_CHECKED_TIMEOUT"
         };
-        public static readonly string[] ByRoles = { "BUYER", "CATHEAD", "BMHEAD", "SYSTEM" };
+        /// <summary>Spec v1.4 + COMMERCIAL (HOLD / BLOCK are decided by the Commercial team since 17 Nov 2026).</summary>
+        public static readonly string[] ByRoles = { "BUYER", "CATHEAD", "BMHEAD", "SYSTEM", "COMMERCIAL" };
         public static readonly string[] Environments = { "PRODUCTION", "TEST" };
     }
 

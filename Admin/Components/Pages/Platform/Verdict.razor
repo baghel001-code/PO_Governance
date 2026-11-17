@@ -106,9 +106,10 @@ else if (_v != null)
         <b>Verdicts:</b> <span class="pf-dp dp-allow">ALLOW</span> within the norms ·
         <span class="pf-dp dp-reduce">REDUCE</span> order at most the max qty ·
         <span class="pf-dp dp-watch">WATCH</span> category head approves or rejects ·
-        <span class="pf-dp dp-hold">HOLD</span> do not release as is (BLOCK = confirmed slow seller).
-        <b>Figures:</b> plan = sales plan of the delivery window, stock + open PO = what is already there or coming, headroom =
-        how much more fits the cover norm, cover = days of sales covered after this PO, sell-thru = % of stock sold per day.
+        <span class="pf-dp dp-hold">HOLD</span> do not release as is - no room left (stock + open POs already cover the norm) or no sales plan; the category head decides ·
+        <span class="pf-dp dp-block">BLOCK</span> confirmed slow seller - do not release; the category head decides.
+        <div style="margin-top:6px"><b>Figures:</b> plan = sales plan of the delivery window, stock + open PO = what is already there or coming, headroom =
+        how much more fits the cover norm, cover = days of sales covered after this PO, sell-thru = % of stock sold per day.</div>
     </div>
     <div class="pf-small pf-muted" style="margin-top:10px">This link is valid until @When(_v.ExpiresAt). Anyone with the link can see this page - do not forward it outside the company.</div>
 }
@@ -142,10 +143,11 @@ else if (_v != null)
         "ALLOW" => "all items are within the norms - the PO continues through the normal approvals.",
         "REDUCE" => "the buyer reduces each REDUCE item to its max qty (or less) and resubmits the PO; the other items stay as ordered.",
         "WATCH" => "the category head approves or rejects the PO (an exception needs a reason code).",
+        // decisions before 17 Nov 2026 sent a blocked article as HOLD with reason BLOCK
         "HOLD" => v.Items.Any(i => i.ReasonCode == "BLOCK")
-            ? "do not release as is - a confirmed slow seller (BLOCK); the category head decides."
-            : "do not release as is - the category head decides.",
-        "BLOCK" => "the article is blocked as a confirmed slow seller - the PO should not be released.",
+            ? "do not release - a confirmed slow seller (BLOCK); the category head decides."
+            : "do not release as is - no room left within the cover norm (or no sales plan); the category head decides.",
+        "BLOCK" => "do not release - the article is a confirmed slow seller (BLOCK); the category head decides.",
         _ => "see the items below."
     };
     private static string VerdictClass(string? v) => v switch

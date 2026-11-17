@@ -1,8 +1,23 @@
+using System.Reflection;
+
 namespace Domain.Constants
 {
     public static class AppConstants
     {
-        public const string AppVersion = "2.0.0";
+        /// <summary>
+        /// The application version from the assembly (Version in Directory.Build.props, or dotnet publish -p:Version=…):
+        /// the informational version without a "+build" suffix; "0.0.0" if the assembly carries none.
+        /// </summary>
+        public static readonly string AppVersion = ReadVersion();
+
+        private static string ReadVersion()
+        {
+            var asm = typeof(AppConstants).Assembly;
+            var v = asm.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion
+                    ?? asm.GetName().Version?.ToString(3);
+            return string.IsNullOrWhiteSpace(v) ? "0.0.0" : v.Split('+')[0];
+        }
+
         public const string AuthScheme = "PoGovSession";
         public const string PortalAuthScheme = "PoGovPortal";
         public const string PortalCookie = "pogov_auth";

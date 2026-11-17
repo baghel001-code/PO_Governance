@@ -108,6 +108,10 @@ Publish both apps (`dotnet publish POGovApi -c Release -o out/api`, same for `Ad
 (ASP.NET Core Hosting Bundle 8) or as a Windows service, serve the portal over HTTPS with the company certificate, and keep the API
 reachable from the portal only (bind it to localhost or firewall it). Nightly backups are written to `BackupDir` in the v1.1.4 zip layout.
 
+**Version:** set once in `Directory.Build.props` (`<Version>2.0.0</Version>`) for every project, or per build with
+`dotnet publish … -p:Version=2.0.1`. It is compiled into the DLLs (file / product version) and shown on the sign-in page and
+in the portal's top bar (`AppConstants.AppVersion` reads it from the assembly), next to the environment.
+
 ## API conventions (QPS)
 
 The portal and the API talk exactly like QPS (the only exception is the SAP-facing `/api/sap/v1/*`, whose paths, snake_case

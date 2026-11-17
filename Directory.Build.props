@@ -1,0 +1,10 @@
+<Project>
+  <!-- The application version, once for every project (API, portal, libraries, tests). It is compiled into each assembly
+       (file version, product version) and shown on the sign-in page and in the top bar (AppConstants.AppVersion reads it).
+       Change it here for a release, or at build time: dotnet publish -p:Version=2.0.1 -->
+  <PropertyGroup>
+    <Version>2.0.0</Version>
+    <!-- keep the shown version clean: no "+<git commit>" suffix in the informational version -->
+    <IncludeSourceRevisionInInformationalVersion>false</IncludeSourceRevisionInInformationalVersion>
+  </PropertyGroup>
+</Project>

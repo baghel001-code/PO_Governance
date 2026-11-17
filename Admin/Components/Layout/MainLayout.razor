@@ -9,6 +9,7 @@
 @inject LoginNotices Notices
 @inject ISnackbar Snackbar
 @inject AuthenticationStateProvider AuthState
+@inject IWebHostEnvironment HostEnv
 
 <MudThemeProvider Theme="PortalTheme.Theme" />
 <MudPopoverProvider />
@@ -18,7 +19,11 @@
 <div class="pg-topbar">
     <a class="pg-brand" href="/">
         <img src="img/logo.png" alt="VMM" />
-        <span class="pg-brand-name">PO Governance Platform</span>
+        <span class="pg-brand-text">
+            <span class="pg-brand-name">PO Governance Platform</span>
+            @* app version and the portal's environment (ASPNETCORE_ENVIRONMENT), as on the sign-in page *@
+            <span class="pg-brand-ver" data-testid="pg-version">v@(AppConstants.AppVersion) · <span class="@("pg-env pg-env-" + HostEnv.EnvironmentName.ToLowerInvariant())">@HostEnv.EnvironmentName</span></span>
+        </span>
         <span class="pg-brand-sub">@(Session.View == "planner" ? "Planner View" : "Category View")</span>
     </a>
     <nav class="pg-tabs">

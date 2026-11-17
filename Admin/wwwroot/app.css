@@ -35,6 +35,11 @@ body { margin: 0; font-family: var(--font); background: var(--bg); color: var(--
 .pg-brand { display: flex; align-items: center; gap: 12px; text-decoration: none; }
 .pg-brand img { height: 34px; border-radius: 7px; border: 2px solid rgba(255,255,255,0.25); background: #fff; }
 .pg-brand-name { font-family: var(--font-brand); font-size: 17px; font-weight: 800; color: #fff; letter-spacing: .02em; }
+.pg-brand-text { display: flex; flex-direction: column; line-height: 1.15; }
+.pg-brand-ver { font-size: 10px; font-weight: 600; color: rgba(255,255,255,.7); letter-spacing: .02em; margin-top: 2px; }
+.pg-brand-ver .pg-env { padding: 0 6px; border-radius: 8px; background: rgba(255,255,255,.14); color: #dbe7ff; }
+.pg-brand-ver .pg-env-production { background: rgba(34,197,94,.25); color: #bbf7d0; }
+.pg-brand-ver .pg-env-staging { background: rgba(245,158,11,.28); color: #fde68a; }
 .pg-brand-sub { font-size: 10px; font-weight: 600; color: rgba(255,255,255,.65); background: rgba(255,255,255,.1); border: 1px solid rgba(255,255,255,.18); padding: 2px 8px; border-radius: 10px; }
 .pg-tabs { display: flex; gap: 4px; flex-wrap: wrap; }
 .pg-tab {

@@ -45,7 +45,7 @@ namespace Admin.Services.Platform
             else
             {
                 pdf.AddText("MRA " + (mraNo ?? "not linked yet") + (td != null ? " · " + td.Gm + " " + td.Colour : ""), TextStyle.SubHeading);
-                if (td != null) pdf.AddText("PO " + (td.PoNumber ?? "—") + " · " + NfD(td.OrderQty) + " pcs checked · delivery " + MonL(td.DeliveryMonth), TextStyle.Small);
+                if (td != null) pdf.AddText("PO " + (td.PoNumber ?? "—") + " · " + NfD(QtyChecked(td)) + " pcs checked · delivery " + MonL(td.DeliveryMonth), TextStyle.Small);
             }
             if (!string.IsNullOrEmpty(note)) pdf.AddText(note, TextStyle.Small);
 
@@ -61,7 +61,7 @@ namespace Admin.Services.Platform
                 if (!string.IsNullOrEmpty(td.PoNumber)) KV(pdf, "PO checked", td.PoNumber);
                 if (!string.IsNullOrEmpty(td.RequestId)) KV(pdf, "Request ID", td.RequestId);
                 if (!string.IsNullOrEmpty(td.DocumentNo)) KV(pdf, "Document (MRN) from SAP", td.DocumentNo);
-                KV(pdf, "Qty checked", NfD(td.OrderQty) + (td.Verdict != null ? " · SAP verdict " + td.Verdict : ""));
+                KV(pdf, "Qty checked", NfD(QtyChecked(td)) + (td.Verdict != null ? " · SAP verdict " + td.Verdict : ""));
                 if (td.MaxPermissible != null) KV(pdf, "Max Permissible at the decision", NfD(td.MaxPermissible));
                 KV(pdf, "Linked by", td.MatchedBy);
                 if (td.ViewUrl != null) { pdf.AddSpacing(4); pdf.AddHyperlink("Open the PO verdict page", td.ViewUrl); }
@@ -162,6 +162,9 @@ namespace Admin.Services.Platform
 
         /// <summary>Label + value row (PDFKit wrapped key-value) with a label column wide enough for the longest label.</summary>
         private static void KV(PdfBuilder pdf, string key, string? value) => pdf.AddWrappedKeyValue(key, string.IsNullOrEmpty(value) ? "—" : value, 175);
+
+        /// <summary>The quantity the tool checked: the group of the PO's items with this article · colour · month (item qty for old rows without it).</summary>
+        private static double QtyChecked(MraToolDecision d) => d.GroupQty > 0 ? d.GroupQty : d.OrderQty;
 
         private static TableColumn Col(string h, double weight, TextAlign align = TextAlign.Left) => new() { Header = h, Weight = weight, Align = align };
         private static ChipColor Chip(string group) => group switch

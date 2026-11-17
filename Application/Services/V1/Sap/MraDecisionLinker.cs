@@ -64,7 +64,7 @@ namespace Application.Services.V1.Sap
         private static MraToolDecision With(MraToolDecision d, string by) => new()
         {
             ItemId = d.ItemId, DecisionId = d.DecisionId, RequestId = d.RequestId, PoNumber = d.PoNumber, DecidedAt = d.DecidedAt, Mode = d.Mode,
-            Decision = d.Decision, Verdict = d.Verdict, Reason = d.Reason, MaxPermissible = d.MaxPermissible, OrderQty = d.OrderQty,
+            Decision = d.Decision, Verdict = d.Verdict, Reason = d.Reason, MaxPermissible = d.MaxPermissible, OrderQty = d.OrderQty, GroupQty = d.GroupQty,
             // the PO verdict page (view_url of new decisions is the MRA page itself)
             ViewUrl = MraVerdictLinks.PoVerdictUrl(d.ViewUrl), HasWorking = d.HasWorking, DocumentNo = d.DocumentNo, MatchedBy = by,
             Gm = d.Gm, Colour = d.Colour, DeliveryMonth = d.DeliveryMonth, OverallVerdict = d.OverallVerdict, PoItem = d.PoItem, ViewExpiresAt = d.ViewExpiresAt

@@ -49,7 +49,7 @@
                 else
                 {
                     <div style="font-size:17px;font-weight:800;color:#13254A">MRA @(mraNo ?? "not linked yet")@(td != null ? " · " + td.Gm + " " + td.Colour : "")</div>
-                    @if (td != null) { <div class="mq-sub">PO @(td.PoNumber ?? "—") · @NfD(td.OrderQty) pcs checked · delivery @MonL(td.DeliveryMonth)</div> }
+                    @if (td != null) { <div class="mq-sub">PO @(td.PoNumber ?? "—") · @NfD(QtyChecked(td)) pcs checked · delivery @MonL(td.DeliveryMonth)</div> }
                 }
             </div>
             @if (OnClose.HasDelegate)
@@ -74,7 +74,7 @@
                 @if (!string.IsNullOrEmpty(td.PoNumber)) { <tr><td>PO checked</td><td>@td.PoNumber</td></tr> }
                 @if (!string.IsNullOrEmpty(td.RequestId)) { <tr><td>Request ID</td><td>@td.RequestId</td></tr> }
                 @if (!string.IsNullOrEmpty(td.DocumentNo)) { <tr><td>Document (MRN) from SAP</td><td>@td.DocumentNo</td></tr> }
-                <tr><td>Qty checked</td><td>@NfD(td.OrderQty)@(td.Verdict != null ? " · SAP verdict " + td.Verdict : "")</td></tr>
+                <tr><td>Qty checked</td><td>@NfD(QtyChecked(td))@(td.Verdict != null ? " · SAP verdict " + td.Verdict : "")</td></tr>
                 @if (td.MaxPermissible != null) { <tr><td>Max Permissible at the decision</td><td><b>@NfD(td.MaxPermissible)</b></td></tr> }
                 <tr><td>Verdict page</td><td>@if (td.ViewUrl != null) { <a href="@td.ViewUrl" target="_blank" rel="noopener noreferrer" data-testid="mq-verdict-link">open ↗</a> } else { <span class="mq-sub">no link for this decision</span> }</td></tr>
                 <tr><td>Linked by</td><td class="mq-sub">@td.MatchedBy</td></tr>
@@ -193,6 +193,8 @@
     private static string MonL(string? mk) { var p = (mk ?? "").Split('.'); return p.Length == 2 && int.TryParse(p[0], out var mo) && mo is >= 1 and <= 12 ? Mn[mo - 1] + " " + p[1] : mk ?? ""; }
     private static int MonOrd(string? mk) { var p = (mk ?? "").Split('.'); return p.Length == 2 && int.TryParse(p[0], out var mo) && int.TryParse(p[1], out var y) ? y * 12 + mo : 0; }
     private static string Nf(long? v) => v == null ? "—" : DecisionEngine.Common.Js.Fmt(v.Value);
+    /// <summary>The quantity the tool checked: the group of the PO's items with this article · colour · month (item qty for old rows without it).</summary>
+    private static double QtyChecked(MraToolDecision d) => d.GroupQty > 0 ? d.GroupQty : d.OrderQty;
     private static string NfD(double? v) => v == null ? "—" : DecisionEngine.Common.Js.Fmt(v.Value);
     private string Who(string? e) => string.IsNullOrEmpty(e) || e.Contains("vacant", StringComparison.OrdinalIgnoreCase) ? "" : Owners != null && Owners.TryGetValue(e, out var n) ? n : e.Split('@')[0];
     private static string Lvl(string? l) => l != null && MraNorm.Levels.TryGetValue(l, out var d) ? d : "";

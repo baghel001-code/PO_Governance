@@ -236,7 +236,7 @@ namespace Infrastructure.Repositories
 
         private static MraToolDecision ToDecision(DecisionRow r) => new()
         {
-            ItemId = r.ItemId, Gm = r.Gm ?? "", Colour = r.Colour ?? "", DeliveryMonth = r.DeliveryMonth ?? "", OrderQty = r.OrderQty,
+            ItemId = r.ItemId, Gm = r.Gm ?? "", Colour = r.Colour ?? "", DeliveryMonth = r.DeliveryMonth ?? "", OrderQty = r.OrderQty, GroupQty = r.GroupQty,
             Verdict = r.Verdict, Decision = r.EngineDecision ?? "", Reason = r.ReasonText, MaxPermissible = r.MaxPermissible, HasWorking = r.HasWorking,
             DecisionId = r.DecisionId, RequestId = r.RequestId, PoNumber = r.PoNumber, DecidedAt = r.DecidedAt, Mode = r.Mode, ViewUrl = r.ViewUrl,
             DocumentNo = r.DocumentNo, OverallVerdict = r.OverallVerdict, PoItem = r.PoItem, ViewExpiresAt = r.ViewExpiresAt

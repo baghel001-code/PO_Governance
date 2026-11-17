@@ -164,9 +164,9 @@ namespace POGovernance.Tests.SqlServer
                     INSERT INTO dbo.SAP_DECISION_LOG (Decision_Id, Request_Id, Http_Status, Is_Test, Po_Number, Overall_Verdict, Decided_At, View_Token, View_Expires_At, Response_Json)
                     VALUES (N'D-TK-1', N'R-TK-1', 200, 0, N'4500077001', N'ALLOW', '2026-11-12T10:00:00+05:30', N'TokTokTokTokTokTokTok1', '2027-02-10T10:00:00+05:30',
                             N'{"view_url":"http://portal/mra-verdict/TokTokTokTokTokTokTok1"}');
-                    INSERT INTO dbo.SAP_DECISION_ITEMS (Decision_Log_Id, Po_Item, Gm, Colour, Delivery_Month, Order_Qty, Verdict, Engine_Decision)
-                    SELECT Id, 20, N'1101000101', N'WHT', N'12.2026', 1500, N'ALLOW', N'Auto Allow' FROM dbo.SAP_DECISION_LOG WHERE Request_Id = N'R-TK-1'
-                    UNION ALL SELECT Id, 10, N'1101000101', N'BLK', N'12.2026', 500, N'ALLOW', N'Auto Allow' FROM dbo.SAP_DECISION_LOG WHERE Request_Id = N'R-TK-1';
+                    INSERT INTO dbo.SAP_DECISION_ITEMS (Decision_Log_Id, Po_Item, Gm, Colour, Delivery_Month, Order_Qty, Group_Qty, Verdict, Engine_Decision)
+                    SELECT Id, 20, N'1101000101', N'WHT', N'12.2026', 1500, 1800, N'ALLOW', N'Auto Allow' FROM dbo.SAP_DECISION_LOG WHERE Request_Id = N'R-TK-1'
+                    UNION ALL SELECT Id, 10, N'1101000101', N'BLK', N'12.2026', 500, 500, N'ALLOW', N'Auto Allow' FROM dbo.SAP_DECISION_LOG WHERE Request_Id = N'R-TK-1';
                     """);
             }
             var r = Repo();
@@ -176,6 +176,7 @@ namespace POGovernance.Tests.SqlServer
             Assert.Equal(("D-TK-1", "ALLOW", DateTimeOffset.Parse("2027-02-10T10:00:00+05:30")), (items[0].DecisionId, items[0].OverallVerdict, items[0].ViewExpiresAt!.Value));
             var pick = Application.Services.V1.Sap.MraDecisionLinker.ForDecision(items, null, null)!;
             Assert.Equal((20, "http://portal/verdict/TokTokTokTokTokTokTok1"), (pick.PoItem!.Value, pick.ViewUrl));   // largest; panel links the PO verdict page
+            Assert.Equal((1500d, 1800d), (pick.OrderQty, pick.GroupQty));        // MRA page / PDF "Qty checked" = the group qty
 
             await using (var c = new SqlConnection(_fx.ConnectionString))
                 await c.ExecuteAsync("""

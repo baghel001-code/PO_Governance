@@ -106,6 +106,8 @@ namespace DecisionEngine.Results.Mra
         public string? Reason { get; set; }
         public double? MaxPermissible { get; set; }
         public double OrderQty { get; set; }
+        /// <summary>Quantity the tool checked: all items of the PO with this generic article · colour · delivery month together (SAP_DECISION_ITEMS.Group_Qty).</summary>
+        public double GroupQty { get; set; }
         /// <summary>Verdict page (the link SAP got in view_url); null when the decision had no link.</summary>
         public string? ViewUrl { get; set; }
         public bool HasWorking { get; set; }

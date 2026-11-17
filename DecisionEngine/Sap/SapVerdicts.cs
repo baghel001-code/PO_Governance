@@ -60,20 +60,20 @@ namespace DecisionEngine.Sap
         public const string Buyer = "BUYER";
         public const string CatHead = "CATHEAD";
         public const string BmHead = "BMHEAD";
-        /// <summary>Addition to spec v1.4: HOLD and BLOCK go to the Commercial team (were CATHEAD).</summary>
+        /// <summary>Addition to spec v1.4: REDUCE (was BUYER), HOLD and BLOCK (were CATHEAD) go to the Commercial team.</summary>
         public const string Commercial = "COMMERCIAL";
 
         /// <summary>Every route_to the tool sends, in the order of the reference document.</summary>
         public static readonly string[] Values = { None, Buyer, CatHead, BmHead, Commercial };
 
         /// <summary>
-        /// ALLOW → NONE, REDUCE → BUYER, WATCH → CATHEAD, HOLD and BLOCK → COMMERCIAL, or BMHEAD when the B&amp;M head is
+        /// ALLOW → NONE, REDUCE → COMMERCIAL, WATCH → CATHEAD, HOLD and BLOCK → COMMERCIAL, or BMHEAD when the B&amp;M head is
         /// required as well (bm_head_required = true; rule hook SapInterface:BmHead, off).
         /// </summary>
         public static string For(string overallVerdict, bool bmHeadRequired) => overallVerdict switch
         {
             SapVerdicts.Allow => None,
-            SapVerdicts.Reduce => Buyer,
+            SapVerdicts.Reduce => Commercial,
             SapVerdicts.Watch => CatHead,
             SapVerdicts.Hold or SapVerdicts.Block => bmHeadRequired ? BmHead : Commercial,
             _ => throw new ArgumentOutOfRangeException(nameof(overallVerdict), overallVerdict, "Unknown SAP verdict")

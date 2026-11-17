@@ -262,7 +262,7 @@ repeat), otherwise the answer is `400 VALIDATION_FAILED`. The answer always echo
   "mode": "SHADOW",
   "overall_verdict": "REDUCE",
   "verdict_code": "R",
-  "route_to": "BUYER",
+  "route_to": "COMMERCIAL",
   "bm_head_required": false,
   "summary_text": "Item 10: reduce to 15,928 - Stock + pending + this PO cover 265 days, above the 79-day norm; max 15,928 pcs",
   "rules_version": "R-P1",
@@ -293,7 +293,7 @@ repeat), otherwise the answer is `400 VALIDATION_FAILED`. The answer always echo
 | `mode` | `SHADOW` \| `LIVE` | Echo of the request |
 | `overall_verdict` | `ALLOW` \| `REDUCE` \| `WATCH` \| `HOLD` \| `BLOCK` | Most severe item verdict (BLOCK > HOLD > WATCH > REDUCE > ALLOW) |
 | `verdict_code` | `A` \| `R` \| `W` \| `H` \| `B` | One-character code for SAP domain values |
-| `route_to` | `NONE` \| `BUYER` \| `CATHEAD` \| `BMHEAD` \| `COMMERCIAL` | Where the workflow goes in LIVE mode (ignored in SHADOW). `NONE` = continue normal approvals. `COMMERCIAL` (addition to spec v1.4, since 17 Nov 2026) = the Commercial team decides HOLD and BLOCK |
+| `route_to` | `NONE` \| `BUYER` \| `CATHEAD` \| `BMHEAD` \| `COMMERCIAL` | Where the workflow goes in LIVE mode (ignored in SHADOW). `NONE` = continue normal approvals. `COMMERCIAL` (addition to spec v1.4, since 17 Nov 2026) = the Commercial team handles REDUCE, HOLD and BLOCK |
 | `bm_head_required` | boolean | Escalation to the B&M head (business rule pending — currently always `false`) |
 | `summary_text` | string, max 255 | Short text for the work item / PO header note |
 | `rules_version` | string | Version of the planner parameters used |
@@ -334,14 +334,14 @@ plus pending POs is sold out before the delivery window starts.
 | Verdict | Code | `route_to` | SAP action (LIVE mode) |
 |---|---|---|---|
 | `ALLOW` | A | `NONE` | Continue normal approvals |
-| `REDUCE` | R | `BUYER` | Buyer reduces the item to `max_qty` or less. Depth plan bypass: store `decision_id` + `max_qty` on the item; if the quantity is reduced to `max_qty` or less, resubmit with `depth_check = BYPASSED` and `previous_decision_id` |
+| `REDUCE` | R | `COMMERCIAL` | Goes to **Commercial**; the item is reduced to `max_qty` or less. Depth plan bypass: store `decision_id` + `max_qty` on the item; if the quantity is reduced to `max_qty` or less, resubmit with `depth_check = BYPASSED` and `previous_decision_id` |
 | `WATCH` | W | `CATHEAD` | Category head approves or rejects (exception with reason code) |
 | `HOLD` | H | `COMMERCIAL` | Do not release as is; **Commercial** decides (no headroom, or no plan available) |
 | `BLOCK` | B | `COMMERCIAL` | **Blocked article — confirmed slow seller** (`reason_code = BLOCK`): do not release; **Commercial** decides. The most severe verdict |
 
 HOLD and BLOCK go to `BMHEAD` instead when `bm_head_required = true` (business rule pending, currently off). Until
-17 Nov 2026 HOLD and BLOCK were routed to `CATHEAD`; `COMMERCIAL` is a new value SAP must accept in `route_to` (and in
-`governance_outcome.by_role` when Commercial decides).
+17 Nov 2026 REDUCE was routed to `BUYER` and HOLD / BLOCK to `CATHEAD`; `COMMERCIAL` is a new value SAP must accept in
+`route_to` (and in `governance_outcome.by_role` when Commercial decides). `BUYER` is no longer sent as `route_to`.
 
 ### Reason codes per verdict
 
@@ -420,7 +420,7 @@ head). If the SAP side is not ready, the tool's setting `SapInterface:BlockVerdi
 
 ```json
 { "decision_id": "D-20261022-000006", "request_id": "WI-MULTI-0001", "mode": "SHADOW",
-  "overall_verdict": "REDUCE", "verdict_code": "R", "route_to": "BUYER", "bm_head_required": false,
+  "overall_verdict": "REDUCE", "verdict_code": "R", "route_to": "COMMERCIAL", "bm_head_required": false,
   "summary_text": "Item 10: reduce to 9,557 - …; Item 20: reduce to 6,371 - …",
   "items": [
     { "po_item": 10, "verdict": "REDUCE", "verdict_code": "R", "max_qty": 9557, "reason_code": "COVER_ABOVE_NORM",

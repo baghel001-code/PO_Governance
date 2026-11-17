@@ -104,7 +104,7 @@ else if (_v != null)
 
     <div class="card pf-small" style="padding:12px 18px;margin-top:14px" data-testid="pv-legend">
         <b>Verdicts:</b> <span class="pf-dp dp-allow">ALLOW</span> within the norms ·
-        <span class="pf-dp dp-reduce">REDUCE</span> order at most the max qty ·
+        <span class="pf-dp dp-reduce">REDUCE</span> order at most the max qty; goes to Commercial ·
         <span class="pf-dp dp-watch">WATCH</span> category head approves or rejects ·
         <span class="pf-dp dp-hold">HOLD</span> do not release as is - no room left (stock + open POs already cover the norm) or no sales plan; Commercial decides ·
         <span class="pf-dp dp-block">BLOCK</span> confirmed slow seller - do not release; Commercial decides.
@@ -141,7 +141,9 @@ else if (_v != null)
     private static string NextStep(SapVerdictView v) => v.OverallVerdict switch
     {
         "ALLOW" => "all items are within the norms - the PO continues through the normal approvals.",
-        "REDUCE" => "the buyer reduces each REDUCE item to its max qty (or less) and resubmits the PO; the other items stay as ordered.",
+        "REDUCE" => v.RouteTo == "BUYER"
+            ? "the buyer reduces each REDUCE item to its max qty (or less) and resubmits the PO; the other items stay as ordered."
+            : "the PO goes to Commercial: each REDUCE item is reduced to its max qty (or less) and the PO resubmitted; the other items stay as ordered.",
         "WATCH" => "the category head approves or rejects the PO (an exception needs a reason code).",
         // decisions before 17 Nov 2026 sent a blocked article as HOLD with reason BLOCK
         "HOLD" => v.Items.Any(i => i.ReasonCode == "BLOCK")

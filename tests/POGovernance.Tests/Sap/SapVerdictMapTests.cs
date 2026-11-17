@@ -114,7 +114,7 @@ namespace POGovernance.Tests.Sap
             Assert.Equal("ALLOW", SapVerdicts.MostSevere(Array.Empty<string>()));
             Assert.Equal("BLOCK", SapVerdicts.MostSevere(new[] { "HOLD", "BLOCK" }));
             Assert.Equal("NONE", SapRoutes.For("ALLOW", false));
-            Assert.Equal("BUYER", SapRoutes.For("REDUCE", false));
+            Assert.Equal("COMMERCIAL", SapRoutes.For("REDUCE", false));
             Assert.Equal("CATHEAD", SapRoutes.For("WATCH", false));
             Assert.Equal("COMMERCIAL", SapRoutes.For("HOLD", false));
             Assert.Equal("BMHEAD", SapRoutes.For("HOLD", true));

@@ -110,7 +110,7 @@ Answer (200):
 
 ```json
 { "decision_id": "D-20261021-000002", "request_id": "WI000004711-4500099001-V1", "mode": "SHADOW",
-  "overall_verdict": "REDUCE", "verdict_code": "R", "route_to": "BUYER", "bm_head_required": false,
+  "overall_verdict": "REDUCE", "verdict_code": "R", "route_to": "COMMERCIAL", "bm_head_required": false,
   "summary_text": "Item 10: reduce to 16,106 - Stock + pending + this PO cover 264 days, above the 79-day norm; max 16,106 pcs",
   "rules_version": "R-P1", "data_delayed": false,
   "data_as_of": { "bw_snapshot": "2026-10-21T14:51:14+05:30", "events_lag_seconds": 0 },
@@ -170,8 +170,8 @@ up to Max Permissible).
   `WATCH`: those items get WATCH / CANNOT_VALIDATE and the rest is decided. If no item can be decided the answer is 422
   either way.
 * `overall_verdict` = the most severe item verdict (HOLD > WATCH > REDUCE > ALLOW; BLOCK above HOLD).
-* `route_to`: ALLOW → NONE, REDUCE → BUYER, WATCH → CATHEAD, HOLD / BLOCK → **COMMERCIAL** (since 17 Nov 2026; was
-  CATHEAD; new value, also accepted as `governance_outcome.by_role`), or BMHEAD when `bm_head_required`.
+* `route_to`: ALLOW → NONE, WATCH → CATHEAD, REDUCE / HOLD / BLOCK → **COMMERCIAL** (since 17 Nov 2026; REDUCE was
+  BUYER, HOLD / BLOCK were CATHEAD; new value, also accepted as `governance_outcome.by_role`), or BMHEAD when `bm_head_required`.
 * `bm_head_required`: rule hook `SapInterface:BmHead` (pending business rule, handover §8 item 5) — off (always `false`);
   when enabled, HOLD / BLOCK (and WATCH with `IncludeWatch`) of a PO whose summed `net_value` ≥ `MinNetValue`.
 * `reason_text` (≤ 132) is a short text from the engine's figures; the full engine reason is kept in the decision log.

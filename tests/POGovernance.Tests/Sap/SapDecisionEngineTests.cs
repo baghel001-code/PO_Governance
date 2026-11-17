@@ -94,7 +94,7 @@ namespace POGovernance.Tests.Sap
 
         [Theory]
         [InlineData("1101000101", "WHT", 100, "ALLOW", "COVER_WITHIN_NORM", "COVER-00", "NONE")]
-        [InlineData("1101000101", "WHT", 50000, "REDUCE", "COVER_ABOVE_NORM", "COVER-01", "BUYER")]
+        [InlineData("1101000101", "WHT", 50000, "REDUCE", "COVER_ABOVE_NORM", "COVER-01", "COMMERCIAL")]
         [InlineData("1101000101", "RED", 100, "HOLD", "COVER_NO_HEADROOM", "COVER-02", "COMMERCIAL")]
         [InlineData("1101000101", "GRY", 100, "WATCH", "MIX_BELOW_MIN", "MIX-01", "CATHEAD")]
         [InlineData("2203000201", "OWH", 100, "BLOCK", "BLOCK", "BLOCK-Q4", "COMMERCIAL")]

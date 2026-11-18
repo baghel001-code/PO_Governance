@@ -16,7 +16,7 @@ namespace Infrastructure.Middleware
     /// <item>a DecisionEngine rule error the service did not translate → 404 (<see cref="EngineNotFoundException"/>) / 400</item>
     /// <item>database not reachable → 503 "The database is not reachable right now - please try again in a minute."</item>
     /// <item>bad JSON body → 400 with the parser message</item>
-    /// <item>anything else → 500 "Server error: …"</item>
+    /// <item>anything else → 500 "Server error - … (reference E-xxxxxx)": no internal details; the log line carries the same reference</item>
     /// </list>
     /// </summary>
     public sealed class ExceptionMiddleware
@@ -66,7 +66,14 @@ namespace Infrastructure.Middleware
                     return;
                 }
                 var (status, message, payload) = Map(e);
-                if (status >= 500) _log.LogError(e, "API error ({Status})", status);
+                if (status == 500 && message == ServerError)
+                {
+                    // the exception text (SQL, paths, driver messages) stays in the log; the user quotes the reference
+                    var reference = "E-" + Convert.ToHexString(System.Security.Cryptography.RandomNumberGenerator.GetBytes(3));
+                    message = ServerError + " (reference " + reference + ")";
+                    _log.LogError(e, "API error (500) reference {Reference} on {Method} {Path}", reference, ctx.Request.Method, ctx.Request.Path);
+                }
+                else if (status >= 500) _log.LogError(e, "API error ({Status})", status);
                 await WriteAsync(ctx, status, message, payload);
             }
         }
@@ -90,8 +97,11 @@ namespace Infrastructure.Middleware
             _ when IsDbUnreachable(e) => (503, DbUnreachable, null),
             JsonException j => (400, j.Message, null),
             BadHttpRequestException b => (b.StatusCode, b.Message, null),
-            _ => (500, "Server error: " + e.Message, null)
+            _ => (500, ServerError, null)
         };
+
+        /// <summary>The text of an unexpected error (500); the details go to the log only.</summary>
+        public const string ServerError = "Server error - please try again, and tell the PO Governance administrator if it happens again";
 
         public static async Task WriteAsync(HttpContext ctx, int status, string message, object? payload = null)
         {

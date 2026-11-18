@@ -152,6 +152,8 @@ namespace Application.Services.V1.Sap
                     SapApiException s => (s.Status, s.ErrorCode, s.Message),
                     _ => Map(ex)
                 };
+                // the answer to SAP never carries internal details; the decision log row (admin page) and the server log do
+                var logMessage = ex is SapApiException || code != SapErrorCodes.InternalError ? message : message + " - " + ex.GetType().Name + ": " + ex.Message;
                 if (status >= 500) _log.LogWarning(ex is SapApiException ? null : ex, "SAP decision {Status} {Code}: {Message} (request {RequestId}, trace {TraceId})",
                                                     status, code, message, req?.RequestId, caller.TraceId);
                 else _log.LogInformation("SAP decision {Status} {Code}: {Message} (request {RequestId}, trace {TraceId})", status, code, message, req?.RequestId, caller.TraceId);
@@ -160,9 +162,9 @@ namespace Application.Services.V1.Sap
                     Status = status, ErrorCode = code, Json = SapJson.Error(code, message, caller.TraceId), DurationMs = (int)sw.ElapsedMilliseconds
                 };
                 if (code == SapErrorCodes.DecisionTimeout)
-                    _ = LogErrorAsync(req, body, hash, caller, status, code, message, result.DurationMs, null);   // answer now, log behind
+                    _ = LogErrorAsync(req, body, hash, caller, status, code, logMessage, result.DurationMs, null);   // answer now, log behind
                 else if (code != SapErrorCodes.StorageNotSupported && code != SapErrorCodes.DatabaseUnavailable && !ct.IsCancellationRequested)
-                    result.LogId = await LogErrorAsync(req, body, hash, caller, status, code, message, result.DurationMs, null);
+                    result.LogId = await LogErrorAsync(req, body, hash, caller, status, code, logMessage, result.DurationMs, null);
                 return result;
             }
         }
@@ -172,7 +174,7 @@ namespace Application.Services.V1.Sap
         private static (int, string, string) Map(Exception ex) =>
             IsDbError(ex)
                 ? (503, SapErrorCodes.DatabaseUnavailable, "The database is not reachable right now - continue as NOT_CHECKED")
-                : (503, SapErrorCodes.InternalError, "Server error: " + ex.Message);
+                : (503, SapErrorCodes.InternalError, "Internal error in the PO Governance tool - continue as NOT_CHECKED and quote the trace_id to the PO Governance team");
 
         private static bool IsDbError(Exception ex)
         {

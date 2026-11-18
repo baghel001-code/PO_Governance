@@ -93,15 +93,6 @@ namespace Application.DTOs.Platform
         [JsonPropertyName("today")] public string Today { get; set; } = "";
     }
 
-    public sealed class SaveRequestResponse
-    {
-        [JsonPropertyName("ok")] public bool Ok { get; set; } = true;
-        [JsonPropertyName("id")] public long Id { get; set; }
-        [JsonPropertyName("reqId")] public string ReqId { get; set; } = "";
-        [JsonPropertyName("seq")] public int Seq { get; set; }
-        [JsonPropertyName("approval")] public JsonNode? Approval { get; set; }
-    }
-
     /// <summary>409 payload of a stale save (server.py api_POST_requests).</summary>
     public sealed class RequestConflict
     {

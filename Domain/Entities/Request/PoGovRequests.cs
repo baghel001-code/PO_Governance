@@ -69,16 +69,6 @@ namespace Domain.Entities.Request
         public string? Date { get; set; }
     }
 
-    /// <summary>RequestSave: {request:{…}, seenSeq, force} (409 when someone else saved on the same colour since seenSeq).</summary>
-    public sealed class RequestSaveReq : BaseRequest
-    {
-        public JsonObject? Request { get; set; }
-        public JsonNode? SeenSeq { get; set; }
-        public JsonNode? Force { get; set; }
-
-        public JsonObject ToBody() => Body.Of(("request", Request), ("seenSeq", SeenSeq), ("force", Force));
-    }
-
     /// <summary>ParamsSave: the whole planner-parameters document.</summary>
     public sealed class ParamsSaveReq : BaseRequest
     {

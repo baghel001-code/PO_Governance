@@ -12,3 +12,9 @@ window.pogov = {
   },
   scrollToTop: function () { window.scrollTo({ top: 0, behavior: 'smooth' }); }
 };
+
+// Buttons with data-pogov-print print the page (the Content-Security-Policy allows no inline onclick handlers).
+document.addEventListener('click', function (e) {
+  var b = e.target && e.target.closest ? e.target.closest('[data-pogov-print]') : null;
+  if (b) { e.preventDefault(); window.print(); }
+});

@@ -30,7 +30,6 @@ namespace Domain.Entities.Common
         public string? PO_PARAMS_GET { get; set; }
         public string? PO_PARAMS_SAVE { get; set; }
         public string? PO_REQUESTS_GET { get; set; }
-        public string? PO_REQUEST_SAVE { get; set; }
         public string? PO_REQUESTS_CLEAR { get; set; }
         public string? PO_APPROVALS_GET { get; set; }
         public string? PO_APPROVAL_DECIDE { get; set; }

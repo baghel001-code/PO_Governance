@@ -67,8 +67,6 @@ namespace Domain.Entities.Common
         public static string PO_PARAMS_SAVE { get; set; } = nameof(PO_PARAMS_SAVE);
         /// <summary>A day's live Tool 1 requests — api/v1/RequestsGet (POST).</summary>
         public static string PO_REQUESTS_GET { get; set; } = nameof(PO_REQUESTS_GET);
-        /// <summary>Save a Tool 1 request (409 on conflict) — api/v1/RequestSave (POST).</summary>
-        public static string PO_REQUEST_SAVE { get; set; } = nameof(PO_REQUEST_SAVE);
         /// <summary>Clear a day's live ledger — api/v1/RequestsClear (POST).</summary>
         public static string PO_REQUESTS_CLEAR { get; set; } = nameof(PO_REQUESTS_CLEAR);
         /// <summary>Watch List approvals: pending + decided — api/v1/ApprovalsGet (POST).</summary>

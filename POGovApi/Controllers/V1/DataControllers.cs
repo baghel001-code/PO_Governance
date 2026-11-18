@@ -29,11 +29,18 @@ namespace POGovApi.Controllers.V1
             _cfg = cfg.Value;
         }
 
-        /// <summary>The stored {"rows":[…], "meta":{…}} payload of the current (or Version) version, as Data.</summary>
+        /// <summary>
+        /// The stored {"rows":[…], "meta":{…}} payload of the current (or Version) version, as Data. Planners and admins only:
+        /// the files hold the whole company's stock, open POs, sales and plan (buyers and category heads get only their
+        /// own results, computed on the server).
+        /// </summary>
         [HttpPost]
         [ProducesResponseType(typeof(ApiDataResponse<JsonObject>), 200)]
-        public async Task<IActionResult> DataGet([FromBody] DataKeyReq req, CancellationToken ct) =>
-            new GzipJsonEnvelopeResult(await _data.GetPayloadGzipAsync(req.Key ?? "", req.Version, ct));
+        public async Task<IActionResult> DataGet([FromBody] DataKeyReq req, CancellationToken ct)
+        {
+            RequireRole("Planner or admin only", Roles.Planner, Roles.Admin);
+            return new GzipJsonEnvelopeResult(await _data.GetPayloadGzipAsync(req.Key ?? "", req.Version, ct));
+        }
 
         /// <summary>
         /// Stores a new version (v1.1.4 wire format) as multipart/form-data: the file part = {"rows":[…], "meta"?} JSON,
@@ -188,26 +195,6 @@ namespace POGovApi.Controllers.V1
         [HttpPost]
         public async Task<ActionResult<ApiDataResponse<RequestsDayResponse>>> RequestsGet([FromBody(EmptyBodyBehavior = EmptyBodyBehavior.Allow)] RequestsDayReq? req, CancellationToken ct) =>
             Success(await _requests.GetDayForUserAsync(req?.Date, Me, ct));
-
-        /// <summary>
-        /// {Request:{…}, SeenSeq, Force}. 409 (Data {conflict, byOthers, seq}) when someone else saved
-        /// a request on the same colour since SeenSeq.
-        /// </summary>
-        [HttpPost]
-        public async Task<ActionResult<ApiDataResponse<SaveRequestResponse>>> RequestSave([FromBody(EmptyBodyBehavior = EmptyBodyBehavior.Allow)] RequestSaveReq? req, CancellationToken ct)
-        {
-            if (!Me.Has(Roles.Buyer, Roles.CatHead, Roles.Planner, Roles.Admin)) throw new ForbiddenException("Not allowed");
-            var body = req?.ToBody() ?? new JsonObject();
-            if (body["request"] is not JsonObject r) throw new AppValidationException("Missing request");
-            var seen = body.GetTruthy("seenSeq") ? (int)PlatformCore.PyInt(body["seenSeq"]) : 0;
-            r = r.DeepClone().AsObject();
-            var saved = await _requests.SaveAsync(r, seen, body.GetTruthy("force"), Me, ct);
-            return Success(new SaveRequestResponse
-            {
-                Id = saved.GetLong("id"), ReqId = saved.GetStr("reqId") ?? "", Seq = (int)saved.GetLong("seq"),
-                Approval = saved.Get("approval")?.DeepClone()
-            });
-        }
 
         /// <summary>Clears the day's live ledger (requests stay in history, marked cleared).</summary>
         [HttpPost]

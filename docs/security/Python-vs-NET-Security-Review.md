@@ -50,21 +50,21 @@ an audit log.
 | **Quality** | Few end-to-end scripts | Compiled, typed code; **1,814 automated tests** (incl. Python parity, SQL Server, contract tests against the SAP spec) | — |
 | **Operations** | Batch / PowerShell scripts | API master (`API_MASTER`, `API_BASE_URL`) per environment, structured logs (Serilog), version and environment shown in the portal | — |
 
-### Remaining gaps in the .NET platform (recommended fixes)
+### Gaps found in the .NET platform
 
-To be fair, the review also found points to fix in the .NET code; none is reachable from a browser today, because the
-API is only called by the portal:
+The review also found points in the .NET code. **N1–N4 are fixed** (18 Nov 2026, tests in
+`tests/POGovernance.Tests/Security/SecurityFixesTests.cs`):
 
-| # | Gap | Where | Recommendation |
-|---|---|---|---|
-| N1 | `api/v1/RequestSave` (kept for parity with Python) still stores a request object as sent, like P1. The portal does not use it. | `POGovApi/Controllers/V1/DataControllers.cs` 196–204 | Remove the endpoint, or restrict it to admins. |
-| N2 | `api/v1/DataGet` returns any data file to any signed-in session, like P5. | `DataControllers.cs` 33–35 | Restrict to planners and admins. |
-| N3 | Error answers contain the exception text (`"Server error: …"`). | `Infrastructure/Middleware/ExceptionMiddleware.cs` 93; `SapInterfaceMiddleware.cs` 121 | Return a generic message with the trace ID; keep the detail in the log only. |
-| N4 | No Content-Security-Policy header. | `Admin/Program.cs` 60–66 | Add a CSP that allows only the portal's own scripts and styles. |
-| N5 | HTTPS depends on configuration (`PortalSettings:UseHttps`). | `Admin/Program.cs` 71–76 | Serve the portal over HTTPS with the company certificate in staging and production. |
-| N6 | Verdict / MRA pages open without sign-in by design (90-day unguessable link). | `/verdict/<token>`, `/mra-verdict/<token>` | Keep links inside the company; shorten `VerdictLink:ValidDays` if needed. |
+| # | Gap | Status |
+|---|---|---|
+| N1 | `api/v1/RequestSave` (kept for parity with Python) stored a request object as sent, like P1. | **Fixed:** endpoint removed (controller action, `PO_REQUEST_SAVE` in the API names and `Admin/appsettings.json`; `04_api_master.sql` deletes its row). Requests are saved only through the server-side check. |
+| N2 | `api/v1/DataGet` returned any data file to any signed-in session, like P5. | **Fixed:** planners and admins only ("Planner or admin only" for everyone else). |
+| N3 | Error answers contained the exception text (`"Server error: …"`). | **Fixed:** portal API answers *"Server error - please try again, and tell the PO Governance administrator if it happens again (reference E-xxxxxx)"*; the log line carries the same reference and the full error. SAP answers `INTERNAL_ERROR` without details (the `trace_id` leads to the log); the admin's decision log row keeps the detail. |
+| N4 | No Content-Security-Policy header. | **Fixed:** `default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self' ws: wss:; media-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'self'` (`Admin/Auth/PortalSecurity.cs`). The last inline handler (verdict page Print) moved to `js/pogov.js`. Checked in the browser: sign-in, CAPTCHA, portal pages, verdict page — no violations. |
+| N5 | HTTPS depends on configuration (`PortalSettings:UseHttps`). | **Open (server setting):** serve the portal over HTTPS with the company certificate in staging and production, then set `UseHttps = true`. |
+| N6 | Verdict / MRA pages open without sign-in by design (90-day unguessable link). | By design: keep links inside the company; shorten `VerdictLink:ValidDays` if needed. |
 
 **Conclusion.** The Python tool's main risks (decisions trusted from the browser, shared default password, plain HTTP,
 all data readable by every user) come from its design and cannot be fixed by configuration. The .NET platform moves the
-rules and the data to the server, uses the company sign-in, and runs on a production web server; with N1–N5 fixed it
-closes every High and Medium issue above.
+rules and the data to the server, uses the company sign-in, and runs on a production web server. With N1–N4 fixed in
+the code and HTTPS switched on (N5), it closes every High and Medium issue above.

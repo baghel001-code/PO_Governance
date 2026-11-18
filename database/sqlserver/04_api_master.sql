@@ -260,7 +260,6 @@ INSERT INTO @seed (Api_Name, Task_Name, Action_Name, Api_Http_Method, Api_Conten
         (N'ParamsGet', N'PO_PARAMS_GET', N'ParamsGet', N'POST', N'application/json', 60, N'Planner parameters'),
         (N'ParamsSave', N'PO_PARAMS_SAVE', N'ParamsSave', N'POST', N'application/json', 60, N'Save planner parameters'),
         (N'RequestsGet', N'PO_REQUESTS_GET', N'RequestsGet', N'POST', N'application/json', 120, N'A day''s live Tool 1 requests'),
-        (N'RequestSave', N'PO_REQUEST_SAVE', N'RequestSave', N'POST', N'application/json', 120, N'Save a Tool 1 request (409 on conflict)'),
         (N'RequestsClear', N'PO_REQUESTS_CLEAR', N'RequestsClear', N'POST', N'application/json', 120, N'Clear a day''s live ledger'),
         (N'ApprovalsGet', N'PO_APPROVALS_GET', N'ApprovalsGet', N'POST', N'application/json', 120, N'Watch List approvals: pending + decided'),
         (N'ApprovalDecide', N'PO_APPROVAL_DECIDE', N'ApprovalDecide', N'POST', N'application/json', 120, N'Approve / reject a request'),
@@ -378,6 +377,9 @@ FROM @seed s
 WHERE NOT EXISTS (SELECT 1 FROM dbo.API_MASTER m WHERE m.Task_Name = s.Task_Name);
 -- task names of removed portal actions (MRA status v5, replaced by the v1.1.7 SAP MRAs)
 DELETE FROM dbo.API_MASTER WHERE Task_Name IN (N'PO_MRA_SUMMARY', N'PO_MRA_LIST', N'PO_MRA_HISTORY');
+-- RequestSave stored a Tool 1 request exactly as the caller sent it (decision, quantities) - removed for security;
+-- requests are saved only through the server-side check (Tool1Validate / Tool1Confirm)
+DELETE FROM dbo.API_MASTER WHERE Task_Name = N'PO_REQUEST_SAVE';
 GO
 
 /* Server-only rows: the HRMS employee API (sign-in and user registration), called by POGovApi only, at the QPS paths.

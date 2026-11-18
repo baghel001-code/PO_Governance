@@ -118,7 +118,8 @@ namespace Infrastructure.Middleware
             SapApiException s => (s.Status, s.ErrorCode, s.Message),
             BadHttpRequestException b => (b.StatusCode == 413 ? 413 : 400, b.StatusCode == 413 ? SapErrorCodes.BatchTooLarge : SapErrorCodes.InvalidJson, b.Message),
             _ when ExceptionMiddleware.IsDbUnreachable(ex) => (503, SapErrorCodes.DatabaseUnavailable, "The database is not reachable right now - retry later / continue as NOT_CHECKED"),
-            _ => (503, SapErrorCodes.InternalError, "Server error: " + ex.Message)
+            // never internal details (exception text, SQL) in the answer: the server log has them under the trace ID
+            _ => (503, SapErrorCodes.InternalError, "Internal error in the PO Governance tool - continue as NOT_CHECKED and quote the trace_id to the PO Governance team")
         };
 
         /// <summary>

@@ -64,6 +64,10 @@ app.Use(async (ctx, next) =>
     h["X-Content-Type-Options"] = "nosniff";
     h["X-Frame-Options"] = "SAMEORIGIN";
     h["Referrer-Policy"] = "same-origin";
+    // Content-Security-Policy: scripts, fonts, media and connections only from the portal itself (no inline scripts or
+    // handlers, nothing from other sites). Inline styles stay allowed (MudBlazor and the pages' style attributes); data:
+    // images for the CAPTCHA; ws/wss for Blazor's SignalR connection.
+    h["Content-Security-Policy"] = Admin.Auth.PortalSecurity.ContentSecurityPolicy;
     await next();
 });
 
@@ -91,3 +95,4 @@ Admin.Services.Platform.MraPdfEndpoints.MapMraPdfEndpoints(app);   // GET /mra-v
 app.MapRazorComponents<App>().AddInteractiveServerRenderMode();
 app.Lifetime.ApplicationStopped.Register(Log.CloseAndFlush);
 app.Run();
+

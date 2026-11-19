@@ -349,20 +349,21 @@ HOLD and BLOCK go to `BMHEAD` instead when `bm_head_required = true` (business r
 |---|---|---|---|
 | ALLOW | `COVER_WITHIN_NORM` | COVER-00 | Stock + pending + this PO within the cover norm |
 | HOLD | `NO_PLAN_DATA` | PLAN-00 | No Plan Available: no F4 plan for the bucket in the requirement window — ask the planning team to add it (v1.1.6; was ALLOW) |
-| ALLOW | `PEER_Q1` / `PEER_Q2` | PEER-Q1 / PEER-Q2 | Multi Concept: ranks in the top half of its peer group |
-| ALLOW | `PEER_Q3` | PEER-Q3-OK | Q3 but at / near the peer average (border zone) |
-| ALLOW | `BOBS_SIBLINGS_OK` | BOBS-01 | New colour of a selling style; sibling colours sell well |
+| ALLOW | `PEER_Q1` | PEER-Q1 | Multi Concept: ranks Q1 (top 25 %) among options of the same Brand, MC, MRP and Flag |
+| ALLOW | `BOBS_SIBLINGS_OK` | BOBS-01 | New colour of an existing option; every other colour (4+ weeks on floor) ranks Q1 |
 | ALLOW | `LOW_HISTORY` | WOF-00 | Too little selling history to judge |
 | ALLOW | `NO_PEER_POOL` | PEER-00 | No comparable styles |
 | ALLOW | `NEW_ARTICLE` | NEW-00 | New article (not in the tool's history) |
 | REDUCE | `COVER_ABOVE_NORM` | COVER-01 | Cover above the norm — reduce to `max_qty` |
 | WATCH | `MIX_BELOW_MIN` | MIX-01 | Colour share below the minimum mix (broken / cut size likely) |
-| WATCH | `PEER_Q3` | PEER-Q3-GAP | Q3, beyond the border zone |
-| WATCH | `PEER_Q4` | PEER-Q4-WATCH | Q4 but at / near the peer average |
-| WATCH | `BOBS_SIBLING_LOW` | BOBS-02 | A sibling colour sells poorly |
 | HOLD | `COVER_NO_HEADROOM` | COVER-02 | Stock + pending already above the norm — no headroom (max 0) |
-| BLOCK | `BLOCK` | BLOCK-Q4 | Q4, well below the peer average: confirmed slow seller |
+| BLOCK | `BLOCK` | BLOCK-PEER | Multi Concept: ranks Q2, Q3 or Q4 — only Q1 is allowed |
+| BLOCK | `BLOCK` | BLOCK-BOBS | New colour of an existing option: another colour ranks below Q1 |
 | BLOCK | `BLOCK` | BLOCK-ABS | Absolute block: sell-thru below 1 %/day after 4+ weeks on floor |
+
+**Multi concept rule, Step 1 (19 Nov 2026):** Multi Concept items are ALLOW (Q1) or BLOCK (Q2–Q4) — never WATCH. The
+codes `PEER_Q2`, `PEER_Q3`, `PEER_Q4`, `BOBS_SIBLING_LOW` and rule ids PEER-Q3-OK, PEER-Q3-GAP, PEER-Q4-WATCH, BOBS-02,
+BLOCK-Q4 are no longer sent (inactive in `SAP_REASON_CODES`).
 
 **BLOCK (code `B`) is an addition to spec v1.4** (since 17 Nov 2026): the tool's Block decisions used to be sent as
 `HOLD` with `reason_code = BLOCK`. SAP must accept `BLOCK` / `B` in the verdict domain and route it like HOLD (category
@@ -405,14 +406,14 @@ head). If the SAP side is not ready, the tool's setting `SapInterface:BlockVerdi
                "rule_id": "MIX-01", "metrics": { "stock_qty": 874, "open_po_qty": 0 } } ] }
 ```
 
-**Block** (confirmed slow seller):
+**Block** (Multi Concept, ranks below Q1):
 
 ```json
 { "...": "...", "overall_verdict": "BLOCK", "verdict_code": "B", "route_to": "COMMERCIAL",
-  "summary_text": "Item 10: block - Ranks Q4, sell-thru 64.4% below the peer average: confirmed slow seller",
+  "summary_text": "Item 10: block - Ranks Q4 in its peer group (sell-thru 1.0%/day): only Q1 (top 25%) is allowed",
   "items": [ { "po_item": 10, "verdict": "BLOCK", "verdict_code": "B", "max_qty": null,
-               "reason_code": "BLOCK", "reason_text": "Ranks Q4, sell-thru 64.4% below the peer average: confirmed slow seller",
-               "rule_id": "BLOCK-Q4", "metrics": { "sell_through_pct": 0.97 } } ] }
+               "reason_code": "BLOCK", "reason_text": "Ranks Q4 in its peer group (sell-thru 1.0%/day): only Q1 (top 25%) is allowed",
+               "rule_id": "BLOCK-PEER", "metrics": { "sell_through_pct": 0.97 } } ] }
 ```
 
 **Several items:** two size variants of one generic article and colour (decided together, `max_qty` split 9,557 + 6,371
@@ -430,7 +431,7 @@ head). If the SAP side is not ready, the tool's setting `SapInterface:BlockVerdi
       "reason_text": "Stock + pending + this PO cover 265 days, above the 79-day norm; max 15,928 pcs for 2 items together (50,000 pcs ordered)",
       "rule_id": "COVER-01", "metrics": { "plan_qty": 6303, "stock_qty": 2707, "open_po_qty": 2703, "headroom_qty": 15928, "cover_days": 265 } },
     { "po_item": 30, "verdict": "ALLOW", "verdict_code": "A", "max_qty": null, "reason_code": "PEER_Q1",
-      "reason_text": "Ranks Q1 in its peer group (sell-thru 5.2%/day): healthy seller", "rule_id": "PEER-Q1",
+      "reason_text": "Ranks Q1 (top 25%) in its peer group (sell-thru 5.2%/day): top seller", "rule_id": "PEER-Q1",
       "metrics": { "sell_through_pct": 5.2 } } ] }
 ```
 

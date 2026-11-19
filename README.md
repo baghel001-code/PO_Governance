@@ -17,6 +17,25 @@ Generic Article description / vendor, "How was this number worked out?" (steps +
 "Late PO counts until day" (1–28) in the Parameters panel, and Attribute Analysis / AI Insights removed from the Planner tabs.
 Multi concept is unchanged.
 
+**Multi concept rule, Step 1 (19 Nov 2026)** — changed on purpose after v1.1.6, for articles not in the Universe Master
+(`DecisionEngine/Tool1/Tool1EngineA.cs`, also used by PO Assessment and SAP `/decisions`; single concept unchanged):
+
+* Peer group: same **Brand**, MC, MRP and Flag (Brand added; a peer's brand is its BSR "Brand Type", else the Article
+  Master / Universe Master / F2 brand), WOF ≥ gate, current seasons with fallback.
+* Ranked on AVG PERDAY SELL THRU%: **Q1 (top 25 %) → Allow, Q2 / Q3 / Q4 → Block**. No Watch List and no border zone for
+  multi concept (the Border Zone % parameter is kept but not used).
+* BOBs (new colour of an existing option): every other colour with WOF ≥ gate must rank Q1, else Block; no other colours,
+  or none with 4 weeks on floor → Allow.
+* Unchanged: WOF below the gate → Allow, no peer pool → Allow, absolute block (< 1 %/day after 4+ weeks, even for Q1),
+  new articles → Allow.
+* PO Assessment: Allow → Retain, Block → Cancel. SAP: `PEER_Q1` / `BOBS_SIBLINGS_OK` ALLOW, BLOCK with rule ids
+  `BLOCK-PEER` / `BLOCK-BOBS` / `BLOCK-ABS`; the old `PEER_Q2/Q3/Q4` and `BOBS_SIBLING_LOW` codes are no longer sent
+  (`docs/sap/README.md`).
+* **Entry / Mid / Fashion Mapping** — new Data Setup upload (dataset `emf`, Multi Concept MRP inputs): Brand × MC × Flag ×
+  MRP → Entry, Mid or Fashion. Each upload replaces the mapping; rows with any other tag (or a missing key field, or one
+  key tagged two ways) are rejected and listed under the slot (`Application/Services/V1/Ingest/EmfImport.cs`,
+  `DecisionEngine/Common/EmfMapping.cs`). Loaded and checked now; used by Step 2 (minimum sell-thru per type).
+
 ## Solution layout
 
 | Project | What it holds |
@@ -234,13 +253,17 @@ Most tests are **parity tests**: a Node script in `tests/parity/<area>/` runs th
 from `legacy/python-app/app/index.html` (Tool 1, Tool 2 and Recommendation: from the v1.1.6 page `legacy/v1.1.6/app/index.html`)
 on a fixture dataset and writes the expected results; the xUnit tests check that the C# port
 (the `DecisionEngine` layer) returns the same decisions, quantities, reasons, texts and Excel output. To regenerate the expected results after a deliberate rule change, run the
-harness again (each harness has the command in its header comment). `tests/POGovernance.Tests/Architecture` checks that
+harness again (each harness has the command in its header comment). The multi concept rule was changed on purpose
+after v1.1.6: `tests/parity/rules/multi-concept.js` is its JavaScript reference (a new `runEngineA` plus exact text changes
+in the result painters), loaded on top of the legacy page by the Tool 1 and Tool 2 harnesses. `tests/POGovernance.Tests/Architecture` checks that
 `DecisionEngine` stays dependency-free. `tests/POGovernance.Tests/Sap` covers the SAP interface: the verdict mapping (every engine
 outcome, Block → HOLD / BLOCK), input normalisation, idempotency / 409 / timeout → 503, events (parking, duplicates, LATE), the
 IP allow-list, and contract tests that compare the classes and real answers with `po-governance-sap-api.yaml` (YamlDotNet, test
 project only); `tests/POGovernance.Tests/SqlServer/SapSqlServerTests` runs the PRO_SAP_* procedures on SQL Server.
 `tests/POGovernance.Tests/Mapping/MapperTests` covers the object mapper (conventions, conversions, nested maps, collections,
 records, `ForMember` / `ReverseMap` / `AfterMap` / `ConvertUsing`, errors, validation, DI registration).
+`tests/POGovernance.Tests/Tool1/MultiConceptStep1Tests` covers the multi concept rule beyond the shared fixture (several brands,
+absolute block on a Q1, BOBs); `Ingest/EmfUploadTests` and `Portal/EmfRejectedBoxTests` the Entry / Mid / Fashion upload.
 
 ## Documents
 

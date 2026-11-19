@@ -148,19 +148,20 @@ up to Max Permissible).
 | Hold, quantity above Max Permissible, Max Permissible > 0 | **REDUCE** + `max_qty` | COVER_ABOVE_NORM | COVER-01 |
 | Hold — Don't Raise, Max Permissible 0 | HOLD | COVER_NO_HEADROOM | COVER-02 |
 | Watch List — colour mix below the minimum, or no F3 sale for the MC (v1.1.6 D3) | WATCH (route CATHEAD) | MIX_BELOW_MIN | MIX-01 |
-| Allow — ranks Q1 / Q2 (Multi Concept) | ALLOW | PEER_Q1 / PEER_Q2 | PEER-Q1 / PEER-Q2 |
-| Allow — Q3 at / near the peer average (border zone) | ALLOW | PEER_Q3 | PEER-Q3-OK |
-| Watch List — Q3 beyond the border zone | WATCH | PEER_Q3 | PEER-Q3-GAP |
-| Watch List — Q4 softened (at / near average) | WATCH | PEER_Q4 | PEER-Q4-WATCH |
-| **Block** — Q4 beyond the border zone | **BLOCK** (or HOLD, see below) | BLOCK | BLOCK-Q4 |
-| **Block** — absolute block (sell-thru < 1 %/day after ≥ 4 weeks) | **BLOCK** (or HOLD) | BLOCK | BLOCK-ABS |
-| Allow — BOBs: all sibling colours Q1/Q2 | ALLOW | BOBS_SIBLINGS_OK | BOBS-01 |
-| Watch List — BOBs: a sibling colour Q3/Q4 | WATCH | BOBS_SIBLING_LOW | BOBS-02 |
+| Allow — ranks Q1 (top 25 %) in its peer group (Multi Concept: same Brand, MC, MRP, Flag) | ALLOW | PEER_Q1 | PEER-Q1 |
+| **Block** — ranks Q2, Q3 or Q4 (Multi Concept rule Step 1, 19 Nov 2026) | **BLOCK** (or HOLD, see below) | BLOCK | BLOCK-PEER |
+| **Block** — absolute block (sell-thru < 1 %/day after ≥ 4 weeks, even for Q1) | **BLOCK** (or HOLD) | BLOCK | BLOCK-ABS |
+| Allow — BOBs: every other colour (WOF ≥ 4 w) ranks Q1 | ALLOW | BOBS_SIBLINGS_OK | BOBS-01 |
+| **Block** — BOBs: another colour ranks Q2, Q3 or Q4 | **BLOCK** (or HOLD) | BLOCK | BLOCK-BOBS |
 | Allow — too little selling history (WOF gate) | ALLOW | LOW_HISTORY | WOF-00 |
 | Allow — no peer pool | ALLOW | NO_PEER_POOL | PEER-00 |
 | Auto Allow — new article (not in Universe Master or BSR) | ALLOW | NEW_ARTICLE | NEW-00 |
 | Cannot Validate / article unknown to the tool / no colour / no delivery date | **422** `CANNOT_DECIDE` (SAP: NOT_CHECKED) — or WATCH `CANNOT_VALIDATE` (CV-00) with `UnknownItemPolicy = WATCH` | | |
 
+* **Multi concept rule, Step 1 (19 Nov 2026)**: Multi Concept no longer produces WATCH — Q1 is ALLOW, Q2 / Q3 / Q4 BLOCK, no
+  border zone; the peer group also matches the Brand. The reason codes `PEER_Q2`, `PEER_Q3`, `PEER_Q4` and `BOBS_SIBLING_LOW`
+  (rule ids PEER-Q2, PEER-Q3-OK, PEER-Q3-GAP, PEER-Q4-WATCH, BOBS-02, BLOCK-Q4) are no longer sent; `05_sap_interface.sql`
+  sets them inactive in `SAP_REASON_CODES` (kept for old decision logs). WATCH remains for Single Concept (MIX_BELOW_MIN).
 * **Block → BLOCK** (since 17 Nov 2026): the tool's Block is sent as verdict **BLOCK** / code `B` with reason_code
   BLOCK — most severe, routed like HOLD (COMMERCIAL, or BMHEAD with `bm_head_required`). An addition to spec v1.4 (which had
   no BLOCK value; before, Block was sent as HOLD + reason BLOCK). For an SAP side that does not accept BLOCK set

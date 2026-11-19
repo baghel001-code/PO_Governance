@@ -180,7 +180,7 @@ the right) and the **reason**:
 | Engine chip | When | What it looks at |
 |---|---|---|
 | **Single Concept MRP · Colour STR** | GM is in the Universe Master | Stock + open POs + your PO against the sales plan → days of cover ("Colour STR") |
-| **Multi Concept MRP · Peer BSR** | GM is in the Best Seller Report | How fast this style sells compared with similar styles (quartile Q1–Q4) |
+| **Multi Concept MRP · Peer BSR** | GM is in the Best Seller Report | How fast this option sells compared with similar options — same Brand, MC, MRP and Flag (quartile Q1–Q4); only Q1 is allowed |
 | **New Product** | GM is in neither | New article — allowed |
 
 ![Watch List result card](img/04-result-watch-list.png)
@@ -190,15 +190,23 @@ The **decisions**:
 | Decision | Meaning | What you do |
 |---|---|---|
 | **Auto Allow** / **Allow** | Within the norms | Raise the PO (at the confirmed quantity for Single Concept) |
-| **Watch List** | Borderline — the category head must approve (e.g. colour share below 2 %, or a Q3/Q4 seller near the average) | Wait; the card shows "⏳ Awaiting <name>". The decision appears in **Requests** |
+| **Watch List** | Borderline — the category head must approve (Single Concept: colour share below 2 %, or no sale in F3). Not used for Multi Concept | Wait; the card shows "⏳ Awaiting <name>". The decision appears in **Requests** |
 | **Hold — Don't Raise** | Stock + open POs already cover more than the norm; the reason shows the Max Permissible (often 0) | Do not raise, or raise at most the quantity shown |
-| **Block** | Confirmed slow seller (bottom quartile far below average, or sell-through below 1 %/day after 4+ weeks) | Do not raise |
+| **Block** | Multi Concept: ranks Q2, Q3 or Q4 among its peers (only the top 25 % — Q1 — is allowed), a new colour whose other colours do not all rank Q1, or sell-through below 1 %/day after 4+ weeks | Do not raise |
 | **Cannot Validate** | The article could not be identified (not in the masters) or the month is invalid | Check the GM and month; tell the planner if the article is missing |
 
 Single Concept cards show the key figures — **Op Stock, Mix %, Daily Rate, Colour STR, Max Permissible** — and
 **▼ Show Step-by-Step Computation** explains every step (stock, colour mix, month-by-month stock roll, STR, Max
-Permissible). Multi Concept cards show the peer pool, the sell-through vs. the peer average, the quartile and the border
-zone check.
+Permissible). Multi Concept cards show the peer pool, the sell-through vs. the peer average and the quartile
+(Q1 → Allow, Q2–Q4 → Block).
+
+**Multi Concept rule (since 19 Nov 2026, Step 1)** — for articles not in the Universe Master:
+
+- The option is ranked against similar options (same **Brand**, MC, MRP and Flag) on its per-day sell-through.
+- **Q1 (top 25 %) → Allow. Q2, Q3 and Q4 → Block.** There is no Watch List for Multi Concept any more.
+- **New colour of an existing option (BOBs):** every other colour of the option with 4+ weeks on floor must rank Q1,
+  otherwise Block. No other colours, or none with 4 weeks on floor → Allow.
+- Unchanged: less than 4 weeks on floor → Allow; new articles → Allow; below 1 %/day after 4+ weeks → Block.
 
 ### 3.5 View Recommendation
 
@@ -290,6 +298,7 @@ every version.
 | F4 — Forecast | ✓ | Monthly plan by Brand × MC × MRP × Flag (`MM.YYYY` columns) |
 | Universe Master | ✓ | GMs of the Single Concept universe |
 | BSR — All Seasons | ✓ | Weeks on floor and per-day sell-through % per GM and colour (several files allowed) |
+| Entry / Mid / Fashion Mapping | optional | Brand × MC × Flag × MRP → Entry, Mid or Fashion (for the Multi Concept minimum sell-through, next step) |
 | Article Master | optional | Article attributes (season, style, fit, material, design, vendor) |
 | Attr Relevance Master | optional | Which attribute matters per Brand × MC × MRP × Flag |
 | Colour Master | optional | Colour codes and descriptions |
@@ -316,6 +325,14 @@ can run.
 
 **Clear** on a slot removes the current file for everyone (History keeps every version).
 
+**Entry / Mid / Fashion Mapping** (Multi Concept MRP inputs): columns At_Brand, MC Code, Flag, MRP and EMF (Division and
+at_Desc are kept when present; blank rows above the header are fine). Each upload **replaces** the whole previous
+mapping; the slot shows the rows loaded, the Upload ID, who and when. The tag must be **Entry, Mid or Fashion** —
+"1.ENTRY", "2.MID", "3.FASHION" are accepted. A row with any other tag, a blank tag, a missing Brand / MC / Flag / MRP,
+or the same Brand × MC × Flag × MRP tagged two ways is **rejected** and listed under the slot (Excel row, key, tag,
+reason); correct it in the file and upload again. If every row is rejected nothing is loaded and the previous mapping
+stays.
+
 ### 5.2 Parameters and seasons
 
 In the Data Setup sidebar:
@@ -332,7 +349,7 @@ In the Data Setup sidebar:
 | WOF Gate (weeks) | 4 | minimum weeks on floor before a style is judged |
 | Peer Min (styles) | 5 | minimum comparable styles for a peer ranking |
 | STR Buffer % (Single Concept) | 5 | tolerance on T (75 d + 5 % = 79 d) |
-| Border Zone % (Multi Concept) | 10 | tolerance around the peer average |
+| Border Zone % (Multi Concept) | 10 | not used since the Multi Concept rule Step 1 (Q1 Allow, Q2–Q4 Block) |
 | Mix Window (days) | 45 | days of F3 used for the colour mix |
 | Late PO counts until day (Single Concept MRP) | 5 | whole days 1–28: from the 1st to this day of the month, a pending PO of last month still counts (PO Assessment: as stock at the window start) |
 
@@ -548,10 +565,10 @@ The link works for 90 days. **Anyone with the link can open the page — do not 
 | Decision | Colour | Meaning |
 |---|---|---|
 | Auto Allow | green | Single Concept within the cover norm, or a new article |
-| Allow | green | Multi Concept: sells well vs. peers (Q1 / Q2, or Q3 near the average), or too little history to judge |
-| Watch List | brown | Category head must approve: colour share below the minimum, or a weak seller near the border |
+| Allow | green | Multi Concept: ranks Q1 (top 25 %) among its peers, or too little history to judge |
+| Watch List | brown | Category head must approve (Single Concept only): colour share below the minimum, or no sale in F3 |
 | Hold — Don't Raise | red | Cover already above the norm — no or limited headroom (Max Permissible) |
-| Block | red | Confirmed slow seller — do not raise |
+| Block | red | Multi Concept ranks Q2–Q4, or a confirmed slow seller — do not raise |
 | Cannot Validate | grey | Article or month not recognised |
 
 **PO Assessment (Tool 2):** Retain · Reduce Qty · Cancel · Watch List · Cannot Validate.
@@ -574,8 +591,8 @@ Commercial decides) · BLOCK (confirmed slow seller — do not release; Commerci
 | **Colour Mix %** | The colour's share of the bucket's recent sales; below 2 % → Watch List |
 | **PDSTR** | Average per-day sell-through % (from BSR) |
 | **WOF** | Weeks on floor |
-| **Q1–Q4** | Quartile of a style's sell-through among its peers (Q1 top, Q4 slowest) |
-| **Border zone** | Tolerance around the peer average (default 10 %) |
+| **Q1–Q4** | Quartile of an option's sell-through among its peers — same Brand, MC, MRP, Flag (Q1 top = Allow, Q2–Q4 = Block) |
+| **Border zone** | Former Multi Concept tolerance around the peer average — not used since the Multi Concept rule Step 1 |
 | **Watch List** | Request that needs the category head's approval |
 | **SCR products file** | Mapping of Brand × MC × MRP to buyers and category heads; creates logins |
 | **Upload ID / Request ID / Run ID** | `UPL-…`, `REQ-…`, `RUN-…` — reference numbers in History |

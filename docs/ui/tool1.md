@@ -166,8 +166,8 @@ v1.1.4 did everything in one click. The server splits it into two calls, so the 
 - **Step 3 — {Heading}** (when present):
   - Line: `PoolText` left, `RankText` right (in `RankColour`).
   - Rank bar with lines at 25/50/75 % and a dot at `Position` %.
-  - Labels under the bar: Q4 Slow, Q3 Watch, Q2 Healthy, Q1 Top.
-- **Step 4 — Border Zone Check (PDSTR Gap)** (when present):
+  - Labels under the bar: Q4 Block, Q3 Block, Q2 Block, Q1 Allow (multi concept rule Step 1: only Q1 is allowed).
+- **Step 4 — Border Zone Check (PDSTR Gap)** (only for a result that went through the old border zone check — `BorderTolUsed` set; never since the multi concept rule Step 1):
   - Monospace box with the `Lines`.
   - Strip with `Verdict`: green when `InBorderZone`, else red.
 - `AbsoluteBlockNote`: red strip "⚡ Absolute Block Override: …".

@@ -32,7 +32,7 @@ real-time source. That change can keep everything described here and only replac
 
 ---
 
-## 2. The eleven datasets
+## 2. The twelve datasets
 
 | Key | On screen | What it is | Required | Upload |
 |---|---|---|---|---|
@@ -42,6 +42,7 @@ real-time source. That change can keep everything described here and only replac
 | `f4` | F4 — Forecast | Monthly plan by Brand × MC × MRP × Flag (`MM.YYYY` columns) | **yes** | single |
 | `um` | Universe Master | GMs of the Single Concept MRP universe (sends a GM to engine B) | **yes** | single |
 | `bsr` | BSR — All Seasons | Per GM + colour: weeks on floor, average per-day sell-through % | **yes** | **multi** (files are added together) |
+| `emf` | Entry / Mid / Fashion Mapping | Brand × MC × Flag × MRP → Entry, Mid or Fashion (multi concept minimum sell-thru, next step of the multi concept rule) | no | single — each upload **replaces** the mapping; rows with another tag are rejected and listed |
 | `artmaster` | Article Master | GM → brand, division, MC, MRP, flag, season, style, fit, material, design, vendor | no | single |
 | `colmaster` | Colour Master | Colour code → description | no | single |
 | `attrrel` | Attr Relevance Master | Brand × MC × MRP × Flag → assessment dimension | no | single |
@@ -189,7 +190,7 @@ The stored versions stay in `dataset_versions`, so the file can be made current 
 
 ### 4.9 MRA file (morning file + SAP during the day)
 
-A slot in the 📂 Data Setup sidebar under SCR Products / Cat Head Mapping (as in the Python v1.1.7 page), separate from the eleven datasets: MRAs are stored as **table rows**, not as a gzipped
+A slot in the 📂 Data Setup sidebar under SCR Products / Cat Head Mapping (as in the Python v1.1.7 page), separate from the twelve datasets: MRAs are stored as **table rows**, not as a gzipped
 version, because SAP changes single MRAs all day. SQL Server only. Rules of v1.1.7 (Python tool): open MRAs
 (levels 1, 2, 4; level 5 reached live today) take capacity from their colour and delivery month in the single
 concept Max Permissible, like a released PO.
@@ -246,6 +247,7 @@ lookups need the **exact** header, so the importer always writes the first name 
 | f4 | `Brand Type` · `MC CD` · `MRP` · `BOGO/NON-BOGO` · `MM.YYYY` month columns |
 | um | `Generic Material` · `Brand Type` · `Division` · `MC CD` · `MC DES` · `MRP` · `Flag (BOGO/NON-BOGO)` |
 | bsr | `Generic Material` · `Color` · `MC CD` · `MRP` · `Article Type` (BOGO/NON-BOGO, Flag) · `WEEK ON FLOOR` (WOF) · `AVG PERDAY SELL THRU%` |
+| emf | `Brand Type` (At_Brand, Brand) · `Division` · `MC CD` (MC Code) · `MC DESC` (at_Desc) · `Flag` · `MRP` · `EMF` (Entry Mid Fashion, Tag) — the importer writes the first names and the tag as `Entry` / `Mid` / `Fashion` (`1.ENTRY` → `Entry`); header row anywhere in the first 30 rows |
 | artmaster | `Generic Material` · `ART DESC` · `Brand Type` · `Division` · `MC CD` · `MC DESC` · `MRP` · `Flag (BOGO/NON-BOGO)` · `Season` · `Style` · `Fit` · `Product Material` · `Design` · `Vendor` · `VENDOR NAME` (any other column = an attribute in Attribute Analysis) |
 | colmaster | `Colour` (Color) · `Colour Desc` (Color Desc, Description, Desc) |
 | attrrel | `Brand Type` · `MC CD` · `MRP` · `BOGO/NON-BOGO` · `Assessment Dimension` |

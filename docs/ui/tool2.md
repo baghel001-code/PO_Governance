@@ -91,8 +91,8 @@ and `view.statusText` under the Run button (line count = `lines.length`).
 4. `strSteps` (Single Concept with STR) — grey box "**STR Computation Steps:**" with 4 lines.
 5. `steps` (Multi Concept with a quartile): "Step 1 — Article & Peer Pool" 5 tiles (`value` over `label`, value in
    `color`); "Step 2 — PDSTR vs Peer Average" 4 tiles; `step3Heading` + a rank bar with lines at 25/50/75 % and a
-   13 px dot in `decisionColor` at `step3MarkerPos`%, labels Q4 Slow | Q3 Watch | Q2 Healthy | Q1 Top; `step4`
-   "Step 4 — Border Zone Check (PDSTR Gap)" mono box (`threshold`, `gap`, "Result : **{result}**" coloured) + verdict
+   13 px dot in `decisionColor` at `step3MarkerPos`%, labels Q4 Block | Q3 Block | Q2 Block | Q1 Allow; `step4` (only for a line with `borderTolUsed` — not since the
+   multi concept rule Step 1) "Step 4 — Border Zone Check (PDSTR Gap)" mono box (`threshold`, `gap`, "Result : **{result}**" coloured) + verdict
    bar `message` (`color` on `bg`, left border); `absBlockNote` red bar.
 
 ## Category Head export panel

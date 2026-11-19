@@ -31,7 +31,7 @@ namespace DecisionEngine.Tool2
 
     /// <summary>
     /// index.html <c>runEngineA</c> (line 4270) and <c>absBlock</c> (line 4257) for Tool 2 — the Multi Concept
-    /// MRP peer-ranking decision (True Repeat / BOBs) that Tool 2 maps to Retain / Cancel / Watch List.
+    /// MRP peer-ranking decision (True Repeat / BOBs) that Tool 2 maps to Retain / Cancel (multi concept rule Step 1: Allow / Block, no Watch List).
     /// Tool 1 and Tool 2 call the same JS function, so there is ONE implementation: <see cref="Tool1EngineA"/>.
     /// This adapter only converts Tool 2's inputs (<see cref="GmInfo"/>, nullable option type) and maps the
     /// result to Tool 2's line model (<see cref="EngineAResult"/> / <see cref="SibRank"/>). Every return path

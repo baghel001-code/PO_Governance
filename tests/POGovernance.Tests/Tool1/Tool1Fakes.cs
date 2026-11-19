@@ -15,6 +15,8 @@ namespace POGovernance.Tests.Tool1
         public int Seq;
         public string Today = "";
         public string SavedAt = "2026-10-14T10:00:00+05:30";
+        /// <summary>More NON-PL "mc-mrp" keys with a category head (a test's own; the parity cases use 2203-599 only).</summary>
+        public HashSet<string> ExtraCatHeadKeys = new();
         public List<(int SeenSeq, bool Force)> Posts = new();
         /// <summary>Called once, right before the next save (simulates another user saving in between).</summary>
         public Action<FakeRequestLedger>? BeforeSave;
@@ -53,7 +55,9 @@ namespace POGovernance.Tests.Tool1
             {
                 var i = r["info"] as JsonObject;
                 string N(string k) => Js.N(i?[k]?.ToString());
-                var mapped = i != null && N("brand") == "non-pl" && N("mcCd") == "2203" && N("mrp") == "599";
+                // the category head mapping of the parity harness's server: NON-PL 2203-599 (+ ExtraCatHeadKeys "mc-mrp" of a test)
+                var mapped = i != null && N("brand") == "non-pl" &&
+                             ((N("mcCd") == "2203" && N("mrp") == "599") || ExtraCatHeadKeys.Contains(N("mcCd") + "-" + N("mrp")));
                 r["approval"] = new JsonObject
                 {
                     ["status"] = "pending",

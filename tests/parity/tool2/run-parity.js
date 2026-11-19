@@ -16,6 +16,7 @@
 const fs = require('fs');
 const path = require('path');
 const vm = require('vm');
+const MULTI_CONCEPT = require('../rules/multi-concept');
 
 const ROOT = path.resolve(__dirname, '../../..');
 const HTML = fs.readFileSync(path.join(ROOT, 'legacy/v1.1.6/app/index.html'), 'utf8');
@@ -63,7 +64,8 @@ function extractShared() {
   return SHARED.slice(s, e);
 }
 
-const helperSrc = [
+// multi concept rule Step 1 (changed after v1.1.6): tests/parity/rules/multi-concept.js — runEngineA replaced
+const helperSrc = MULTI_CONCEPT.apply([
   extractLine('const num = v =>'),
   extractLine('const fmt = v =>'),
   'const fmtCr = v => {\n  if(v>=1e7) return (v/1e7).toFixed(2)+\'Cr\';\n  if(v>=1e5) return (v/1e5).toFixed(2)+\'L\';\n  return fmt(v);\n};',
@@ -78,8 +80,8 @@ const helperSrc = [
     'getWOF', 'getPDSTR', 'quartile', 'pctRank', 'getBSRRows', 'absBlock', 'runEngineA', 'resolveGM', '_aiDriverBucketT2', 'toggleAssReason'].map(extractFunction),
   'function renderPlannerDashboard(){}',
   'function $g(id){ return document.getElementById(id); }'
-].join('\n\n');
-const tool2Src = extractTool2Block();
+].join('\n\n'), []);
+const tool2Src = MULTI_CONCEPT.apply(extractTool2Block(), ['buildDetailedReason'], false);
 const recSrc = extractRecScript();
 const sharedSrc = extractShared();
 // The workbook is captured instead of being zipped and downloaded.

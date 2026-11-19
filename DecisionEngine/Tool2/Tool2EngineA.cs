@@ -44,8 +44,8 @@ namespace DecisionEngine.Tool2
         /// <summary>Port of <c>runEngineA(gm, colour, optionType, info)</c> — runs <see cref="Tool1EngineA.Run"/>.</summary>
         public static EngineAResult Run(EngineData data, string gm, string colour, string? optionType, GmInfo? info)
         {
-            // runEngineA reads info.mcCd / info.mrp / info.flag only.
-            var t1Info = info == null ? null : new Tool1InfoDto { McCd = info.McCd, Mrp = info.Mrp, Flag = info.Flag };
+            // the engine reads info.brand (peer pool, multi concept Step 1) / mcCd / mrp / flag only.
+            var t1Info = info == null ? null : new Tool1InfoDto { Brand = info.Brand, McCd = info.McCd, Mrp = info.Mrp, Flag = info.Flag };
             var r = Engine.Run(data, gm, colour, optionType ?? "", t1Info);
             return new EngineAResult
             {

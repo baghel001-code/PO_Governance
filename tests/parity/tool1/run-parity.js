@@ -18,6 +18,7 @@
 const fs = require('fs');
 const path = require('path');
 const vm = require('vm');
+const MULTI_CONCEPT = require('../rules/multi-concept');
 
 const ROOT = path.resolve(__dirname, '../../..');
 const HTML = fs.readFileSync(path.join(ROOT, 'legacy/v1.1.6/app/index.html'), 'utf8');
@@ -63,7 +64,8 @@ function extractRecScript() {
   return HTML.slice(s, e);
 }
 
-const pageSrc = [
+// multi concept rule Step 1 (changed after v1.1.6): tests/parity/rules/multi-concept.js
+const pageSrc = MULTI_CONCEPT.apply([
   extractLine('const REQUIRED_KEYS ='),
   extractLine('const num = v =>'),
   extractLine('const fmt = v =>'),
@@ -84,7 +86,7 @@ const pageSrc = [
     'formColChange', 'formGetColour', 'formClear', 'formSubmit', 'renderCatHistory', 'populateMonths'].map(extractFunction),
   'function renderCatInsights(){}',
   'let _runACache = null;', 'let _runBCache = null;'
-].join('\n\n');
+].join('\n\n'), ['renderResult']);
 const recSrc = extractRecScript();
 
 // ── fake DOM ───────────────────────────────────────────────────────────────

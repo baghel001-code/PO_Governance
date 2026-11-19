@@ -330,7 +330,7 @@ namespace DecisionEngine.Results.Tool1
         public string Heading { get; set; } = "";
         /// <summary>"Rank within peer group of 12 styles".</summary>
         public string PoolText { get; set; } = "";
-        /// <summary>"63th percentile — Q2 — Healthy".</summary>
+        /// <summary>"63th percentile — Q2 — Block".</summary>
         public string RankText { get; set; } = "";
         public string RankColour { get; set; } = "";
         /// <summary>Marker position on the bar, 2 … 98 (%).</summary>

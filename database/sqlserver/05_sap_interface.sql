@@ -245,7 +245,9 @@ WHERE NOT EXISTS (SELECT 1 FROM dbo.SAP_REASON_CODES r WHERE r.Code_Type = s.Cod
 GO
 
 /* Verdict reason codes (items[].reason_code / rule_id of /decisions) = DecisionEngine/Sap/SapVerdictMap.Table
-   (tests/POGovernance.Tests/Sap checks that both lists are the same). Texts are refreshed on every run. */
+   (tests/POGovernance.Tests/Sap checks that both lists are the same). Texts are refreshed on every run.
+   A verdict code that is no longer in the list (multi concept rule Step 1, Nov 2026: PEER_Q2, PEER_Q3, PEER_Q4,
+   BOBS_SIBLING_LOW) is kept for the old decision logs but set inactive. */
 MERGE dbo.SAP_REASON_CODES AS t
 USING (VALUES
     (N'COVER_WITHIN_NORM', N'Cover within the norm (STR <= T + buffer)', N'ALLOW', N'COVER-00', 110),
@@ -253,13 +255,9 @@ USING (VALUES
     (N'COVER_ABOVE_NORM', N'Cover above the norm: reduce to Max Permissible', N'REDUCE', N'COVER-01', 130),
     (N'COVER_NO_HEADROOM', N'Existing stock + pending already above the norm: Max Permissible 0', N'HOLD', N'COVER-02', 140),
     (N'MIX_BELOW_MIN', N'Colour mix below the minimum share of its MC-MRP', N'WATCH', N'MIX-01', 150),
-    (N'PEER_Q1', N'Ranks Q1 in its BSR peer group', N'ALLOW', N'PEER-Q1', 160),
-    (N'PEER_Q2', N'Ranks Q2 in its BSR peer group', N'ALLOW', N'PEER-Q2', 170),
-    (N'PEER_Q3', N'Ranks Q3: ALLOW at or near the peer average, WATCH below it beyond the border zone', N'ALLOW/WATCH', N'PEER-Q3-OK,PEER-Q3-GAP', 180),
-    (N'PEER_Q4', N'Ranks Q4 but at or near the peer average', N'WATCH', N'PEER-Q4-WATCH', 190),
-    (N'BLOCK', N'Block: confirmed slow seller (Q4 beyond the border zone, or sell-thru below 1 %/day after 4+ weeks)', N'HOLD|BLOCK', N'BLOCK-Q4,BLOCK-ABS', 200),
-    (N'BOBS_SIBLINGS_OK', N'New colour: all sibling colours rank Q1/Q2', N'ALLOW', N'BOBS-01', 210),
-    (N'BOBS_SIBLING_LOW', N'New colour: a sibling colour ranks Q3/Q4', N'WATCH', N'BOBS-02', 220),
+    (N'PEER_Q1', N'Ranks Q1 (top 25 %) in its BSR peer group (same Brand, MC, MRP, Flag)', N'ALLOW', N'PEER-Q1', 160),
+    (N'BLOCK', N'Block: multi concept option ranks below Q1 (top 25 %) in its peer group, a new colour whose other colours do not all rank Q1, or sell-thru below 1 %/day after 4+ weeks', N'HOLD|BLOCK', N'BLOCK-PEER,BLOCK-BOBS,BLOCK-ABS', 200),
+    (N'BOBS_SIBLINGS_OK', N'New colour: all other colours of the option rank Q1', N'ALLOW', N'BOBS-01', 210),
     (N'LOW_HISTORY', N'Too little selling history (weeks on floor below the gate), allowed', N'ALLOW', N'WOF-00', 230),
     (N'NO_PEER_POOL', N'No BSR peer group available, allowed', N'ALLOW', N'PEER-00', 240),
     (N'NEW_ARTICLE', N'New article: not in Universe Master or BSR', N'ALLOW', N'NEW-00', 250),
@@ -268,7 +266,9 @@ USING (VALUES
 ON t.Code_Type = N'VERDICT' AND t.Code = s.Code
 WHEN MATCHED THEN UPDATE SET Text = s.Text, Verdict = s.Verdict, Rule_Ids = s.Rule_Ids, Sort_Order = s.Sort_Order, Updated_At = SYSDATETIMEOFFSET(), Updated_By = N'seed'
 WHEN NOT MATCHED THEN INSERT (Code_Type, Code, Text, Active, Sort_Order, Verdict, Rule_Ids, Updated_By)
-     VALUES (N'VERDICT', s.Code, s.Text, 1, s.Sort_Order, s.Verdict, s.Rule_Ids, N'seed');
+     VALUES (N'VERDICT', s.Code, s.Text, 1, s.Sort_Order, s.Verdict, s.Rule_Ids, N'seed')
+WHEN NOT MATCHED BY SOURCE AND t.Code_Type = N'VERDICT' AND t.Active = 1
+     THEN UPDATE SET Active = 0, Updated_At = SYSDATETIMEOFFSET(), Updated_By = N'seed';
 GO
 
 /* ───────────────────────────── technical users ───────────────────────────── */

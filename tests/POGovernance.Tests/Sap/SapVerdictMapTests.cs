@@ -43,22 +43,21 @@ namespace POGovernance.Tests.Sap
             new object[] { "B Hold, Max Permissible NaN", B(Decisions.Hold, double.NaN), SapOutcomePath.CoverNoHeadroom, "HOLD", "HOLD", "COVER_NO_HEADROOM", "COVER-02" },
             new object[] { "B Watch List (mix gate)", B(Decisions.WatchList), SapOutcomePath.MixBelowMin, "WATCH", "WATCH", "MIX_BELOW_MIN", "MIX-01" },
             new object[] { "B Cannot Validate", B(Decisions.CannotValidate), SapOutcomePath.CannotValidate, "WATCH", "WATCH", "CANNOT_VALIDATE", "CV-00" },
-            // Multi Concept (runEngineA) — True Repeat
-            new object[] { "A Allow Q1", A(Decisions.Allow, "Q1", "True Repeat: ranks Q1 (90th pct) …"), SapOutcomePath.PeerQ1, "ALLOW", "ALLOW", "PEER_Q1", "PEER-Q1" },
-            new object[] { "A Allow Q2", A(Decisions.Allow, "Q2", "True Repeat: ranks Q2 (60th pct) …"), SapOutcomePath.PeerQ2, "ALLOW", "ALLOW", "PEER_Q2", "PEER-Q2" },
-            new object[] { "A Allow Q3 (border zone)", A(Decisions.Allow, "Q3", "True Repeat: ranks Q3 … within border zone"), SapOutcomePath.PeerQ3WithinBorder, "ALLOW", "ALLOW", "PEER_Q3", "PEER-Q3-OK" },
-            new object[] { "A Watch List Q3", A(Decisions.WatchList, "Q3", "True Repeat: ranks Q3 … gap exceeds border zone"), SapOutcomePath.PeerQ3BeyondBorder, "WATCH", "WATCH", "PEER_Q3", "PEER-Q3-GAP" },
-            new object[] { "A Watch List Q4 (softened)", A(Decisions.WatchList, "Q4", "True Repeat: ranks Q4 … Softened from Block to Watch List."), SapOutcomePath.PeerQ4Softened, "WATCH", "WATCH", "PEER_Q4", "PEER-Q4-WATCH" },
-            new object[] { "A Block Q4", A(Decisions.Block, "Q4", "True Repeat: ranks Q4 … Confirmed slow seller. Do not raise PO."), SapOutcomePath.BlockQ4, "HOLD", "BLOCK", "BLOCK", "BLOCK-Q4" },
+            // Multi Concept (Tool1EngineA, rule Step 1: Q1 → Allow, Q2–Q4 → Block, no Watch List) — True Repeat
+            new object[] { "A Allow Q1", A(Decisions.Allow, "Q1", "True Repeat: ranks Q1 (90th pct) … top 25% (Q1). Allow."), SapOutcomePath.PeerQ1, "ALLOW", "ALLOW", "PEER_Q1", "PEER-Q1" },
+            new object[] { "A Block Q2", A(Decisions.Block, "Q2", "True Repeat: ranks Q2 (60th pct) … Only Q1 (top 25%) is allowed for multi concept — Block. Do not raise PO."), SapOutcomePath.BlockBelowQ1, "HOLD", "BLOCK", "BLOCK", "BLOCK-PEER" },
+            new object[] { "A Block Q3", A(Decisions.Block, "Q3", "True Repeat: ranks Q3 (40th pct) … Block. Do not raise PO."), SapOutcomePath.BlockBelowQ1, "HOLD", "BLOCK", "BLOCK", "BLOCK-PEER" },
+            new object[] { "A Block Q4", A(Decisions.Block, "Q4", "True Repeat: ranks Q4 (10th pct) … Block. Do not raise PO."), SapOutcomePath.BlockBelowQ1, "HOLD", "BLOCK", "BLOCK", "BLOCK-PEER" },
             new object[] { "A Absolute Block", A(Decisions.Block, null, "Absolute Block override: GM+Colour (…) has AVG PERDAY SELL THRU% = 0.5% < 1%"), SapOutcomePath.BlockAbsolute, "HOLD", "BLOCK", "BLOCK", "BLOCK-ABS" },
+            new object[] { "A Absolute Block of a Q1 BOBs", A(Decisions.Block, "Q1", "Absolute Block override: best sibling colourway (…) has AVG PERDAY SELL THRU% = 0.5% < 1%", "BOBs"), SapOutcomePath.BlockAbsolute, "HOLD", "BLOCK", "BLOCK", "BLOCK-ABS" },
             new object[] { "A Allow, WOF below gate", A(Decisions.Allow, null, "WOF = 2w < 4w gate. Insufficient selling history — Auto Allow."), SapOutcomePath.LowHistory, "ALLOW", "ALLOW", "LOW_HISTORY", "WOF-00" },
             new object[] { "A Allow, no peer pool", A(Decisions.Allow, null, "No peer pool available. Auto Allow."), SapOutcomePath.NoPeerPool, "ALLOW", "ALLOW", "NO_PEER_POOL", "PEER-00" },
-            // Multi Concept — BOBs
-            new object[] { "A BOBs siblings Q1/Q2", A(Decisions.Allow, "Q1", "BOBs: All 2 qualifying sibling colourway(s) rank Q2/Q1 — …", "BOBs"), SapOutcomePath.BobsSiblingsOk, "ALLOW", "ALLOW", "BOBS_SIBLINGS_OK", "BOBS-01" },
-            new object[] { "A BOBs sibling Q3/Q4", A(Decisions.WatchList, "Q4", "BOBs: 3 sibling colourway(s) with WOF ≥ 4w found. At least one ranks Q4/Q3 — …", "BOBs"), SapOutcomePath.BobsSiblingLow, "WATCH", "WATCH", "BOBS_SIBLING_LOW", "BOBS-02" },
+            // Multi Concept — BOBs: every other colour with WOF ≥ gate must rank Q1
+            new object[] { "A BOBs all siblings Q1", A(Decisions.Allow, "Q1", "BOBs: All 2 sibling colourway(s) with WOF ≥ 4w rank Q1 (top 25%) — …", "BOBs"), SapOutcomePath.BobsSiblingsOk, "ALLOW", "ALLOW", "BOBS_SIBLINGS_OK", "BOBS-01" },
+            new object[] { "A BOBs a sibling below Q1", A(Decisions.Block, "Q2", "BOBs: 1 of 3 sibling colourway(s) with WOF ≥ 4w rank below Q1 (RED Q2). …", "BOBs"), SapOutcomePath.BlockBobsSibling, "HOLD", "BLOCK", "BLOCK", "BLOCK-BOBS" },
+            new object[] { "A BOBs siblings but no peer pool", A(Decisions.Allow, null, "BOBs: 2 sibling colourway(s) with WOF ≥ 4w found, but no peer pool to rank them against. Auto Allow.", "BOBs"), SapOutcomePath.NoPeerPool, "ALLOW", "ALLOW", "NO_PEER_POOL", "PEER-00" },
+            new object[] { "A BOBs siblings below the WOF gate", A(Decisions.Allow, null, "BOBs: 2 sibling(s) found but none qualify on WOF ≥ 4w (best WOF=3w). Insufficient history — Auto Allow.", "BOBs"), SapOutcomePath.LowHistory, "ALLOW", "ALLOW", "LOW_HISTORY", "WOF-00" },
             new object[] { "A BOBs no siblings", A(Decisions.Allow, null, "BOBs: No sibling colourways found in CY BSR. Auto Allow (new colourway of untracked parent).", "BOBs"), SapOutcomePath.LowHistory, "ALLOW", "ALLOW", "LOW_HISTORY", "WOF-00" },
-            new object[] { "A BOBs fallthrough parent Q2", A(Decisions.Allow, "Q2", "BOBs fallthrough: parent style ranks Q2 (60th pct, CY BSR (AW26)) — healthy.", "BOBs"), SapOutcomePath.PeerQ2, "ALLOW", "ALLOW", "PEER_Q2", "PEER-Q2" },
-            new object[] { "A BOBs fallthrough Block", A(Decisions.Block, "Q4", "BOBs fallthrough: parent ranks Q4 … Confirmed slow. Do not raise.", "BOBs"), SapOutcomePath.BlockQ4, "HOLD", "BLOCK", "BLOCK", "BLOCK-Q4" },
             // NEW article
             new object[] { "NEW", new Tool1Outcome { Engine = "NEW", Decision = Decisions.AutoAllow, DecisionReason = "Not in Universe Master or CY BSR. New article." }, SapOutcomePath.NewArticle, "ALLOW", "ALLOW", "NEW_ARTICLE", "NEW-00" },
         };
@@ -89,7 +88,7 @@ namespace POGovernance.Tests.Sap
                 Assert.Equal("BLOCK", SapVerdictMap.VerdictFor(r, "BLOCK"));
                 Assert.Equal("B", SapVerdicts.Code(SapVerdictMap.VerdictFor(r, "BLOCK")));
             }
-            Assert.Equal(2, SapVerdictMap.Table.Count(r => r.IsBlock));
+            Assert.Equal(3, SapVerdictMap.Table.Count(r => r.IsBlock));   // below Q1, BOBs sibling below Q1, absolute
             // nothing else changes with the switch
             foreach (var r in SapVerdictMap.Table.Where(r => !r.IsBlock))
                 Assert.Equal(SapVerdictMap.VerdictFor(r, "HOLD"), SapVerdictMap.VerdictFor(r, "BLOCK"));

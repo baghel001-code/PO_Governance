@@ -5,15 +5,26 @@ using DecisionEngine.Results.Tool1;
 namespace DecisionEngine.Tool1
 {
     /// <summary>
-    /// Port of index.html <c>runEngineA</c> (line 4270) — Tool 1 Multi Concept MRP: peer pool from BSR
-    /// (same MC / MRP / Flag, WOF ≥ gate, current seasons with fallback), PDSTR quartile, border zone,
-    /// BOBs sibling logic and the absolute-block override (<c>absBlock</c>, line 4257). Uses the shared
-    /// <see cref="BsrPeerRank"/> (getWOF / getPDSTR / quartile / pctRank) and <see cref="ResolveIndex"/>.
-    /// This is the only port of runEngineA: Tool 2 runs it through <see cref="Tool2.Tool2EngineA"/> (an adapter
-    /// to Tool 2's line model), because both tools call the same JS function.
+    /// Tool 1 Multi Concept MRP (articles not in the Universe Master) — originally a port of index.html <c>runEngineA</c>
+    /// (line 4270), changed by the <b>multi concept rule, Step 1</b> (Nov 2026):
+    /// <list type="bullet">
+    /// <item>Peer pool from BSR: same <b>Brand</b>, MC, MRP and Flag, WOF ≥ gate, current seasons with fallback (Brand added
+    /// in Step 1; the peer's brand is the BSR row's Brand Type, else the Article Master / Universe Master / F2 one).</item>
+    /// <item>True Repeat ranked on AVG PERDAY SELL THRU% (PDSTR): <b>Q1 (top 25 %) → Allow, Q2 / Q3 / Q4 → Block</b>. No Watch
+    /// List and no border zone any more.</item>
+    /// <item>BOBs (new colour of an existing option): every other colour with WOF ≥ gate must rank Q1 to Allow, else Block.
+    /// No other colours, or none with WOF ≥ gate → Allow as before.</item>
+    /// <item>Unchanged: WOF below the gate → Allow; no peer pool → Allow; the absolute-block override (<see cref="AbsBlock"/>);
+    /// new articles (engine NEW) → Auto Allow.</item>
+    /// </list>
+    /// The JavaScript reference of the same rule, used by the parity harnesses, is <c>tests/parity/rules/multi-concept.js</c>.
+    /// Tool 2 runs this engine through <see cref="Tool2.Tool2EngineA"/> (an adapter to Tool 2's line model).
     /// </summary>
     public sealed class Tool1EngineA
     {
+        /// <summary>The only multi concept quartile that is allowed (Step 1).</summary>
+        public const string AllowQuartile = "Q1";
+
         /// <summary>Port of <c>getBSRRows(src, gm)</c>.</summary>
         public static List<SheetRow> GetBsrRows(IReadOnlyList<SheetRow>? src, string gm)
         {
@@ -33,12 +44,25 @@ namespace DecisionEngine.Tool1
             return (false, null, null);
         }
 
+        /// <summary>
+        /// The brand of a BSR peer row: its own Brand Type column when filled, else the brand the GM resolves to
+        /// (Article Master / Universe Master / F2). Empty when unknown.
+        /// </summary>
+        public static string PeerBrand(SheetRow r, IReadOnlyDictionary<string, GmInfo> resolve)
+        {
+            var own = r.Col("Brand Type", "BRAND TYPE", "brand type").Trim();
+            if (own.Length > 0) return own;
+            var gm = JsOps.StrOr(r, "Generic Material", "GENERIC MATERIAL").Trim();
+            return resolve.TryGetValue(gm, out var i) ? (i.Brand ?? "").Trim() : "";
+        }
+
         public Tool1EngineAResult Run(EngineData data, string gm, string colour, string optionType, Tool1InfoDto? info)
         {
             var p = data.Params;
             double wofGate = p.Wof, peerMin = p.Peer;
             var mcCd = info?.McCd ?? "";
             var mrp = info?.Mrp ?? "";
+            var brand = (info?.Brand ?? "").Trim();
             var flag = (info?.Flag ?? "").Trim();
             var resolve = ResolveIndex.ResolveMap(data);
 
@@ -48,6 +72,7 @@ namespace DecisionEngine.Tool1
                 var nMC = Tool1JsHelpers.StripDot0(mcCd);
                 var nMRP = Tool1JsHelpers.StripDot0(mrp);
                 var nFlag = flag.ToLowerInvariant();
+                var nBrand = brand.ToLowerInvariant();
                 return src.Where(r =>
                 {
                     var rMC = Tool1JsHelpers.StripDot0(r.Col("MC CD", "MC_CD", "mc cd"));
@@ -56,6 +81,12 @@ namespace DecisionEngine.Tool1
                     var wof = Js.Num(r.Col("WEEK\n ON\nFLOOR", "WEEK ON FLOOR", "WOF", "wof"));
                     var ok = rMC == nMC && rMRP == nMRP && (nFlag.Length == 0 || rArt == nFlag || rArt == "") && wof >= wofGate;
                     if (!ok) return false;
+                    // Step 1: same brand (a peer whose brand is not known is kept, like a blank flag)
+                    if (nBrand.Length > 0)
+                    {
+                        var rBrand = PeerBrand(r, resolve).ToLowerInvariant();
+                        if (rBrand.Length > 0 && rBrand != nBrand) return false;
+                    }
                     if (seasonSet == null) return true;
                     var rGm = JsOps.StrOr(r, "Generic Material", "GENERIC MATERIAL").Trim();
                     if (!resolve.TryGetValue(rGm, out var peer) || string.IsNullOrEmpty(peer.Season)) return false;
@@ -97,8 +128,6 @@ namespace DecisionEngine.Tool1
                 Wof = wof, Pdstr = pdstr, Quartile = q, Percentile = pct
             };
 
-            var bt = JsOps.Or(p.BorderTolerance, 10);
-
             if (optionType == "BOBs")
             {
                 var gmT = gm.Trim();
@@ -109,22 +138,40 @@ namespace DecisionEngine.Tool1
                 var qualSibs = allSibs.Where(r => BsrPeerRank.GetWof(r) >= wofGate).ToList();
                 if (qualSibs.Count > 0)
                 {
+                    var best = qualSibs.Aggregate(qualSibs[0], (b, r) => BsrPeerRank.GetWof(r) > BsrPeerRank.GetWof(b) ? r : b);
                     var rankPool = cleanPool.Count > 0 ? cleanPool : peerPool;
+                    if (rankPool.Count == 0)
+                    {
+                        // nothing to rank the other colours against: allowed, like a True Repeat without a peer pool
+                        var bp = BsrPeerRank.GetPdstr(best);
+                        var bw = BsrPeerRank.GetWof(best);
+                        var ab0 = AbsBlock(Decisions.Allow, bp, bw, "best sibling colourway (" + gm + ")");
+                        var r0 = ab0.Overridden
+                            ? Res(ab0.Decision!, ab0.Reason!, allSibs, bw, bp, null, null)
+                            : Res(Decisions.Allow, "BOBs: " + qualSibs.Count + " sibling colourway(s) with WOF ≥ " + Js.NumberToString(wofGate) +
+                                  "w found, but no peer pool to rank them against. Auto Allow.", allSibs, bw, null, null, null);
+                        r0.QualSibs = qualSibs;
+                        return r0;
+                    }
                     var sibRanked = qualSibs.Select(r => new Tool1SiblingRankDto
                     {
                         Row = r, Q = BsrPeerRank.Quartile(BsrPeerRank.GetPdstr(r), rankPool), Pdstr = BsrPeerRank.GetPdstr(r)
                     }).ToList();
-                    var hasLow = sibRanked.Any(s => s.Q == "Q4" || s.Q == "Q3");
-                    var decision = hasLow ? Decisions.WatchList : Decisions.Allow;
+                    var low = sibRanked.Where(s => s.Q != AllowQuartile).ToList();
+                    var hasLow = low.Count > 0;
+                    var decision = hasLow ? Decisions.Block : Decisions.Allow;
                     var reason = hasLow
-                        ? "BOBs: " + qualSibs.Count + " sibling colourway(s) with WOF ≥ " + Js.NumberToString(wofGate) + "w found. At least one ranks Q4/Q3 — new colourway addition is risky."
-                        : "BOBs: All " + qualSibs.Count + " qualifying sibling colourway(s) rank Q2/Q1 — parent style is a healthy seller. New colour permitted.";
+                        ? "BOBs: " + low.Count + " of " + qualSibs.Count + " sibling colourway(s) with WOF ≥ " + Js.NumberToString(wofGate) + "w rank below Q1 (" +
+                          string.Join(", ", low.Select(s => s.Row.Col("Color", "Colour", "COLOR", "COLOUR", "colour", "color").Trim() + " " + s.Q)) +
+                          "). Every other colour must rank Q1 (top 25%) — new colour blocked."
+                        : "BOBs: All " + qualSibs.Count + " sibling colourway(s) with WOF ≥ " + Js.NumberToString(wofGate) +
+                          "w rank Q1 (top 25%) — parent style is a top seller. New colour permitted.";
                     if (decision == Decisions.Allow)
                     {
-                        var best = qualSibs.Aggregate(qualSibs[0], (b, r) => BsrPeerRank.GetWof(r) > BsrPeerRank.GetWof(b) ? r : b);
                         var ab = AbsBlock(Decisions.Allow, BsrPeerRank.GetPdstr(best), BsrPeerRank.GetWof(best), "best sibling colourway (" + gm + ")");
                         if (ab.Overridden) { decision = ab.Decision!; reason = ab.Reason!; }
                     }
+                    // the sibling that drove the decision: Block → the worst-ranked colour, Allow → the best-ranked one
                     var qOrder = new Dictionary<string, int> { ["Q4"] = 0, ["Q3"] = 1, ["Q2"] = 2, ["Q1"] = 3 };
                     var rep = hasLow
                         ? sibRanked.Aggregate(sibRanked[0], (w, s) => qOrder[s.Q] < qOrder[w.Q] || (qOrder[s.Q] == qOrder[w.Q] && s.Pdstr < w.Pdstr) ? s : w)
@@ -139,56 +186,14 @@ namespace DecisionEngine.Tool1
                 }
                 if (allSibs.Count > 0)
                 {
+                    // other colours exist but none has WOF ≥ gate: allowed as before (unless the absolute block applies)
                     var bestSib = allSibs.Aggregate(allSibs[0], (b, r) => BsrPeerRank.GetWof(r) > BsrPeerRank.GetWof(b) ? r : b);
                     var parentWOF = BsrPeerRank.GetWof(bestSib);
-                    if (parentWOF < wofGate)
-                    {
-                        var sp = BsrPeerRank.GetPdstr(bestSib);
-                        var ab = AbsBlock(Decisions.Allow, sp, parentWOF, "best sibling of GM " + gm);
-                        if (ab.Overridden) return Res(ab.Decision!, ab.Reason!, allSibs, parentWOF, sp, null, null);
-                        return Res(Decisions.Allow, "BOBs: " + allSibs.Count + " sibling(s) found but none qualify on WOF ≥ " + Js.NumberToString(wofGate) +
-                                   "w (best WOF=" + Js.NumberToString(parentWOF) + "w). Insufficient history — Auto Allow.", allSibs, parentWOF, null, null, null);
-                    }
-                    {
-                        var sp2 = BsrPeerRank.GetPdstr(bestSib);
-                        var ab2 = AbsBlock(Decisions.Allow, sp2, parentWOF, "best sibling of GM " + gm);
-                        if (ab2.Overridden) return Res(ab2.Decision!, ab2.Reason!, allSibs, parentWOF, sp2, null, null);
-                        if (cleanPool.Count == 0) return Res(Decisions.Allow, "BOBs fallthrough: no valid peer pool after IQR clean. Auto Allow.", allSibs, parentWOF, null, null, null);
-                    }
-                    var pdstr = BsrPeerRank.GetPdstr(bestSib);
-                    var q = BsrPeerRank.Quartile(pdstr, cleanPool);
-                    var pct = BsrPeerRank.PctRank(pdstr, cleanPool);
-                    var gapPct = peerAvg > 0 ? (peerAvg - pdstr) / peerAvg * 100 : 0;
-                    var gapPctRound = Js.Round(gapPct * 10) / 10;
-                    var inBorderZone = gapPct > 0 && gapPct <= bt;
-                    string pre = "BOBs fallthrough: parent ranks " + q + " (" + Js.NumberToString(pct) + "th pct, " + bsrLabel + ")";
-                    string g = Js.NumberToString(gapPctRound), bts = Js.NumberToString(bt);
-                    string dec, reason;
-                    if (q == "Q2" || q == "Q1")
-                    {
-                        dec = Decisions.Allow;
-                        reason = "BOBs fallthrough: parent style ranks " + q + " (" + Js.NumberToString(pct) + "th pct, " + bsrLabel + ") — healthy. New colour permitted.";
-                    }
-                    else if (q == "Q3")
-                    {
-                        if (pdstr >= peerAvg) { dec = Decisions.Allow; reason = pre + ". PDSTR " + Js.ToFixed(pdstr * 100, 1) + "%/d ≥ peer avg — at/above mean. Allow."; }
-                        else if (inBorderZone) { dec = Decisions.Allow; reason = pre + ". PDSTR gap " + g + "% within border zone (≤" + bts + "%). Marginally below mean — Allow."; }
-                        else { dec = Decisions.WatchList; reason = pre + ". PDSTR gap " + g + "% exceeds border zone (" + bts + "%). Category Head review."; }
-                    }
-                    else
-                    {
-                        if (pdstr >= peerAvg) { dec = Decisions.WatchList; reason = pre + ". PDSTR ≥ peer avg — Q4 but at/above mean. Category Head review."; }
-                        else if (inBorderZone) { dec = Decisions.WatchList; reason = pre + ". PDSTR gap " + g + "% within border zone (≤" + bts + "%). Softened from Block to Watch List. Category Head review."; }
-                        else { dec = Decisions.Block; reason = pre + ". PDSTR gap " + g + "% exceeds border zone (" + bts + "%). Confirmed slow. Do not raise."; }
-                    }
-                    if (dec == Decisions.Allow)
-                    {
-                        var ab = AbsBlock(Decisions.Allow, pdstr, parentWOF, "parent style (" + gm + ")");
-                        if (ab.Overridden) { dec = ab.Decision!; reason = ab.Reason!; }
-                    }
-                    var res = Res(dec, reason, allSibs, parentWOF, pdstr, q, pct);
-                    res.GapPct = gapPctRound; res.InBorderZone = inBorderZone; res.BorderTolUsed = bt;
-                    return res;
+                    var sp = BsrPeerRank.GetPdstr(bestSib);
+                    var ab = AbsBlock(Decisions.Allow, sp, parentWOF, "best sibling of GM " + gm);
+                    if (ab.Overridden) return Res(ab.Decision!, ab.Reason!, allSibs, parentWOF, sp, null, null);
+                    return Res(Decisions.Allow, "BOBs: " + allSibs.Count + " sibling(s) found but none qualify on WOF ≥ " + Js.NumberToString(wofGate) +
+                               "w (best WOF=" + Js.NumberToString(parentWOF) + "w). Insufficient history — Auto Allow.", allSibs, parentWOF, null, null, null);
                 }
                 return Res(Decisions.Allow, "BOBs: No sibling colourways found in CY BSR. Auto Allow (new colourway of untracked parent).", new(), 0, null, null, null);
             }
@@ -217,36 +222,24 @@ namespace DecisionEngine.Tool1
             var qa = BsrPeerRank.Quartile(pd, cleanPool);
             var pcta = BsrPeerRank.PctRank(pd, cleanPool);
             var gap = peerAvg > 0 ? (peerAvg - pd) / peerAvg * 100 : 0;
-            var gapR = Js.Round(gap * 10) / 10;
-            var inBz = gap > 0 && gap <= bt;
             var head = "True Repeat: ranks " + qa + " (" + Js.NumberToString(pcta) + "th pct) in peer group of " + cleanPool.Count + " styles (" + bsrLabel + "). ";
             var pdTxt = Js.ToFixed(pd * 100, 1);
-            string gTxt = Js.NumberToString(gapR), btTxt = Js.NumberToString(bt);
             string decA, reasonA;
-            if (qa == "Q2" || qa == "Q1")
+            if (qa == AllowQuartile)
             {
                 decA = Decisions.Allow;
-                reasonA = head + "PDSTR = " + pdTxt + "%/day — healthy seller.";
-            }
-            else if (qa == "Q3")
-            {
-                if (pd >= peerAvg) { decA = Decisions.Allow; reasonA = head + "PDSTR " + pdTxt + "%/day ≥ peer avg " + Js.ToFixed(peerAvg * 100, 1) + "%/day — at or above mean. Allow."; }
-                else if (inBz) { decA = Decisions.Allow; reasonA = head + "PDSTR " + pdTxt + "%/day is " + gTxt + "% below peer avg — within border zone (≤" + btTxt + "%). Marginally below mean — Allow."; }
-                else { decA = Decisions.WatchList; reasonA = head + "PDSTR " + pdTxt + "%/day is " + gTxt + "% below peer avg — gap exceeds border zone (" + btTxt + "%). Category Head review required."; }
-            }
-            else
-            {
-                if (pd >= peerAvg) { decA = Decisions.WatchList; reasonA = head + "PDSTR " + pdTxt + "%/day ≥ peer avg — Q4 rank but at or above peer mean. Category Head review."; }
-                else if (inBz) { decA = Decisions.WatchList; reasonA = head + "PDSTR " + pdTxt + "%/day is " + gTxt + "% below peer avg — within border zone (≤" + btTxt + "%). Softened from Block to Watch List. Category Head review."; }
-                else { decA = Decisions.Block; reasonA = head + "PDSTR " + pdTxt + "%/day is " + gTxt + "% below peer avg — gap exceeds border zone (" + btTxt + "%). Confirmed slow seller. Do not raise PO."; }
-            }
-            if (decA == Decisions.Allow)
-            {
+                reasonA = head + "PDSTR = " + pdTxt + "%/day — top 25% (Q1). Allow.";
                 var ab = AbsBlock(decA, pd, wofA, label);
                 if (ab.Overridden) { decA = ab.Decision!; reasonA = ab.Reason!; }
             }
+            else
+            {
+                decA = Decisions.Block;
+                reasonA = head + "PDSTR = " + pdTxt + "%/day (peer avg " + Js.ToFixed(peerAvg * 100, 1) +
+                          "%/day). Only Q1 (top 25%) is allowed for multi concept — Block. Do not raise PO.";
+            }
             var ra = Res(decA, reasonA, new(), wofA, pd, qa, pcta);
-            ra.GapPct = gapR; ra.InBorderZone = inBz; ra.BorderTolUsed = bt;
+            ra.GapPct = Js.Round(gap * 10) / 10;   // shown as "Gap from Avg" (information only — no border zone any more)
             return ra;
         }
     }

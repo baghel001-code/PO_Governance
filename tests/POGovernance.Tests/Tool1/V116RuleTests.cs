@@ -116,13 +116,14 @@ namespace POGovernance.Tests.Tool1
         }
 
         [Fact]
-        public async Task Multi_concept_Watch_List_is_sent_without_a_reason()
+        public async Task Multi_concept_has_no_Watch_List_and_never_asks_for_a_reason()
         {
+            // multi concept rule Step 1: 2203000202 BLK ranks Q3 — was Watch List, now Block
             var data = Tool1Fixture.Data("S1-early-month");
             var ledger = new FakeRequestLedger { Today = "2026-10-03" };
             var svc = Service(data, ledger);
             var v = await svc.ValidateAsync(new() { Gm = "2203000202", Colour = "BLK", Month = "11.2026", Qty = 100 }, Buyer);
-            Assert.Equal(Decisions.WatchList, v.Decision);
+            Assert.Equal(Decisions.Block, v.Decision);
             Assert.Equal("A", v.Engine);
             Assert.False(v.NeedsColourReason);
         }

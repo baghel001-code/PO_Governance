@@ -154,15 +154,18 @@ namespace POGovernance.Tests.Tool1
         public async Task Today_list_visibility_and_badges()
         {
             var (svc, ledger) = Make();
-            var v = await svc.ValidateAsync(In("2203000205", "NEWC", "11.2026", 400), Buyer);
+            // a single concept Watch List (multi concept has no Watch List since the multi concept rule Step 1)
+            ledger.ExtraCatHeadKeys.Add("1101-399");
+            var v = await svc.ValidateAsync(In("1101000101", "GRY", "12.2026", 100), Buyer);
             Assert.Equal(Decisions.WatchList, v.Decision);
-            var s = await svc.SubmitAsync(new Tool1SubmitInputDto { Gm = "2203000205", Colour = "NEWC", Month = "11.2026", Qty = 400, SeenSeq = v.SeenSeq }, Buyer);
+            var s = await svc.SubmitAsync(new Tool1SubmitInputDto { Gm = "1101000101", Colour = "GRY", Month = "12.2026", Qty = 100, SeenSeq = v.SeenSeq,
+                                                                    ColourReason = "Festive launch colour" }, Buyer);
             Assert.Equal("Watch List — sent to Cat Head for approval", s.Toasts.Single());
             var mine = await svc.GetTodayAsync(Buyer, false);
             var row = Assert.Single(mine.Rows);
             Assert.Equal("⏳ Awaiting Cat Head", row.ApprovalBadge!.Text);
             Assert.Equal("dp-watch", row.DecisionClass);
-            Assert.Equal("—", row.ApprovedQty);
+            Assert.Equal("0", row.ApprovedQty);   // single concept: the run's approved quantity (a multi concept row showed "—")
             var all = await svc.GetTodayAsync(Planner, false);
             Assert.Equal(ledger.Reqs.Count, all.Rows.Count);
             Assert.Empty((await svc.GetTodayAsync(Planner, true)).Rows);

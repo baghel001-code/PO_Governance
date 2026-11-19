@@ -97,13 +97,14 @@ namespace POGovernance.Tests.Sap
         [InlineData("1101000101", "WHT", 50000, "REDUCE", "COVER_ABOVE_NORM", "COVER-01", "COMMERCIAL")]
         [InlineData("1101000101", "RED", 100, "HOLD", "COVER_NO_HEADROOM", "COVER-02", "COMMERCIAL")]
         [InlineData("1101000101", "GRY", 100, "WATCH", "MIX_BELOW_MIN", "MIX-01", "CATHEAD")]
-        [InlineData("2203000201", "OWH", 100, "BLOCK", "BLOCK", "BLOCK-Q4", "COMMERCIAL")]
-        [InlineData("2203000201", "BLU", 100, "ALLOW", "PEER_Q1", "PEER-Q1", "NONE")]
-        [InlineData("2203000201", "BEG", 100, "ALLOW", "PEER_Q2", "PEER-Q2", "NONE")]
-        [InlineData("2203000202", "BLK", 100, "WATCH", "PEER_Q3", "PEER-Q3-GAP", "CATHEAD")]
-        [InlineData("2203009106", "BLU", 100, "ALLOW", "PEER_Q3", "PEER-Q3-OK", "NONE")]
-        [InlineData("2203000201", "ZZZ", 100, "WATCH", "BOBS_SIBLING_LOW", "BOBS-02", "CATHEAD")]
-        [InlineData("2203000203", "ZZZ", 100, "ALLOW", "BOBS_SIBLINGS_OK", "BOBS-01", "NONE")]
+        // multi concept rule Step 1: Q1 → ALLOW, Q2 / Q3 / Q4 → BLOCK (no WATCH); BOBs: every other colour must rank Q1
+        [InlineData("2203000201", "OWH", 100, "BLOCK", "BLOCK", "BLOCK-PEER", "COMMERCIAL")]   // Q4
+        [InlineData("2203000201", "BLU", 100, "ALLOW", "PEER_Q1", "PEER-Q1", "NONE")]          // Q1
+        [InlineData("2203000201", "BEG", 100, "BLOCK", "BLOCK", "BLOCK-PEER", "COMMERCIAL")]   // Q2 (was ALLOW)
+        [InlineData("2203000202", "BLK", 100, "BLOCK", "BLOCK", "BLOCK-PEER", "COMMERCIAL")]   // Q3 below the average (was WATCH)
+        [InlineData("2203009106", "BLU", 100, "BLOCK", "BLOCK", "BLOCK-PEER", "COMMERCIAL")]   // Q3 near the average (was ALLOW)
+        [InlineData("2203000201", "ZZZ", 100, "BLOCK", "BLOCK", "BLOCK-BOBS", "COMMERCIAL")]   // a sibling Q4 (was WATCH)
+        [InlineData("2203000203", "ZZZ", 100, "BLOCK", "BLOCK", "BLOCK-BOBS", "COMMERCIAL")]   // a sibling Q2 (was ALLOW)
         [InlineData("2203000204", "BLK", 100, "ALLOW", "LOW_HISTORY", "WOF-00", "NONE")]
         [InlineData("8800000001", "BLK", 100, "HOLD", "NO_PLAN_DATA", "PLAN-00", "COMMERCIAL")]   // v1.1.6 D1: No Plan Available → HOLD (was ALLOW)
         [InlineData("8800000002", "WHT", 100, "WATCH", "MIX_BELOW_MIN", "MIX-01", "CATHEAD")]  // v1.1.6 D3: no F3 sale → Watch List

@@ -277,6 +277,10 @@ namespace DecisionEngine.Tool1
             return m;
         }
 
+        /// <summary>The rank label of a percentile (multi concept rule Step 1: only Q1 is allowed).</summary>
+        public static string QuartileLabel(double pct) =>
+            pct <= 25 ? "Q4 — Slow Seller (Block)" : pct <= 50 ? "Q3 — Block" : pct <= 75 ? "Q2 — Block" : "Q1 — Top 25% (Allow)";
+
         private static Tool1CardADto BuildA(Tool1EngineAResult r, EngineParams p, string dc, string decision)
         {
             var dto = new Tool1CardADto();
@@ -300,7 +304,7 @@ namespace DecisionEngine.Tool1
             if (!string.IsNullOrEmpty(r.Quartile) && r.Percentile != null)
             {
                 var pct = r.Percentile.Value;
-                var label = pct <= 25 ? "Q4 — Slow Seller" : pct <= 50 ? "Q3 — Watch" : pct <= 75 ? "Q2 — Healthy" : "Q1 — Top Seller";
+                var label = QuartileLabel(pct);
                 var n = r.CleanPool.Count > 0 ? N(r.CleanPool.Count) : r.PeerPool.Count > 0 ? N(r.PeerPool.Count) : "?";
                 dto.Step3 = new Tool1QuartileDto
                 {
@@ -310,7 +314,8 @@ namespace DecisionEngine.Tool1
                     Position = Math.Min(Math.Max(pct, 2), 98), Percentile = pct
                 };
             }
-            if (r.Pdstr != null && r.Pdstr < r.PeerAvg && (r.Quartile == "Q4" || r.Quartile == "Q3"))
+            // only a result that went through the (pre-Step 1) border zone check carries BorderTolUsed
+            if (r.BorderTolUsed != null && r.Pdstr != null && r.Pdstr < r.PeerAvg && (r.Quartile == "Q4" || r.Quartile == "Q3"))
             {
                 var bt2 = r.BorderTolUsed is { } bu && JsOps.Truthy(bu) ? bu : JsOps.Or(p.BorderTolerance, 10);
                 var bz = r.InBorderZone == true;

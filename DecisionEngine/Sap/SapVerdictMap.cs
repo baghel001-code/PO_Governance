@@ -12,17 +12,13 @@ namespace DecisionEngine.Sap
         CoverAboveNorm,
         CoverNoHeadroom,
         MixBelowMin,
-        // Multi Concept (runEngineA) — True Repeat / BOBs fallthrough peer ranking
+        // Multi Concept (Tool1EngineA, rule Step 1) — True Repeat peer ranking: only Q1 is allowed
         PeerQ1,
-        PeerQ2,
-        PeerQ3WithinBorder,
-        PeerQ3BeyondBorder,
-        PeerQ4Softened,
-        BlockQ4,
+        BlockBelowQ1,
         BlockAbsolute,
-        // Multi Concept — BOBs siblings
+        // Multi Concept — BOBs: every other colour must rank Q1
         BobsSiblingsOk,
-        BobsSiblingLow,
+        BlockBobsSibling,
         LowHistory,
         NoPeerPool,
         // NEW article
@@ -42,7 +38,7 @@ namespace DecisionEngine.Sap
     /// <item>Single Concept quantity above Max Permissible with Max Permissible &gt; 0 → REDUCE + max_qty</item>
     /// <item>Max Permissible 0 (Hold — Don't Raise) → HOLD; v1.1.6 "No Plan Available" Hold (no F4 plan in the requirement
     /// window) → HOLD with reason NO_PLAN_DATA</item>
-    /// <item>Watch List → WATCH (route CATHEAD)</item>
+    /// <item>Watch List → WATCH (route CATHEAD) — single concept only (multi concept rule Step 1: no Watch List)</item>
     /// <item>Block → BLOCK (code B) with reason_code BLOCK — or HOLD with reason_code BLOCK when
     /// <c>SapInterface:BlockVerdict = HOLD</c> (spec v1.4 without BLOCK; one switch, see <see cref="VerdictFor"/>)</item>
     /// <item>Cannot Validate / unknown article → not decidable: 422 for the request, or WATCH CANNOT_VALIDATE per item
@@ -65,15 +61,11 @@ namespace DecisionEngine.Sap
             new SapVerdictRule(SapOutcomePath.CoverAboveNorm, Decisions.Hold, SapVerdicts.Reduce, "COVER_ABOVE_NORM", "COVER-01", "Cover above the norm: reduce to Max Permissible"),
             new SapVerdictRule(SapOutcomePath.CoverNoHeadroom, Decisions.Hold, SapVerdicts.Hold, "COVER_NO_HEADROOM", "COVER-02", "Existing stock + pending already above the norm: Max Permissible 0"),
             new SapVerdictRule(SapOutcomePath.MixBelowMin, Decisions.WatchList, SapVerdicts.Watch, "MIX_BELOW_MIN", "MIX-01", "Colour mix below the minimum share of its MC-MRP"),
-            new SapVerdictRule(SapOutcomePath.PeerQ1, Decisions.Allow, SapVerdicts.Allow, "PEER_Q1", "PEER-Q1", "Ranks Q1 in its BSR peer group"),
-            new SapVerdictRule(SapOutcomePath.PeerQ2, Decisions.Allow, SapVerdicts.Allow, "PEER_Q2", "PEER-Q2", "Ranks Q2 in its BSR peer group"),
-            new SapVerdictRule(SapOutcomePath.PeerQ3WithinBorder, Decisions.Allow, SapVerdicts.Allow, "PEER_Q3", "PEER-Q3-OK", "Ranks Q3, at or near the peer average"),
-            new SapVerdictRule(SapOutcomePath.PeerQ3BeyondBorder, Decisions.WatchList, SapVerdicts.Watch, "PEER_Q3", "PEER-Q3-GAP", "Ranks Q3, below the peer average beyond the border zone"),
-            new SapVerdictRule(SapOutcomePath.PeerQ4Softened, Decisions.WatchList, SapVerdicts.Watch, "PEER_Q4", "PEER-Q4-WATCH", "Ranks Q4 but at or near the peer average"),
-            new SapVerdictRule(SapOutcomePath.BlockQ4, Decisions.Block, SapVerdicts.Block, BlockReasonCode, "BLOCK-Q4", "Block: ranks Q4, confirmed slow seller", IsBlock: true),
+            new SapVerdictRule(SapOutcomePath.PeerQ1, Decisions.Allow, SapVerdicts.Allow, "PEER_Q1", "PEER-Q1", "Ranks Q1 (top 25 %) in its BSR peer group (same Brand, MC, MRP, Flag)"),
+            new SapVerdictRule(SapOutcomePath.BlockBelowQ1, Decisions.Block, SapVerdicts.Block, BlockReasonCode, "BLOCK-PEER", "Block: ranks below Q1 (top 25 %) in its BSR peer group", IsBlock: true),
             new SapVerdictRule(SapOutcomePath.BlockAbsolute, Decisions.Block, SapVerdicts.Block, BlockReasonCode, "BLOCK-ABS", "Block: sell-thru below 1 %/day after 4+ weeks on floor", IsBlock: true),
-            new SapVerdictRule(SapOutcomePath.BobsSiblingsOk, Decisions.Allow, SapVerdicts.Allow, "BOBS_SIBLINGS_OK", "BOBS-01", "New colour: all sibling colours rank Q1/Q2"),
-            new SapVerdictRule(SapOutcomePath.BobsSiblingLow, Decisions.WatchList, SapVerdicts.Watch, "BOBS_SIBLING_LOW", "BOBS-02", "New colour: a sibling colour ranks Q3/Q4"),
+            new SapVerdictRule(SapOutcomePath.BobsSiblingsOk, Decisions.Allow, SapVerdicts.Allow, "BOBS_SIBLINGS_OK", "BOBS-01", "New colour: all other colours of the option rank Q1"),
+            new SapVerdictRule(SapOutcomePath.BlockBobsSibling, Decisions.Block, SapVerdicts.Block, BlockReasonCode, "BLOCK-BOBS", "Block: new colour, another colour of the option ranks below Q1", IsBlock: true),
             new SapVerdictRule(SapOutcomePath.LowHistory, Decisions.Allow, SapVerdicts.Allow, "LOW_HISTORY", "WOF-00", "Too little selling history (weeks on floor below the gate), allowed"),
             new SapVerdictRule(SapOutcomePath.NoPeerPool, Decisions.Allow, SapVerdicts.Allow, "NO_PEER_POOL", "PEER-00", "No BSR peer group available, allowed"),
             new SapVerdictRule(SapOutcomePath.NewArticle, Decisions.AutoAllow, SapVerdicts.Allow, "NEW_ARTICLE", "NEW-00", "New article: not in Universe Master or BSR"),
@@ -118,12 +110,10 @@ namespace DecisionEngine.Sap
                 var reason = a?.DecisionReason ?? o.DecisionReason ?? "";
                 var q = a?.Quartile;
                 if (d == Decisions.Block)
-                    return reason.StartsWith("Absolute Block override", StringComparison.Ordinal) ? SapOutcomePath.BlockAbsolute : SapOutcomePath.BlockQ4;
-                if (d == Decisions.WatchList)
                 {
-                    if (reason.StartsWith("BOBs: ", StringComparison.Ordinal) && reason.Contains("sibling colourway", StringComparison.Ordinal))
-                        return SapOutcomePath.BobsSiblingLow;
-                    return q == "Q3" ? SapOutcomePath.PeerQ3BeyondBorder : SapOutcomePath.PeerQ4Softened;
+                    if (reason.StartsWith("Absolute Block override", StringComparison.Ordinal)) return SapOutcomePath.BlockAbsolute;
+                    return a?.OptionType == "BOBs" || reason.StartsWith("BOBs: ", StringComparison.Ordinal)
+                        ? SapOutcomePath.BlockBobsSibling : SapOutcomePath.BlockBelowQ1;
                 }
                 if (d == Decisions.Allow || d == Decisions.AutoAllow)
                 {
@@ -131,13 +121,7 @@ namespace DecisionEngine.Sap
                     if (reason.Contains("Insufficient", StringComparison.Ordinal) || reason.StartsWith("BOBs: No sibling", StringComparison.Ordinal))
                         return SapOutcomePath.LowHistory;
                     if (reason.Contains("peer pool", StringComparison.OrdinalIgnoreCase)) return SapOutcomePath.NoPeerPool;
-                    return q switch
-                    {
-                        "Q1" => SapOutcomePath.PeerQ1,
-                        "Q2" => SapOutcomePath.PeerQ2,
-                        "Q3" or "Q4" => SapOutcomePath.PeerQ3WithinBorder,
-                        _ => SapOutcomePath.NoPeerPool
-                    };
+                    return q == Tool1EngineA.AllowQuartile ? SapOutcomePath.PeerQ1 : SapOutcomePath.NoPeerPool;
                 }
                 return SapOutcomePath.CannotValidate;
             }

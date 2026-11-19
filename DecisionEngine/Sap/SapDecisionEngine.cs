@@ -213,7 +213,6 @@ namespace DecisionEngine.Sap
             var effT = b?.EffectiveT is double e ? Js.NumberToString(Js.Round(e)) : Js.NumberToString(Js.Round(p.T1 * (1 + p.StrBuffer / 100)));
             var cover = m.CoverDays is double cd ? Js.NumberToString(cd) : "?";
             var pd = a?.Pdstr is double x ? Pct(x * 100) : "?";
-            var gap = a?.GapPct is double gp ? Js.NumberToString(gp) : "?";
             var grp = itemsInGroup > 1 ? " for " + itemsInGroup + " items together (" + Js.Fmt(qty) + " pcs ordered)" : "";
             return path switch
             {
@@ -225,15 +224,11 @@ namespace DecisionEngine.Sap
                 SapOutcomePath.MixBelowMin => b != null && b.DecisionReason.StartsWith("No sale in F3", StringComparison.Ordinal)
                     ? "No sale in F3 for the MC: colour share cannot be worked out, treated like a share under the " + Js.NumberToString(p.Mix) + "% minimum"
                     : "Colour mix " + Pct((b?.MixPct ?? 0) * 100) + "% below the " + Js.NumberToString(p.Mix) + "% minimum of its MC-MRP",
-                SapOutcomePath.PeerQ1 or SapOutcomePath.PeerQ2 => "Ranks " + a?.Quartile + " in its peer group (sell-thru " + pd + "%/day): healthy seller",
-                SapOutcomePath.PeerQ3WithinBorder => "Ranks Q3 (sell-thru " + pd + "%/day), at or near the peer average",
-                SapOutcomePath.PeerQ3BeyondBorder => "Ranks Q3, sell-thru " + gap + "% below the peer average (beyond the " +
-                                                     Js.NumberToString(a?.BorderTolUsed ?? p.BorderTolerance) + "% border zone)",
-                SapOutcomePath.PeerQ4Softened => "Ranks Q4 but at or near the peer average (sell-thru " + pd + "%/day)",
-                SapOutcomePath.BlockQ4 => "Ranks Q4, sell-thru " + gap + "% below the peer average: confirmed slow seller",
+                SapOutcomePath.PeerQ1 => "Ranks Q1 (top 25%) in its peer group (sell-thru " + pd + "%/day): top seller",
+                SapOutcomePath.BlockBelowQ1 => "Ranks " + a?.Quartile + " in its peer group (sell-thru " + pd + "%/day): only Q1 (top 25%) is allowed",
                 SapOutcomePath.BlockAbsolute => "Sell-thru " + pd + "%/day below 1% after " + Js.NumberToString(a?.Wof ?? 0) + " weeks on floor: confirmed slow seller",
-                SapOutcomePath.BobsSiblingsOk => "New colour: all sibling colours rank Q1/Q2",
-                SapOutcomePath.BobsSiblingLow => "New colour: at least one sibling colour ranks Q3/Q4",
+                SapOutcomePath.BobsSiblingsOk => "New colour: all other colours of the option rank Q1",
+                SapOutcomePath.BlockBobsSibling => "New colour: another colour of the option ranks " + a?.Quartile + " (only Q1 is allowed)",
                 SapOutcomePath.LowHistory => "Less than " + Js.NumberToString(p.Wof) + " weeks of selling history: allowed",
                 SapOutcomePath.NoPeerPool => "No BSR peer group available: allowed",
                 SapOutcomePath.NewArticle => "New article (not in Universe Master or BSR): allowed",

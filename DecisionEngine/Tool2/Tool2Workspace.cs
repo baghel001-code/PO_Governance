@@ -244,7 +244,8 @@ namespace DecisionEngine.Tool2
                     s.Step3Heading = "Step 3 — Quartile Ranking (" + N(r.Percentile) + "th pct — " + n + " styles)";
                     s.Step3MarkerPos = Math.Min(Math.Max(r.Percentile.Value, 2), 98);
                 }
-                if (r.Pdstr != null && r.PeerAvg != null && r.Pdstr < r.PeerAvg && (r.Quartile == "Q4" || r.Quartile == "Q3"))
+                // only a line that went through the (pre-Step 1) border zone check carries BorderTolUsed
+                if (r.BorderTolUsed != null && r.Pdstr != null && r.PeerAvg != null && r.Pdstr < r.PeerAvg && (r.Quartile == "Q4" || r.Quartile == "Q3"))
                 {
                     var bt2 = N(r.BorderTolUsed is double bu && bu != 0 ? bu : BorderTol);
                     var bz = r.InBorderZone;

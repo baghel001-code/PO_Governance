@@ -23,7 +23,7 @@ Multi concept is unchanged.
 |---|---|
 | `Domain` | Constants (roles, app constants), store entities, exceptions, records, settings — no business rules; `Entities/Sap` = the SAP contract classes (snake_case, as the YAML) and the SAP monitoring DTOs, `AppSettings/SapInterfaceSettings` |
 | `DecisionEngine` | **The core business-logic layer, BCL only (no project / package references).** Every verdict algorithm as synchronous, side-effect-free engines: `Tool1` (New Request decisions), `Tool2` (PO Assessment), `Recommendation`, `Grc` (back-testing, season selection), `Analytics` (attribute analysis, insights dashboards, AI prompt context, help values); the data model (`Model`: `EngineData`, `EngineParams`, `SheetRow`, dataset keys, decision labels), JS-semantics helpers (`Common`: `Js`, `JsObjectMap` …) and the result models (`Results`); `Sap` = the SAP /decisions verdict (`SapDecisionEngine` over Tool 1, `SapVerdictMap`, input normalisation). See `DecisionEngine/README.md` |
-| `Application` | Interfaces for IO (`Interfaces/V1`: dataset cache, request ledger, clock, store …), the use-case services in `Services/V1` that load data and call the engines (`Tool1`, `Tool2`, `Recommendation`, `Analytics`), `Ingest` (Excel / ZIP / raw-export import), `Platform` (accounts, requests ledger, approvals, history, runs, params, feedback, audit, backups), `Sap` (decisions, events, technical-user Basic auth, monitoring — `Interfaces/V1/Sap`, `Services/V1/Sap`), DI registration (`DIResolver`) |
+| `Application` | Interfaces for IO (`Interfaces/V1`: dataset cache, request ledger, clock, store …), the use-case services in `Services/V1` that load data and call the engines (`Tool1`, `Tool2`, `Recommendation`, `Analytics`), `Ingest` (Excel / ZIP / raw-export import), `Platform` (accounts, requests ledger, approvals, history, runs, params, feedback, audit, backups), `Sap` (decisions, events, technical-user Basic auth, monitoring — `Interfaces/V1/Sap`, `Services/V1/Sap`), `Mapping` (our own object mapper — replaces the AutoMapper package, see *Object mapping*), DI registration (`DIResolver`) |
 | `Infrastructure` | SQL Server store (`Utilitys/DapperHelper` + `PRO_*` procedures) and PostgreSQL store, dataset cache, password hashing, Excel reader / writers, AI client, backups, middleware (`StaticTokenMiddleware`, exceptions, `SapInterfaceMiddleware`: IP allow-list / SAP error bodies), the `SapBasic` authentication scheme, `Repositories/SapSqlServerRepository` (`PRO_SAP_*`), the portal's HTTP client (`Services/V1/APICallService`, QPS), DI registration |
 | `POGovApi` | REST API, `Controllers/V1/*`, QPS routes `api/v1/[Action]` (Swagger at `/swagger` in Development) — see *API conventions*; `Controllers/Sap/SapController` = the SAP-facing `/api/sap/v1/{ping, reason-codes, events, decisions}` (routes fixed by the spec, Basic auth, not in the API master) |
 | `Admin` | The portal (MudBlazor). Talks only to the API, by task name through the API master (`IAPICall.CallingAPI(AllApiNames.X, req)`); uses the `DecisionEngine.Results` models as its view models |
@@ -165,6 +165,63 @@ X-Session-Token and the API master do not apply there):
 `tests/POGovernance.Tests/Architecture/ApiMasterConventionTests` fails when one of steps 1–4 is missing (it also checks that
 `POGovApi/Controllers/Sap` serves exactly the four spec paths with the `SapBasic` scheme).
 
+## Object mapping
+
+The solution has **its own small object mapper** in `Application/Mapping` instead of the AutoMapper package (AutoMapper 13.0.1
+had known high-severity vulnerabilities — GHSA-rvv3-g6hj-g44x, GHSA-gpwp-5797-mjff, GHSA-6vhm-j9h7-f9gh — and was referenced
+but never used). It keeps AutoMapper's everyday API, so code reads the same, with no third-party dependency.
+
+**Declare maps** in a `MapProfile` (public, non-abstract, parameterless constructor):
+
+```csharp
+using Application.Mapping;
+
+public sealed class UserProfile : MapProfile
+{
+    public UserProfile()
+    {
+        CreateMap<AppUser, UserDto>()
+            .ForMember(d => d.DisplayName, o => o.MapFrom(s => s.Name ?? s.Email))   // computed member
+            .ForMember(d => d.PasswordHash, o => o.Ignore())                         // left alone
+            .AfterMap((s, d) => d.Summary = $"{d.DisplayName} ({d.Role})");        // after the members
+        CreateMap<Address, AddressDto>().ReverseMap();                               // both directions
+        CreateMap<Money, string>().ConvertUsing(m => m.ToString());                  // whole-type converter
+    }
+}
+```
+
+**Use it** through DI — the API registers it in `POGovApi/Program.cs` with `builder.Services.AddMapping()`
+(`Application/DIResolver/MappingRegistration.cs`; pass assemblies to scan others: `AddMapping(typeof(X).Assembly)`):
+
+```csharp
+public sealed class UsersService(IMapper mapper) { … mapper.Map<UserDto>(user) … mapper.Map<List<UserDto>>(users) … mapper.Map(src, existing) … }
+```
+
+`AddMapping` finds the profiles, **validates them at start-up** (`AssertConfigurationIsValid`: a destination member with no
+source of the same name and no `ForMember`, a nested type without a map, a `ForMember` for a member that does not exist, a
+destination that cannot be constructed — all problems in one error, the API does not start) and registers `MapperConfiguration`
+and `IMapper` as singletons (thread-safe, the plan per map is built once). Outside DI:
+`new MapperConfiguration(new UserProfile()).CreateMapper()` or `new MapperConfiguration(cfg => cfg.CreateMap<A, B>())`.
+
+**Rules** (`Application/Mapping/Mapper.cs`):
+* Members match **by name, case-insensitive**: public properties / fields of the source → public settable (or `init`)
+  properties / non-readonly fields of the destination. A destination without a parameterless constructor (records, immutable
+  classes) is built through the public constructor with the most parameters that all match source members (or have defaults).
+* Values are converted to the destination type: a declared map (nested objects, also for a base type / interface of the
+  source) → a new object; collections (array, `List`, `IList`, `ICollection`, `IEnumerable`, `IReadOnlyList`,
+  `IReadOnlyCollection`, `HashSet`, `ISet`) → a **new** collection, element by element; `null` → empty collection or `default`;
+  anything → `string` (invariant culture); `T` ↔ `T?` (blank string → null); enums from a name (case-insensitive) or a number,
+  enum → enum by name then number; string → `Guid`; `DateTime` → `DateTimeOffset`; other numbers / `IConvertible` with
+  `Convert.ChangeType` (invariant culture). An assignable value of a non-collection type is copied **by reference**.
+* Errors are `MappingException` with the map and member in the message ("No map from User to UserDto - add
+  CreateMap<User, UserDto>() to a MapProfile", "User -> UserDto, member 'Limit': …"). A reference cycle stops after 64 levels.
+* Not supported (on purpose — keep it small): flattening (`Customer.Name` → `CustomerName`, use `MapFrom`), `ProjectTo` /
+  `IQueryable`, value resolver / type converter classes (use `MapFrom` / `ConvertUsing` lambdas), conditions, mapping into
+  existing nested objects (nested members get a new object), dictionaries (copied by reference when assignable).
+
+Do not add the AutoMapper package (or `AutoMapper.Extensions.*`) again: `tests/POGovernance.Tests/Architecture/NoAutoMapperTests`
+fails if any project references it.
+
 ## Testing
 
 ```bash
@@ -182,6 +239,8 @@ harness again (each harness has the command in its header comment). `tests/POGov
 outcome, Block → HOLD / BLOCK), input normalisation, idempotency / 409 / timeout → 503, events (parking, duplicates, LATE), the
 IP allow-list, and contract tests that compare the classes and real answers with `po-governance-sap-api.yaml` (YamlDotNet, test
 project only); `tests/POGovernance.Tests/SqlServer/SapSqlServerTests` runs the PRO_SAP_* procedures on SQL Server.
+`tests/POGovernance.Tests/Mapping/MapperTests` covers the object mapper (conventions, conversions, nested maps, collections,
+records, `ForMember` / `ReverseMap` / `AfterMap` / `ConvertUsing`, errors, validation, DI registration).
 
 ## Documents
 

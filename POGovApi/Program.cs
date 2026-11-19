@@ -26,6 +26,8 @@ builder.WebHost.ConfigureKestrel(k => k.Limits.MaxRequestBodySize = (long)maxMb 
 // ── services ───────────────────────────────────────────────────────────
 builder.Services.AddInfrastructure(builder.Configuration);
 builder.Services.AddPlatformServices();
+// ── object mapper (Application/Mapping, our own - replaces AutoMapper): MapProfile classes, IMapper singleton ─
+builder.Services.AddMapping();
 // ── decision engines, recommendation, analytics (Application) + their Excel writers (Infrastructure) ─
 builder.Services.AddRecommendationServices();
 builder.Services.AddRecommendationExcel();

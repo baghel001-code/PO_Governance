@@ -41,6 +41,8 @@ namespace DecisionEngine.Model
         public IReadOnlyList<SheetRow>? ColMaster => Get(DatasetKeys.ColMaster);
         public IReadOnlyList<SheetRow>? AttrRel => Get(DatasetKeys.AttrRel);
         public IReadOnlyList<SheetRow>? CatHeadMap => Get(DatasetKeys.CatHeadMap);
+        /// <summary>The Entry / Mid / Fashion mapping (rows as written by the upload: <see cref="Common.EmfMapping"/> columns).</summary>
+        public IReadOnlyList<SheetRow>? Emf => Get(DatasetKeys.Emf);
         public IReadOnlyList<SheetRow>? Grc => Get(DatasetKeys.Grc);
 
         /// <summary>

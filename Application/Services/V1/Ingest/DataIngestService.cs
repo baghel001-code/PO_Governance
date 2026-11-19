@@ -48,6 +48,7 @@ namespace Application.Services.V1.Ingest
         /// <remarks>Port of index.html loadFile / readOne (line 2016).</remarks>
         public IngestResult ParseFiles(string key, IReadOnlyList<IngestUpload> files, IReadOnlyList<SheetRow>? existingRows = null)
         {
+            if (key == DatasetKeys.Emf) return ParseEmf(files);
             var result = new IngestResult { Source = IngestSources.Files, SourceFiles = files.Select(f => f.FileName).ToList() };
             var rep = result.Report;
             var merged = new List<SheetRow>();
@@ -93,6 +94,60 @@ namespace Application.Services.V1.Ingest
                 rep.Errors.Add(msg);
                 if (merged.Count == 0) result.Error = msg;
             }
+            return result;
+        }
+
+        // ── Entry / Mid / Fashion mapping (multi concept rule) ─────────
+
+        /// <summary>
+        /// The Entry / Mid / Fashion mapping upload (<see cref="EmfImport"/>): the rows that pass the checks replace the whole
+        /// previous mapping; the rejected rows are listed in <see cref="IngestReport.Rejected"/>. Nothing is saved when no row passes.
+        /// </summary>
+        public IngestResult ParseEmf(IReadOnlyList<IngestUpload> files)
+        {
+            var result = new IngestResult { Source = IngestSources.Files, SourceFiles = files.Select(f => f.FileName).ToList() };
+            var rep = result.Report;
+            var key = DatasetKeys.Emf;
+            var books = new List<(string, WorkbookData)>();
+            var errors = new List<string>();
+            foreach (var f in files)
+            {
+                try { books.Add((f.FileName, _reader.Read(f.Content, f.FileName))); }
+                catch (Exception e) when (e is not OperationCanceledException)
+                {
+                    errors.Add(f.FileName);
+                    rep.Files.Add(new IngestFileRows(f.FileName, 0, false, e.Message));
+                }
+            }
+            var emf = EmfImport.Parse(books);
+            rep.Rejected = emf.Rejected;
+            rep.DuplicatesIgnored = emf.DuplicatesIgnored;
+            foreach (var (name, _) in books)
+                rep.Files.Add(new IngestFileRows(name, emf.Rows.Count, !emf.NoHeader.Contains(name), emf.NoHeader.Contains(name) ? EmfImport.ColumnsMissing : null));
+
+            string? fail = null;
+            if (errors.Count > 0 && books.Count == 0) fail = "Error: " + string.Join(", ", errors);
+            else if (emf.NoHeader.Count == books.Count) fail = EmfImport.ColumnsMissing;
+            else if (emf.Rows.Count == 0) fail = "Not loaded: all " + emf.RowsRead + " rows were rejected (see the list) — the previous mapping is kept";
+            if (fail != null)
+            {
+                rep.Status = "✗ " + fail;
+                rep.StatusIsError = true;
+                rep.SlotStatus[key] = rep.Status;
+                rep.Toasts.Add(fail);
+                rep.Errors.Add(fail);
+                result.Error = fail;
+                return result;
+            }
+
+            var from = files.Count > 1 ? files.Count + " files" : files[0].FileName;
+            var lbl = "✓ " + emf.Rows.Count + " rows — " + from + (emf.Rejected.Count > 0 ? " · " + emf.Rejected.Count + " rejected" : "");
+            rep.Status = lbl;
+            rep.SlotStatus[key] = lbl;
+            rep.Toasts.Add("Loaded " + emf.Rows.Count + " rows" + (emf.Rejected.Count > 0 ? " — " + emf.Rejected.Count + " rejected, see the list" : ""));
+            if (emf.DuplicatesIgnored > 0) rep.Warnings.Add(emf.DuplicatesIgnored + " repeated row(s) (same Brand, MC, Flag, MRP and tag) loaded once");
+            if (errors.Count > 0) rep.Errors.Add("Error: " + string.Join(", ", errors));
+            result.Keys.Add(new IngestKeyPayload { Key = key, Label = Label(lbl), Rows = emf.Rows.Count, NewRows = emf.Rows.Count, Payload = Payload(emf.Rows) });
             return result;
         }
 

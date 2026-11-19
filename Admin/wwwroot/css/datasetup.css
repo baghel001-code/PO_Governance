@@ -55,6 +55,16 @@
 .ds-report .r-amb { color: #B45309; }
 .ds-report .r-gap { height: 9px; }
 
+/* Entry / Mid / Fashion mapping: rejected rows of the last upload (EmfRejectedBox) */
+.ds-emf-rej { font-size: 11px; color: #1A2B4A; line-height: 1.55; padding: 9px 12px; border-radius: 10px; margin-top: -4px; margin-bottom: 10px;
+              background: #FFFBEB; border: 1px solid #FCD34D; }
+.ds-emf-rej-h { font-weight: 700; color: #8A5A00; margin-bottom: 6px; }
+.ds-emf-rej-wrap { max-height: 260px; overflow: auto; background: #fff; border: 1px solid #F3E3B5; border-radius: 6px; }
+.ds-emf-rej table { border-collapse: collapse; width: 100%; font-size: 10.5px; }
+.ds-emf-rej th { position: sticky; top: 0; background: #FEF3C7; text-align: left; font-weight: 700; padding: 4px 6px; white-space: nowrap; }
+.ds-emf-rej td { padding: 3px 6px; border-top: 1px solid #F3E3B5; vertical-align: top; }
+.ds-emf-rej-more { margin-top: 6px; color: #8A5A00; }
+
 .ds-rules { margin-top: 6px; font-size: 11px; color: rgba(255,255,255,0.6); }
 .ds-rules summary { cursor: pointer; font-weight: 600; }
 .ds-rules > div { padding: 8px 4px; line-height: 1.8; }

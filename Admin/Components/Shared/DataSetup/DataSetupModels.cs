@@ -83,6 +83,12 @@ namespace Admin.Components.Shared.DataSetup
             "DETAIL sheet · Generic Material, Color, MC CD, MRP, WOF, AVG PERDAY SELL THRU% · Uploads to this slot <strong>accumulate</strong> — dump every season's Best Seller files here, any time, in any order. Which season each row counts as Current/Fallback is decided below by Season Selection, not by upload — nothing here needs re-uploading when a new season starts.",
             Multiple: true, Idle: "Click to upload (Ctrl for multiple)", Clearable: true);
 
+        /// <summary>Multi concept rule: the Entry / Mid / Fashion mapping (DecisionEngine.Common.EmfMapping, Application EmfImport).</summary>
+        public static readonly SlotDef Emf = new(DatasetKeys.Emf, "Entry / Mid / Fashion Mapping",
+            "Brand (At_Brand) · MC Code · Flag · MRP · <strong>EMF</strong> = Entry, Mid or Fashion (1.ENTRY / 2.MID / 3.FASHION are fine). " +
+            "Each upload <strong>replaces</strong> the previous mapping. Rows with any other tag (or a missing Brand / MC / Flag / MRP) are rejected and listed below the slot. " +
+            "Used by the multi concept minimum sell-thru (next step of the multi concept rule).");
+
         public static readonly SlotDef[] Masters =
         {
             new("artmaster", "Article Master", "Generic Material → Brand/Division/MC/MRP/Flag, and Style/Fit/Product Material/Design (required for Multi Concept MRP)"),
@@ -91,7 +97,7 @@ namespace Admin.Components.Shared.DataSetup
             new("catheadmap", "SCR Products / Cat Head Mapping", "Brand×MC CD×MRP → Buyer &amp; Category Head emails. Powers per-person Watchlist links, routes Watch List approvals, and <strong>creates logins</strong> for new buyers and category heads (Users tab)."),
         };
 
-        public static IEnumerable<SlotDef> AllFileSlots => SingleConcept.Append(Bsr).Concat(Masters);
+        public static IEnumerable<SlotDef> AllFileSlots => SingleConcept.Append(Bsr).Append(Emf).Concat(Masters);
     }
 
     /// <summary>Read-only stream wrapper that reports how many bytes have been read (upload progress).</summary>

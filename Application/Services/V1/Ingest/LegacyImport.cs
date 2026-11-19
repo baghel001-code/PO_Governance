@@ -18,8 +18,8 @@ namespace Application.Services.V1.Ingest
         /// <summary>index.html REQUIRED_KEYS (line 1652).</summary>
         public static readonly string[] RequiredKeys = { "f1", "f2", "f3", "f4", "um", "bsr" };
 
-        /// <summary>Slot keys with a loadFile upload slot on the Data Setup page.</summary>
-        public static readonly string[] SlotKeys = { "f1", "f2", "f3", "f4", "um", "bsr", "artmaster", "attrrel", "colmaster", "catheadmap" };
+        /// <summary>Slot keys with a loadFile upload slot on the Data Setup page (+ "emf", the Entry / Mid / Fashion mapping, read by <see cref="EmfImport"/>).</summary>
+        public static readonly string[] SlotKeys = { "f1", "f2", "f3", "f4", "um", "bsr", "artmaster", "attrrel", "colmaster", "catheadmap", "emf" };
 
         /// <summary>REQUIRED_LABELS of loadZipBundle.</summary>
         public static readonly IReadOnlyDictionary<string, string> RequiredLabels = new Dictionary<string, string>

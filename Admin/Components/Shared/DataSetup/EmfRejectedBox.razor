@@ -1,0 +1,55 @@
+@* The rows of the last Entry / Mid / Fashion mapping upload that were NOT loaded (IngestReport.Rejected, from the API's
+   EmfImport): Excel row, Brand, MC, Flag, MRP, the tag as written and the reason. Shown under the slot until the next upload. *@
+@using Application.DTOs.Ingest
+
+@if (Report is { } r && (r.Rejected.Count > 0 || r.DuplicatesIgnored > 0))
+{
+    var many = r.Rejected.Select(x => x.File + "|" + x.Sheet).Distinct().Count() > 1;
+    <div class="ds-emf-rej" id="emf-rejected" data-testid="emf-rejected">
+        @if (r.Rejected.Count > 0)
+        {
+            <div class="ds-emf-rej-h">⚠ @r.Rejected.Count.ToString("N0") row(s) rejected — not loaded. Only Entry, Mid and Fashion are allowed; correct them in the file and upload it again.</div>
+            <div class="ds-emf-rej-wrap">
+                <table>
+                    <thead>
+                        <tr>
+                            @if (many)
+                            {
+                                <th>File / sheet</th>
+                            }
+                            <th>Row</th><th>Brand</th><th>MC</th><th>Flag</th><th>MRP</th><th>Tag</th><th>Reason</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var x in r.Rejected.Take(MaxShown))
+                        {
+                            <tr>
+                                @if (many)
+                                {
+                                    <td>@x.File / @x.Sheet</td>
+                                }
+                                <td>@x.Row</td><td>@x.Brand</td><td>@x.Mc</td><td>@x.Flag</td><td>@x.Mrp</td>
+                                <td><strong>@(x.Tag.Length > 0 ? x.Tag : "(blank)")</strong></td><td>@x.Reason</td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+            @if (r.Rejected.Count > MaxShown)
+            {
+                <div class="ds-emf-rej-more">… and @((r.Rejected.Count - MaxShown).ToString("N0")) more</div>
+            }
+        }
+        @if (r.DuplicatesIgnored > 0)
+        {
+            <div class="ds-emf-rej-more">@r.DuplicatesIgnored.ToString("N0") repeated row(s) (same Brand, MC, Flag, MRP and tag) loaded once.</div>
+        }
+    </div>
+}
+
+@code {
+    /// <summary>The report of the last mapping upload (null = nothing to show).</summary>
+    [Parameter] public IngestReport? Report { get; set; }
+
+    private const int MaxShown = 300;
+}

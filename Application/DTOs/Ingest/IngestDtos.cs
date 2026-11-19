@@ -69,6 +69,11 @@ namespace Application.DTOs.Ingest
         public List<string> MissingRequired { get; set; } = new();
         public List<string> Errors { get; set; } = new();
 
+        /// <summary>Entry / Mid / Fashion mapping only: the rows that were not loaded, with the reason (every one of them).</summary>
+        public List<IngestRejectedRow> Rejected { get; set; } = new();
+        /// <summary>Entry / Mid / Fashion mapping only: exact repeats of a loaded row (same Brand, MC, Flag, MRP and tag), loaded once.</summary>
+        public int DuplicatesIgnored { get; set; }
+
         /// <summary>GRC only: "week" or "month".</summary>
         public string? GrcPeriodType { get; set; }
         /// <summary>GRC only: the periods found (MM.YYYY / WW.YYYY), oldest first.</summary>
@@ -113,5 +118,21 @@ namespace Application.DTOs.Ingest
         /// <summary>catheadmap only: logins created / updated from the SCR products file.</summary>
         public object? UsersSync { get; set; }
         public string? UsersError { get; set; }
+    }
+
+    /// <summary>A row of an upload that was rejected (Entry / Mid / Fashion mapping): where it is, its key, its tag and why.</summary>
+    public sealed class IngestRejectedRow
+    {
+        public string File { get; set; } = "";
+        public string Sheet { get; set; } = "";
+        /// <summary>The Excel row number (1 = first row of the sheet).</summary>
+        public int Row { get; set; }
+        public string Brand { get; set; } = "";
+        public string Mc { get; set; } = "";
+        public string Flag { get; set; } = "";
+        public string Mrp { get; set; } = "";
+        /// <summary>The tag as written in the file.</summary>
+        public string Tag { get; set; } = "";
+        public string Reason { get; set; } = "";
     }
 }

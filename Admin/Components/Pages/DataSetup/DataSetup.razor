@@ -80,6 +80,8 @@
         <div class="sb-sec">
             <div class="sb-lbl">Multi Concept MRP Inputs</div>
             @FileSlot(DataSetupText.Bsr)
+            @FileSlot(DataSetupText.Emf)
+            <EmfRejectedBox Report="_emfReport" />
             <div class="uslot" style="cursor:default" id="sl-season-selection">
                 <div class="us-name">Season Selection</div>
                 <div class="us-desc" style="margin-bottom:10px">Reads every distinct Season value found in Article Master. Defaults to the latest season as Current and the next-latest as Fallback — rolls forward on its own as new seasons appear. Click a pill to add or remove it from a group; combine two seasons in Current during a transition, then drop back to one when it's over.</div>
@@ -189,7 +191,7 @@
     private readonly SlotState _zip = new() { Status = "Click to upload .zip" };
     private readonly SlotState _raw = new() { Status = "Click to upload raw files" };
     private Dictionary<string, DatasetEntry>? _datasets;
-    private IngestReport? _zipReport, _rawReport;
+    private IngestReport? _zipReport, _rawReport, _emfReport;
     private List<string>? _grcPeriods;
     private string? _grcPeriodType, _grcDefault;
     private string? _lastUploadId;
@@ -423,6 +425,7 @@
         }
 
         if (kind == "zip") _zipReport = rep ?? (res.IsSuccess ? null : new IngestReport { Errors = { res.responseMessage ?? "" } });
+        if (kind == DatasetKeys.Emf) _emfReport = rep;   // rejected rows of the Entry / Mid / Fashion mapping (also when nothing was loaded)
         if (kind == "raw") _rawReport = rep ?? (res.IsSuccess ? null : new IngestReport { Errors = { res.responseMessage ?? "" } });
 
         // datasets saved → each slot shows what is on the server now (shared.js markSlot)

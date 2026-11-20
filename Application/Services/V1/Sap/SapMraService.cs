@@ -115,9 +115,14 @@ namespace Application.Services.V1.Sap
         private readonly SapInterfaceSettings _cfg;
         private readonly ILogger<SapMraFeedService> _log;
 
-        public SapMraFeedService(IMraRepository repo, IMraCapacitySource source, IAppClock clock, IOptions<SapInterfaceSettings> cfg, ILogger<SapMraFeedService> log)
+        private readonly ISapDecisionService? _decisions;
+
+        /// <param name="decisions">Gives the portal base URL of this environment for GET /verdict-url (optional: without it the
+        /// host of the decision's stored link is used).</param>
+        public SapMraFeedService(IMraRepository repo, IMraCapacitySource source, IAppClock clock, IOptions<SapInterfaceSettings> cfg, ILogger<SapMraFeedService> log,
+                                 ISapDecisionService? decisions = null)
         {
-            _repo = repo; _source = source; _clock = clock; _cfg = cfg.Value; _log = log;
+            _repo = repo; _source = source; _clock = clock; _cfg = cfg.Value; _log = log; _decisions = decisions;
         }
 
         public async Task<SapCallResult> ReceiveAsync(string kind, string body, SapCallContext caller, CancellationToken ct = default)
@@ -171,8 +176,10 @@ namespace Application.Services.V1.Sap
             if (!MraNoRx.IsMatch(raw)) throw new SapApiException(400, SapErrorCodes.ValidationFailed, "mra_no is not valid (letters, digits, - and _, max 40)");
             var no = MraNorm.NoZeros(raw);
             var link = await _repo.VerdictLinkAsync(no, ct);
-            // the MRA page (same content as the MRA Queues panel) on the portal of the decision's verdict link
-            var url = MraVerdictLinks.PageUrl(link?.ViewUrl, no);
+            // the MRA page (same content as the MRA Queues panel) on the portal of THIS environment now (app setting
+            // SapInterface:VerdictLink:PortalBaseUrl, else API_BASE_URL POGOV_PORTAL) with the decision's token
+            var portalBase = _decisions != null ? await _decisions.VerdictLinkBaseAsync(ct) : null;
+            var url = MraVerdictLinks.PageUrl(link?.ViewUrl, no, portalBase);
             if (url == null)
                 throw new SapApiException(404, SapErrorCodes.MraNotFound,
                     "No verdict for MRA " + no + " - send it as document_no to POST /documents with the request_id of the checked PO");

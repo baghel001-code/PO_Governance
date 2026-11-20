@@ -250,7 +250,10 @@ head maintains them on `/admin/sap` → *Reason codes* (code ≤ 4, text ≤ 60 
   pop-up: decision, working and — once `/documents` stored the MRA number — where the MRA is and its level changes; PDF
   at `/mra-verdict/<token>/pdf`), via `api/v1/MraVerdictView` (`PRO_SAP_MRA BY_TOKEN`); `/verdict/<token>` is the PO
   verdict page via `api/v1/SapVerdictView`. Both read-only **without sign-in** (anyone with the link, static API token only). Unknown token → "not valid", past the expiry → "expired". The portal base URL is the
-  `API_BASE_URL` row `POGOV_PORTAL` of the API's environment (or `SapInterface:VerdictLink:PortalBaseUrl`).
+  `API_BASE_URL` row `POGOV_PORTAL` of the API's environment, unless the app setting `SapInterface:VerdictLink:PortalBaseUrl` is
+  set — it wins; set it per environment in `POGovApi/appsettings.Staging.json` (staging portal `http://192.168.0.175:8177/`)
+  and `appsettings.Production.json` (production portal). `GET /verdict-url` builds the MRA link on this **current** base with
+  the decision's token, so links follow a changed setting (only without any base the host of the stored link is kept).
 * `POST /api/sap/v1/documents` stores the final SAP document (MRN) against the `request_id`
   (`SAP_DECISION_DOCUMENTS`, procedure `PRO_SAP_DOCUMENT_SAVE`): one current document per request_id, the same one again =
   `UNCHANGED`, another = 409 unless `replace = true` (the old row stays as history). Full contract:
@@ -302,7 +305,7 @@ document in `SAP_DECISION_DOCUMENTS`.
 | `BmHead` | off | `{Enabled, MinNetValue, IncludeWatch}` |
 | `MaxFailedLogins`, `LockoutMinutes`, `MinPasswordLength` | 5, 15, 24 | technical users |
 | `MaxEventsPerBatch`, `MaxBodyBytes` | 500, 5 MB | 413 above |
-| `VerdictLink` | on | `{Enabled, ValidDays (90), BaseUrlKey (POGOV_PORTAL), PortalBaseUrl (optional fixed base)}` — the `view_url` |
+| `VerdictLink` | on | `{Enabled, ValidDays (90), BaseUrlKey (POGOV_PORTAL), PortalBaseUrl}` — base of `view_url` and `GET /verdict-url`; `PortalBaseUrl` per environment (appsettings.Staging / .Production), empty = API_BASE_URL |
 
 Storage: the SAP interface needs **SQL Server** (`database/sqlserver/05_sap_interface.sql`, schema v4). With
 `PoGovSettings:Storage = postgres` every SAP endpoint answers 503 "SAP interface requires SQL Server storage" and the

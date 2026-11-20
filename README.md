@@ -123,7 +123,7 @@ On SQL Server the write lock is a database application lock (`sp_getapplock`), s
 - `SapInterface` — the SAP R/3 interface (`/api/sap/v1`): `Enabled`, `Environment`, `EnforceIpAllowList` (optional IP check, default `false` =
   technical user + password only) and `AllowedIps` (required when the check is on: CIDR list of the SAP application servers), `TrustedProxies`, `OnlyOnPort`, `RulesVersion`, `DecisionTimeoutMs` (2500),
   `EventsLagLimitSeconds` (60), `DefaultMode`, `BlockVerdict` (`BLOCK` default | `HOLD`), `UnknownItemPolicy` (`REJECT` | `WATCH`),
-  `BmHead`, lockout / password length / batch limits, `VerdictLink` (the `view_url` of a decision: `Enabled`, `ValidDays`, `BaseUrlKey` = `POGOV_PORTAL` in API_BASE_URL, optional `PortalBaseUrl`). HTTPS on 8443: `_KestrelHttpsExample` (rename to `Kestrel` in production).
+  `BmHead`, lockout / password length / batch limits, `VerdictLink` (the links sent to SAP — `view_url` of a decision and `GET /verdict-url`: `Enabled`, `ValidDays`, `PortalBaseUrl` = the portal address of this environment, set in `POGovApi/appsettings.Staging.json` / `appsettings.Production.json`; empty = the `BaseUrlKey` (`POGOV_PORTAL`) row of API_BASE_URL). HTTPS on 8443: `_KestrelHttpsExample` (rename to `Kestrel` in production).
   Technical users are managed on `/admin/sap`. Full description: `docs/sap/README.md`.
 - `Tool1:ReducedLabel` — `false` (default) labels breaches exactly like the running v1.1.4 page; `true` uses "Recommend Reduced Qty" as described in the v1.1.4 README.
 

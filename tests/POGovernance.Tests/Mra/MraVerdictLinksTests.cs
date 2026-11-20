@@ -24,6 +24,17 @@ namespace POGovernance.Tests.Mra
         }
 
         [Theory]
+        [InlineData("https://pogov.company.local/", "https://pogov.company.local/mra-verdict/Tok_9/348404")]
+        [InlineData("https://pogov.company.local", "https://pogov.company.local/mra-verdict/Tok_9/348404")]
+        [InlineData("", "http://192.168.0.175:8177/mra-verdict/Tok_9/348404")]     // no base now: the stored link's host
+        [InlineData(null, "http://192.168.0.175:8177/mra-verdict/Tok_9/348404")]
+        public void The_mra_page_follows_the_portal_base_of_this_environment(string? portalBase, string expected)
+        {
+            // a decision answered on staging, the MRA link asked after the portal moved (app setting / API_BASE_URL)
+            Assert.Equal(expected, MraVerdictLinks.PageUrl("http://192.168.0.175:8177/mra-verdict/Tok_9", "348404", portalBase));
+        }
+
+        [Theory]
         [InlineData("http://portal/mra-verdict/Tok_1", "http://portal/verdict/Tok_1")]
         [InlineData("http://portal/mra-verdict/Tok_1/348404", "http://portal/verdict/Tok_1")]
         [InlineData("http://portal/verdict/Tok_1", "http://portal/verdict/Tok_1")]

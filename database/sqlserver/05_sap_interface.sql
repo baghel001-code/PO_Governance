@@ -256,7 +256,7 @@ USING (VALUES
     (N'COVER_NO_HEADROOM', N'Existing stock + pending already above the norm: Max Permissible 0', N'HOLD', N'COVER-02', 140),
     (N'MIX_BELOW_MIN', N'Colour mix below the minimum share of its MC-MRP', N'WATCH', N'MIX-01', 150),
     (N'PEER_Q1', N'Ranks Q1 (top 25 %) in its BSR peer group (same Brand, MC, MRP, Flag) and meets its Entry / Mid / Fashion minimum', N'ALLOW', N'PEER-Q1', 160),
-    (N'BLOCK', N'Block: multi concept option ranks below Q1 (top 25 %) in its peer group, a Q1 below the minimum sell-thru of its Entry / Mid / Fashion type, a new colour whose other colours do not all rank Q1, or sell-thru below 1 %/day after 4+ weeks', N'HOLD|BLOCK', N'BLOCK-PEER,BLOCK-EMF-MIN,BLOCK-BOBS,BLOCK-ABS', 200),
+    (N'BLOCK', N'Block: multi concept ranks below Q1 (top 25 %), a Q1 below its Entry / Mid / Fashion minimum, a new colour whose other colours are not all Q1, or sell-thru below 1 %/day after 4+ weeks', N'HOLD|BLOCK', N'BLOCK-PEER,BLOCK-EMF-MIN,BLOCK-BOBS,BLOCK-ABS', 200),
     (N'EMF_NOT_MAINTAINED', N'Planner has not maintained this MC-MRP in the master (Entry / Mid / Fashion mapping)', N'HOLD', N'EMF-00', 205),
     (N'BOBS_SIBLINGS_OK', N'New colour: all other colours of the option rank Q1 and the oldest meets the Entry / Mid / Fashion minimum', N'ALLOW', N'BOBS-01', 210),
     (N'LOW_HISTORY', N'Too little selling history (weeks on floor below the gate), allowed', N'ALLOW', N'WOF-00', 230),

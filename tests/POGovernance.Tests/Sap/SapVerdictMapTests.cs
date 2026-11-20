@@ -138,6 +138,26 @@ namespace POGovernance.Tests.Sap
             Assert.Equal("HOLD|BLOCK", seeded["BLOCK"].Verdict);
         }
 
+        [Fact]
+        public void Every_seeded_reason_code_fits_its_columns()
+        {
+            // SQL Server stops the whole MERGE with "String or binary data would be truncated" (Msg 8152) when one value is too long
+            var sql = File.ReadAllText(RepoPath("database", "sqlserver", "05_sap_interface.sql"));
+            var create = sql[sql.IndexOf("CREATE TABLE dbo.SAP_REASON_CODES", StringComparison.Ordinal)..];
+            create = create[..create.IndexOf("CONSTRAINT PK_SAP_REASON_CODES", StringComparison.Ordinal)];
+            int Size(string column) => int.Parse(Regex.Match(create, @"\b" + column + @"\s+NVARCHAR\((\d+)\)").Groups[1].Value);
+            var (code, text, verdict, rules) = (Size("Code"), Size("Text"), Size("Verdict"), Size("Rule_Ids"));
+            var rows = Regex.Matches(sql, @"\(N'([A-Z0-9_]+)', N'([^']*)', N'([A-Z/|]+)', N'([A-Z0-9,\-]+)', \d+\)");
+            Assert.NotEmpty(rows);
+            foreach (Match m in rows)
+            {
+                Assert.True(m.Groups[1].Length <= code, $"{m.Groups[1].Value}: code longer than {code}");
+                Assert.True(m.Groups[2].Length <= text, $"{m.Groups[1].Value}: text is {m.Groups[2].Length} characters, the column holds {text}");
+                Assert.True(m.Groups[3].Length <= verdict, $"{m.Groups[1].Value}: verdict longer than {verdict}");
+                Assert.True(m.Groups[4].Length <= rules, $"{m.Groups[1].Value}: rule ids longer than {rules}");
+            }
+        }
+
         public static string RepoPath(params string[] parts)
         {
             var dir = new DirectoryInfo(AppContext.BaseDirectory);

@@ -87,7 +87,7 @@ namespace Admin.Components.Shared.DataSetup
         public static readonly SlotDef Emf = new(DatasetKeys.Emf, "Entry / Mid / Fashion Mapping",
             "Brand (At_Brand) · MC Code · Flag · MRP · <strong>EMF</strong> = Entry, Mid or Fashion (1.ENTRY / 2.MID / 3.FASHION are fine). " +
             "Each upload <strong>replaces</strong> the previous mapping. Rows with any other tag (or a missing Brand / MC / Flag / MRP) are rejected and listed below the slot. " +
-            "Used by the multi concept minimum sell-thru (next step of the multi concept rule).");
+            "Used by the multi concept rule: a Q1 option needs the minimum of its type (Entry 2.0%, Mid 1.5%, Fashion 1.5% per day); an MC-MRP missing here is a Hold.");
 
         public static readonly SlotDef[] Masters =
         {

@@ -167,6 +167,9 @@ v1.1.4 did everything in one click. The server splits it into two calls, so the 
   - Line: `PoolText` left, `RankText` right (in `RankColour`).
   - Rank bar with lines at 25/50/75 % and a dot at `Position` %.
   - Labels under the bar: Q4 Block, Q3 Block, Q2 Block, Q1 Allow (multi concept rule Step 1: only Q1 is allowed).
+- **Step 4 — Minimum Sell-Thru** (`Minimum`, multi concept rule Step 2 — only when a Q1 was checked): heading with the type and
+  minimum ("Step 4 — Minimum Sell-Thru (Mid ≥ 1.5%/day)", or "(not in the master)"), and a strip with the value checked
+  ("4.6%/day ≥ 1.5%/day → Allow" green, "… < … → Block" red, the planner message "→ Hold" amber; BOBs: "the oldest other colour: …").
 - **Step 4 — Border Zone Check (PDSTR Gap)** (only for a result that went through the old border zone check — `BorderTolUsed` set; never since the multi concept rule Step 1):
   - Monospace box with the `Lines`.
   - Strip with `Verdict`: green when `InBorderZone`, else red.

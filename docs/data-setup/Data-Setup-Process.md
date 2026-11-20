@@ -42,7 +42,7 @@ real-time source. That change can keep everything described here and only replac
 | `f4` | F4 — Forecast | Monthly plan by Brand × MC × MRP × Flag (`MM.YYYY` columns) | **yes** | single |
 | `um` | Universe Master | GMs of the Single Concept MRP universe (sends a GM to engine B) | **yes** | single |
 | `bsr` | BSR — All Seasons | Per GM + colour: weeks on floor, average per-day sell-through % | **yes** | **multi** (files are added together) |
-| `emf` | Entry / Mid / Fashion Mapping | Brand × MC × Flag × MRP → Entry, Mid or Fashion (multi concept minimum sell-thru, next step of the multi concept rule) | no | single — each upload **replaces** the mapping; rows with another tag are rejected and listed |
+| `emf` | Entry / Mid / Fashion Mapping | Brand × MC × Flag × MRP → Entry, Mid or Fashion (multi concept rule Step 2: a Q1 needs Entry 2.0 % / Mid 1.5 % / Fashion 1.5 % per day; an MC-MRP missing here is a Hold) | no | single — each upload **replaces** the mapping; rows with another tag are rejected and listed |
 | `artmaster` | Article Master | GM → brand, division, MC, MRP, flag, season, style, fit, material, design, vendor | no | single |
 | `colmaster` | Colour Master | Colour code → description | no | single |
 | `attrrel` | Attr Relevance Master | Brand × MC × MRP × Flag → assessment dimension | no | single |

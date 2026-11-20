@@ -148,10 +148,12 @@ up to Max Permissible).
 | Hold, quantity above Max Permissible, Max Permissible > 0 | **REDUCE** + `max_qty` | COVER_ABOVE_NORM | COVER-01 |
 | Hold — Don't Raise, Max Permissible 0 | HOLD | COVER_NO_HEADROOM | COVER-02 |
 | Watch List — colour mix below the minimum, or no F3 sale for the MC (v1.1.6 D3) | WATCH (route CATHEAD) | MIX_BELOW_MIN | MIX-01 |
-| Allow — ranks Q1 (top 25 %) in its peer group (Multi Concept: same Brand, MC, MRP, Flag) | ALLOW | PEER_Q1 | PEER-Q1 |
+| Allow — ranks Q1 (top 25 %) in its peer group (Multi Concept: same Brand, MC, MRP, Flag) and meets its Entry / Mid / Fashion minimum (Entry 2.0 %, Mid / Fashion 1.5 %/day) | ALLOW | PEER_Q1 | PEER-Q1 |
+| **Block** — ranks Q1 but below the minimum of its Entry / Mid / Fashion type (Step 2, 20 Nov 2026; BOBs: the oldest other colour) | **BLOCK** (or HOLD) | BLOCK | BLOCK-EMF-MIN |
+| Hold — "Planner has not maintained this MC-MRP in the master": the option's Brand × MC × Flag × MRP is not in the Entry / Mid / Fashion mapping (Step 2) | HOLD | EMF_NOT_MAINTAINED | EMF-00 |
 | **Block** — ranks Q2, Q3 or Q4 (Multi Concept rule Step 1, 19 Nov 2026) | **BLOCK** (or HOLD, see below) | BLOCK | BLOCK-PEER |
 | **Block** — absolute block (sell-thru < 1 %/day after ≥ 4 weeks, even for Q1) | **BLOCK** (or HOLD) | BLOCK | BLOCK-ABS |
-| Allow — BOBs: every other colour (WOF ≥ 4 w) ranks Q1 | ALLOW | BOBS_SIBLINGS_OK | BOBS-01 |
+| Allow — BOBs: every other colour (WOF ≥ 4 w) ranks Q1 and the oldest meets the minimum | ALLOW | BOBS_SIBLINGS_OK | BOBS-01 |
 | **Block** — BOBs: another colour ranks Q2, Q3 or Q4 | **BLOCK** (or HOLD) | BLOCK | BLOCK-BOBS |
 | Allow — too little selling history (WOF gate) | ALLOW | LOW_HISTORY | WOF-00 |
 | Allow — no peer pool | ALLOW | NO_PEER_POOL | PEER-00 |

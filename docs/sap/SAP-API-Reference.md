@@ -349,15 +349,17 @@ HOLD and BLOCK go to `BMHEAD` instead when `bm_head_required = true` (business r
 |---|---|---|---|
 | ALLOW | `COVER_WITHIN_NORM` | COVER-00 | Stock + pending + this PO within the cover norm |
 | HOLD | `NO_PLAN_DATA` | PLAN-00 | No Plan Available: no F4 plan for the bucket in the requirement window — ask the planning team to add it (v1.1.6; was ALLOW) |
-| ALLOW | `PEER_Q1` | PEER-Q1 | Multi Concept: ranks Q1 (top 25 %) among options of the same Brand, MC, MRP and Flag |
-| ALLOW | `BOBS_SIBLINGS_OK` | BOBS-01 | New colour of an existing option; every other colour (4+ weeks on floor) ranks Q1 |
+| ALLOW | `PEER_Q1` | PEER-Q1 | Multi Concept: ranks Q1 (top 25 %) among options of the same Brand, MC, MRP and Flag, and sells at least the minimum of its Entry / Mid / Fashion type (Entry 2.0 %, Mid / Fashion 1.5 %/day) |
+| ALLOW | `BOBS_SIBLINGS_OK` | BOBS-01 | New colour of an existing option; every other colour (4+ weeks on floor) ranks Q1 and the oldest meets the minimum |
 | ALLOW | `LOW_HISTORY` | WOF-00 | Too little selling history to judge |
 | ALLOW | `NO_PEER_POOL` | PEER-00 | No comparable styles |
 | ALLOW | `NEW_ARTICLE` | NEW-00 | New article (not in the tool's history) |
 | REDUCE | `COVER_ABOVE_NORM` | COVER-01 | Cover above the norm — reduce to `max_qty` |
 | WATCH | `MIX_BELOW_MIN` | MIX-01 | Colour share below the minimum mix (broken / cut size likely) |
 | HOLD | `COVER_NO_HEADROOM` | COVER-02 | Stock + pending already above the norm — no headroom (max 0) |
+| HOLD | `EMF_NOT_MAINTAINED` | EMF-00 | Multi Concept Q1 whose Brand × MC × Flag × MRP is not in the Entry / Mid / Fashion mapping — "Planner has not maintained this MC-MRP in the master" |
 | BLOCK | `BLOCK` | BLOCK-PEER | Multi Concept: ranks Q2, Q3 or Q4 — only Q1 is allowed |
+| BLOCK | `BLOCK` | BLOCK-EMF-MIN | Multi Concept: ranks Q1 but below the minimum of its Entry / Mid / Fashion type (new colour: the oldest other colour) |
 | BLOCK | `BLOCK` | BLOCK-BOBS | New colour of an existing option: another colour ranks below Q1 |
 | BLOCK | `BLOCK` | BLOCK-ABS | Absolute block: sell-thru below 1 %/day after 4+ weeks on floor |
 

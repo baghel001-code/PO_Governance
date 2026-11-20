@@ -191,8 +191,9 @@ The **decisions**:
 |---|---|---|
 | **Auto Allow** / **Allow** | Within the norms | Raise the PO (at the confirmed quantity for Single Concept) |
 | **Watch List** | Borderline — the category head must approve (Single Concept: colour share below 2 %, or no sale in F3). Not used for Multi Concept | Wait; the card shows "⏳ Awaiting <name>". The decision appears in **Requests** |
-| **Hold — Don't Raise** | Stock + open POs already cover more than the norm; the reason shows the Max Permissible (often 0) | Do not raise, or raise at most the quantity shown |
-| **Block** | Multi Concept: ranks Q2, Q3 or Q4 among its peers (only the top 25 % — Q1 — is allowed), a new colour whose other colours do not all rank Q1, or sell-through below 1 %/day after 4+ weeks | Do not raise |
+| **Hold — Don't Raise** (Single Concept) | Stock + open POs already cover more than the norm; the reason shows the Max Permissible (often 0) | Do not raise, or raise at most the quantity shown |
+| **Hold — Don't Raise** (Multi Concept) | The option's MC-MRP is not in the Entry / Mid / Fashion mapping: "Planner has not maintained this MC-MRP in the master." | Ask the planner to maintain it, then request again |
+| **Block** | Multi Concept: ranks Q2, Q3 or Q4 among its peers (only the top 25 % — Q1 — is allowed), a Q1 below the minimum of its Entry / Mid / Fashion type, a new colour whose other colours do not all rank Q1, or sell-through below 1 %/day after 4+ weeks | Do not raise |
 | **Cannot Validate** | The article could not be identified (not in the masters) or the month is invalid | Check the GM and month; tell the planner if the article is missing |
 
 Single Concept cards show the key figures — **Op Stock, Mix %, Daily Rate, Colour STR, Max Permissible** — and
@@ -207,6 +208,21 @@ Permissible). Multi Concept cards show the peer pool, the sell-through vs. the p
 - **New colour of an existing option (BOBs):** every other colour of the option with 4+ weeks on floor must rank Q1,
   otherwise Block. No other colours, or none with 4 weeks on floor → Allow.
 - Unchanged: less than 4 weeks on floor → Allow; new articles → Allow; below 1 %/day after 4+ weeks → Block.
+
+**Step 2 (since 20 Nov 2026)** — a Q1 is allowed only if it also sells at least the minimum per day (first 3 weeks) of
+its type in the **Entry / Mid / Fashion Mapping** (section 5.1):
+
+| Type | Allowed when |
+|---|---|
+| Entry | Q1 and at least **2.0 %** per day |
+| Mid | Q1 and at least **1.5 %** per day |
+| Fashion | Q1 and at least **1.5 %** per day |
+
+- Q1 but below the minimum → **Block**.
+- The option's Brand × MC × Flag × MRP is not in the mapping → **Hold — "Planner has not maintained this MC-MRP in the
+  master."** Ask the planner to add it to the mapping and upload it again.
+- New colour of an existing option: the minimum is checked on the **oldest** other colour (most weeks on floor).
+- The card shows **Step 4 — Minimum Sell-Thru** with the type, the minimum and the value checked.
 
 ### 3.5 View Recommendation
 
@@ -298,7 +314,7 @@ every version.
 | F4 — Forecast | ✓ | Monthly plan by Brand × MC × MRP × Flag (`MM.YYYY` columns) |
 | Universe Master | ✓ | GMs of the Single Concept universe |
 | BSR — All Seasons | ✓ | Weeks on floor and per-day sell-through % per GM and colour (several files allowed) |
-| Entry / Mid / Fashion Mapping | optional | Brand × MC × Flag × MRP → Entry, Mid or Fashion (for the Multi Concept minimum sell-through, next step) |
+| Entry / Mid / Fashion Mapping | optional | Brand × MC × Flag × MRP → Entry, Mid or Fashion (Multi Concept: the minimum sell-through of a Q1; missing → Hold) |
 | Article Master | optional | Article attributes (season, style, fit, material, design, vendor) |
 | Attr Relevance Master | optional | Which attribute matters per Brand × MC × MRP × Flag |
 | Colour Master | optional | Colour codes and descriptions |
@@ -565,13 +581,13 @@ The link works for 90 days. **Anyone with the link can open the page — do not 
 | Decision | Colour | Meaning |
 |---|---|---|
 | Auto Allow | green | Single Concept within the cover norm, or a new article |
-| Allow | green | Multi Concept: ranks Q1 (top 25 %) among its peers, or too little history to judge |
+| Allow | green | Multi Concept: ranks Q1 (top 25 %) among its peers and meets its Entry / Mid / Fashion minimum, or too little history to judge |
 | Watch List | brown | Category head must approve (Single Concept only): colour share below the minimum, or no sale in F3 |
-| Hold — Don't Raise | red | Cover already above the norm — no or limited headroom (Max Permissible) |
+| Hold — Don't Raise | red | Single Concept: cover already above the norm — no or limited headroom (Max Permissible). Multi Concept: the MC-MRP is not in the Entry / Mid / Fashion mapping |
 | Block | red | Multi Concept ranks Q2–Q4, or a confirmed slow seller — do not raise |
 | Cannot Validate | grey | Article or month not recognised |
 
-**PO Assessment (Tool 2):** Retain · Reduce Qty · Cancel · Watch List · Cannot Validate.
+**PO Assessment (Tool 2):** Retain · Reduce Qty · Cancel · Watch List · Cannot Validate (also a Multi Concept PO whose MC-MRP is not in the Entry / Mid / Fashion mapping).
 
 **SAP verdicts:** ALLOW · REDUCE (order at most the max qty; Commercial) · WATCH (category head) · HOLD (do not release as is;
 Commercial decides) · BLOCK (confirmed slow seller — do not release; Commercial decides).

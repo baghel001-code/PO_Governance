@@ -34,7 +34,16 @@ Multi concept is unchanged.
 * **Entry / Mid / Fashion Mapping** — new Data Setup upload (dataset `emf`, Multi Concept MRP inputs): Brand × MC × Flag ×
   MRP → Entry, Mid or Fashion. Each upload replaces the mapping; rows with any other tag (or a missing key field, or one
   key tagged two ways) are rejected and listed under the slot (`Application/Services/V1/Ingest/EmfImport.cs`,
-  `DecisionEngine/Common/EmfMapping.cs`). Loaded and checked now; used by Step 2 (minimum sell-thru per type).
+  `DecisionEngine/Common/EmfMapping.cs`).
+
+**Multi concept rule, Step 2 (20 Nov 2026)** — a Q1 is allowed only when it also meets the minimum per-day sell-thru (first
+3 weeks) of its Entry / Mid / Fashion type: **Entry 2.0 %, Mid 1.5 %, Fashion 1.5 %/day** ("at least"; `EmfMapping.MinPdstr`).
+Q1 below the minimum → **Block**; the option's Brand × MC × Flag × MRP not in the mapping → **Hold** "Planner has not
+maintained this MC-MRP in the master." BOBs: all other colours must rank Q1 and the minimum is checked on the **oldest**
+other colour (most weeks on floor). Q2–Q4, WOF below the gate, no peer pool and new articles are not checked (Block /
+Allow as before). The flag NON-BOGO of the data files matches the mapping's "Normal". PO Assessment: not maintained →
+Cannot Validate, below the minimum → Cancel. SAP: HOLD `EMF_NOT_MAINTAINED` (EMF-00), BLOCK rule id `BLOCK-EMF-MIN`.
+**Upload the mapping before deploying Step 2** — without it every multi concept Q1 is a Hold.
 
 ## Solution layout
 
@@ -262,8 +271,8 @@ IP allow-list, and contract tests that compare the classes and real answers with
 project only); `tests/POGovernance.Tests/SqlServer/SapSqlServerTests` runs the PRO_SAP_* procedures on SQL Server.
 `tests/POGovernance.Tests/Mapping/MapperTests` covers the object mapper (conventions, conversions, nested maps, collections,
 records, `ForMember` / `ReverseMap` / `AfterMap` / `ConvertUsing`, errors, validation, DI registration).
-`tests/POGovernance.Tests/Tool1/MultiConceptStep1Tests` covers the multi concept rule beyond the shared fixture (several brands,
-absolute block on a Q1, BOBs); `Ingest/EmfUploadTests` and `Portal/EmfRejectedBoxTests` the Entry / Mid / Fashion upload.
+`tests/POGovernance.Tests/Tool1/MultiConceptStep1Tests` / `MultiConceptStep2Tests` cover the multi concept rule beyond the shared
+fixture (several brands, absolute block on a Q1, BOBs, the Entry / Mid / Fashion minimum and the Hold); `Ingest/EmfUploadTests` and `Portal/EmfRejectedBoxTests` the Entry / Mid / Fashion upload.
 
 ## Documents
 

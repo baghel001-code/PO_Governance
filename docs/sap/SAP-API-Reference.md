@@ -367,6 +367,11 @@ HOLD and BLOCK go to `BMHEAD` instead when `bm_head_required = true` (business r
 codes `PEER_Q2`, `PEER_Q3`, `PEER_Q4`, `BOBS_SIBLING_LOW` and rule ids PEER-Q3-OK, PEER-Q3-GAP, PEER-Q4-WATCH, BOBS-02,
 BLOCK-Q4 are no longer sent (inactive in `SAP_REASON_CODES`).
 
+**Multi concept rule, Step 2 (20 Nov 2026):** a Q1 is ALLOW only when it also sells at least the minimum of its Entry / Mid /
+Fashion type (Entry 2.0 %, Mid / Fashion 1.5 % per day; new colour: the oldest other colour) — below it the item is BLOCK
+with rule_id `BLOCK-EMF-MIN`. When the planner has not maintained the item's Brand × MC × Flag × MRP in the Entry / Mid /
+Fashion mapping the item is **HOLD** with reason_code `EMF_NOT_MAINTAINED` (rule_id EMF-00, routed to Commercial).
+
 **BLOCK (code `B`) is an addition to spec v1.4** (since 17 Nov 2026): the tool's Block decisions used to be sent as
 `HOLD` with `reason_code = BLOCK`. SAP must accept `BLOCK` / `B` in the verdict domain and route it like HOLD (category
 head). If the SAP side is not ready, the tool's setting `SapInterface:BlockVerdict = HOLD` sends them as `HOLD` +

@@ -322,6 +322,20 @@ namespace DecisionEngine.Results.Tool1
         public Tool1BorderDto? Step4 { get; set; }
         /// <summary>"⚡ Absolute Block Override: …" or null.</summary>
         public string? AbsoluteBlockNote { get; set; }
+        /// <summary>Multi concept rule Step 2: the Entry / Mid / Fashion minimum check of a Q1 (null when it was not checked).</summary>
+        public Tool1MinimumDto? Minimum { get; set; }
+    }
+
+    /// <summary>"Step 4 — Minimum sell-thru": the option's type, its minimum and the value checked.</summary>
+    public sealed class Tool1MinimumDto
+    {
+        /// <summary>"Step 4 — Minimum Sell-Thru (Mid ≥ 1.5%/day)" or "Step 4 — Minimum Sell-Thru (not in the master)".</summary>
+        public string Heading { get; set; } = "";
+        /// <summary>"4.6%/day ≥ 1.5%/day → Allow" / "the oldest colour RED: 1.4%/day < 1.5%/day → Block" / the planner message.</summary>
+        public string Text { get; set; } = "";
+        /// <summary>"ok", "below" or "notMapped".</summary>
+        public string Check { get; set; } = "";
+        public string Colour { get; set; } = "";
     }
 
     public sealed class Tool1QuartileDto

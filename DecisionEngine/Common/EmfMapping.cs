@@ -7,14 +7,31 @@ namespace DecisionEngine.Common
     /// The Entry / Mid / Fashion (EMF) mapping of the multi concept rule: Brand × MC × Flag × MRP → Entry, Mid or Fashion.
     /// Uploaded on Data Setup (dataset <see cref="DatasetKeys.Emf"/>); each upload replaces the previous one. Rows are stored
     /// with the columns below and the tag already normalised (<see cref="NormalizeTag"/>).
-    /// <para>Step 1 of the multi concept rule only loads and checks the mapping; Step 2 will use it for the minimum
-    /// sell-thru per type (Entry 2.0 %, Mid 1.5 %, Fashion 1.5 % per day).</para>
+    /// <para>Multi concept rule Step 2: a Q1 option is allowed only when its per-day sell-thru (first 3 weeks, the BSR
+    /// "AVG PERDAY SELL THRU%") is at least the minimum of its type (<see cref="MinPdstr"/>: Entry 2.0 %, Mid 1.5 %,
+    /// Fashion 1.5 % per day); a Brand × MC × Flag × MRP that is not in the mapping is a Hold with
+    /// <see cref="NotMaintainedMessage"/>.</para>
     /// </summary>
     public static class EmfMapping
     {
         public const string Entry = "Entry";
         public const string Mid = "Mid";
         public const string Fashion = "Fashion";
+
+        /// <summary>The Hold message when the option's Brand × MC × Flag × MRP is not in the mapping (business wording).</summary>
+        public const string NotMaintainedMessage = "Planner has not maintained this MC-MRP in the master.";
+
+        /// <summary><see cref="Tool1.Tool1EngineA"/> result of the minimum check: met, below the minimum, not in the mapping.</summary>
+        public const string CheckOk = "ok", CheckBelow = "below", CheckNotMapped = "notMapped";
+
+        /// <summary>The minimum per-day sell-thru (fraction: 0.02 = 2.0 %/day) of a tag; null for anything else.</summary>
+        public static double? MinPdstr(string? tag) => tag switch { Entry => 0.02, Mid => 0.015, Fashion => 0.015, _ => null };
+
+        /// <summary>
+        /// Whether a per-day sell-thru meets a minimum, compared in basis points (0.01 %) so a file value of "1.50%" equals
+        /// the 1.5 % minimum exactly ("at least" = equal is fine).
+        /// </summary>
+        public static bool MeetsMinimum(double pdstr, double min) => Js.Round(pdstr * 10000) >= Js.Round(min * 10000);
 
         /// <summary>The only tags a row may carry.</summary>
         public static readonly IReadOnlyList<string> Tags = new[] { Entry, Mid, Fashion };
@@ -45,10 +62,22 @@ namespace DecisionEngine.Common
 
         /// <summary>
         /// The lookup key of a Brand × MC × Flag × MRP: brand and flag trimmed, case-insensitive ("Normal" = "NORMAL");
-        /// MC and MRP trimmed without a trailing ".0" ("399.0" = "399").
+        /// MC and MRP trimmed without a trailing ".0" ("399.0" = "399"). The flag "NON-BOGO" (the tool's data files) is the
+        /// mapping's "Normal" (<see cref="FlagKey"/>).
         /// </summary>
         public static string Key(string? brand, string? mc, string? flag, string? mrp) =>
-            string.Join("|", (brand ?? "").Trim().ToUpperInvariant(), StripDot0(mc), (flag ?? "").Trim().ToUpperInvariant(), StripDot0(mrp));
+            string.Join("|", (brand ?? "").Trim().ToUpperInvariant(), StripDot0(mc), FlagKey(flag), StripDot0(mrp));
+
+        /// <summary>The flag part of <see cref="Key"/>: upper-case, trimmed; NON-BOGO / NON BOGO / NONBOGO → NORMAL.</summary>
+        public static string FlagKey(string? flag)
+        {
+            var f = (flag ?? "").Trim().ToUpperInvariant();
+            return f is "NON-BOGO" or "NON BOGO" or "NONBOGO" or "NON_BOGO" ? "NORMAL" : f;
+        }
+
+        /// <summary>"NON-PL · MC 2203 · Flag BOGO · MRP 599" — how a key is named in reasons.</summary>
+        public static string Describe(string? brand, string? mc, string? flag, string? mrp) =>
+            (brand ?? "").Trim() + " · MC " + StripDot0(mc) + " · Flag " + ((flag ?? "").Trim().Length > 0 ? (flag ?? "").Trim() : "(blank)") + " · MRP " + StripDot0(mrp);
 
         /// <summary>The tag of a Brand × MC × Flag × MRP in the uploaded mapping; null when it is not mapped (or no mapping is loaded).</summary>
         public static string? Lookup(EngineData data, string? brand, string? mc, string? flag, string? mrp)

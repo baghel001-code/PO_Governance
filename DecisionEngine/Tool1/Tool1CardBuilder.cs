@@ -335,6 +335,18 @@ namespace DecisionEngine.Tool1
                         : "OUTSIDE BORDER ZONE (gap " + gap + "% > " + N(bt2) + "%) → Hard decision stands"
                 };
             }
+            if (r.EmfCheck != null)
+            {
+                var basis = r.OptionType == "BOBs" && r.RepSibling != null ? "the oldest other colour: " : "";
+                var val = r.EmfPdstr is double ep ? Js.ToFixed(ep * 100, 1) + "%/day" : "—";
+                var min = r.EmfMin is double em ? Js.ToFixed(em * 100, 1) + "%/day" : "";
+                dto.Minimum = r.EmfCheck switch
+                {
+                    Common.EmfMapping.CheckOk => new Tool1MinimumDto { Heading = "Step 4 — Minimum Sell-Thru (" + r.EmfTag + " ≥ " + min + ")", Text = basis + val + " ≥ " + min + " → Allow", Check = r.EmfCheck, Colour = Green },
+                    Common.EmfMapping.CheckBelow => new Tool1MinimumDto { Heading = "Step 4 — Minimum Sell-Thru (" + r.EmfTag + " ≥ " + min + ")", Text = basis + val + " < " + min + " → Block", Check = r.EmfCheck, Colour = Red },
+                    _ => new Tool1MinimumDto { Heading = "Step 4 — Minimum Sell-Thru (not in the master)", Text = Common.EmfMapping.NotMaintainedMessage + " → Hold", Check = r.EmfCheck, Colour = "#B45309" }
+                };
+            }
             if (decision == Decisions.Block && r.Pdstr != null && r.Pdstr < 0.01 && r.Wof >= 4)
                 dto.AbsoluteBlockNote = "⚡ Absolute Block Override: PDSTR = " + Js.ToFixed(r.Pdstr.Value * 100, 1) + "%/day < 1%/day threshold with WOF " +
                                         Js.ToFixed(r.Wof, 0) + "w ≥ 4w. Block regardless of quartile.";

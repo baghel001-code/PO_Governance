@@ -17,12 +17,18 @@ namespace POGovernance.Tests.Tool1
     {
         private static readonly Tool1EngineA Engine = new();
 
-        private static SheetRow R(params (string K, object? V)[] cells) => new(cells.Select(c => new KeyValuePair<string, object?>(c.K, c.V)));
+        internal static SheetRow R(params (string K, object? V)[] cells) => new(cells.Select(c => new KeyValuePair<string, object?>(c.K, c.V)));
 
         /// <summary>BSR row (Brand Type only when given) + its Article Master row (brand, season AW26).</summary>
-        private sealed class Builder
+        internal sealed class Builder
         {
             public readonly List<SheetRow> Bsr = new(), Am = new();
+            /// <summary>The Entry / Mid / Fashion mapping (Step 2): MC 100 / MRP 499 / Normal is Mid (1.5 %/day) for both brands.</summary>
+            public readonly List<SheetRow> Emf = new()
+            {
+                R(("Brand Type", "NON-PL"), ("MC CD", "100"), ("Flag", "Normal"), ("MRP", "499"), ("EMF", "Mid")),
+                R(("Brand Type", "BELONG"), ("MC CD", "100"), ("Flag", "Normal"), ("MRP", "499"), ("EMF", "Mid"))
+            };
 
             public Builder Add(string gm, string colour, double pdstr, double wof = 8, string brand = "NON-PL", bool brandInBsr = true,
                                string mc = "100", string mrp = "499", string flag = "Normal", string season = "AW26")
@@ -45,11 +51,11 @@ namespace POGovernance.Tests.Tool1
 
             public EngineData Data() => new(new Dictionary<string, IReadOnlyList<SheetRow>?>
             {
-                [DatasetKeys.Bsr] = Bsr, [DatasetKeys.ArtMaster] = Am, [DatasetKeys.Um] = new List<SheetRow>()
+                [DatasetKeys.Bsr] = Bsr, [DatasetKeys.ArtMaster] = Am, [DatasetKeys.Um] = new List<SheetRow>(), [DatasetKeys.Emf] = Emf
             }, new EngineParams { Wof = 4, Peer = 5, SeasonCurrent = new() { "AW26" }, SeasonFallback = new() }, 1, 1);
         }
 
-        private static Tool1EngineAResult Run(EngineData d, string gm, string colour)
+        internal static Tool1EngineAResult Run(EngineData d, string gm, string colour)
         {
             var (engine, option) = ResolveIndex.RouteRequest(d, gm, colour);
             Assert.Equal("A", engine);
@@ -58,7 +64,7 @@ namespace POGovernance.Tests.Tool1
             return Engine.Run(d, gm, colour, option!, info);
         }
 
-        private static SapOutcomePath Sap(Tool1EngineAResult a) =>
+        internal static SapOutcomePath Sap(Tool1EngineAResult a) =>
             SapVerdictMap.Classify(new Tool1Outcome { Engine = "A", OptionType = a.OptionType, A = a, Decision = a.Decision, DecisionReason = a.DecisionReason });
 
         // ── True Repeat ─────────────────────────────────────────────────────
@@ -70,7 +76,7 @@ namespace POGovernance.Tests.Tool1
             var a = Run(d, "T1", "BLU");
             Assert.Equal("Q1", a.Quartile);
             Assert.Equal(Decisions.Allow, a.Decision);
-            Assert.StartsWith("True Repeat: ranks Q1 (100th pct) in peer group of 9 styles (CY BSR (AW26)). PDSTR = 9.0%/day — top 25% (Q1). Allow.", a.DecisionReason);
+            Assert.StartsWith("True Repeat: ranks Q1 (100th pct) in peer group of 9 styles (CY BSR (AW26)). PDSTR = 9.0%/day — top 25% (Q1) and at least the Mid minimum 1.5%/day. Allow.", a.DecisionReason);
             Assert.Equal(SapOutcomePath.PeerQ1, Sap(a));
         }
 
@@ -163,7 +169,7 @@ namespace POGovernance.Tests.Tool1
             Assert.Equal(2, a.QualSibs.Count);
             Assert.All(a.SibRanked, s => Assert.Equal("Q1", s.Q));
             Assert.Equal(Decisions.Allow, a.Decision);
-            Assert.Equal("BOBs: All 2 sibling colourway(s) with WOF ≥ 4w rank Q1 (top 25%) — parent style is a top seller. New colour permitted.", a.DecisionReason);
+            Assert.Equal("BOBs: All 2 sibling colourway(s) with WOF ≥ 4w rank Q1 (top 25%) and the oldest colour RED (8w on floor) sells 9.0%/day — at least the Mid minimum 1.5%/day. New colour permitted.", a.DecisionReason);
             Assert.Equal(SapOutcomePath.BobsSiblingsOk, Sap(a));
         }
 

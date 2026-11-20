@@ -152,5 +152,13 @@ namespace DecisionEngine.Results.Tool1
         [JsonPropertyName("gapPct"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] public double? GapPct { get; set; }
         [JsonPropertyName("inBorderZone"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] public bool? InBorderZone { get; set; }
         [JsonPropertyName("borderTolUsed"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] public double? BorderTolUsed { get; set; }
+        /// <summary>Multi concept rule Step 2: the option's Entry / Mid / Fashion tag (null when not looked up or not mapped).</summary>
+        [JsonPropertyName("emfTag"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] public string? EmfTag { get; set; }
+        /// <summary>Step 2: the minimum per-day sell-thru of the tag (fraction).</summary>
+        [JsonPropertyName("emfMin"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] public double? EmfMin { get; set; }
+        /// <summary>Step 2: "ok", "below" or "notMapped" (EmfMapping.Check*); null when the minimum was not checked.</summary>
+        [JsonPropertyName("emfCheck"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] public string? EmfCheck { get; set; }
+        /// <summary>Step 2: the per-day sell-thru the minimum was checked on (BOBs: the oldest other colour).</summary>
+        [JsonPropertyName("emfPdstr"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] public double? EmfPdstr { get; set; }
     }
 }

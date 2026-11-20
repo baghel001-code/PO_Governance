@@ -15,6 +15,11 @@
 //   * BOBs (new colour of an existing option): all other colours with WOF >= gate must rank Q1 to Allow, else Block;
 //     no other colours, or none with WOF >= gate -> Allow as today; other colours but no peer pool -> Allow;
 //   * unchanged: WOF below the gate -> Allow, no peer pool -> Allow, absolute block (< 1%/day with WOF >= 4w), new articles -> Allow.
+//
+// Step 2 ("To be done next", implemented 20 Nov 2026): a Q1 is allowed only when its per-day sell-thru is at least the minimum
+// of the option's Entry / Mid / Fashion type (S.files.emf, Brand x MC x Flag x MRP; Entry 2.0%, Mid 1.5%, Fashion 1.5%/day);
+// below -> Block; not in the mapping -> Hold "Planner has not maintained this MC-MRP in the master." BOBs: checked on the
+// oldest other colour (most weeks on floor). The flag NON-BOGO is the mapping's "Normal". Tool 2: the Hold -> Cannot Validate.
 'use strict';
 
 /* eslint-disable no-undef */
@@ -69,6 +74,26 @@ function runEngineA(gm, colour, optionType, info) {
   const base={optionType,bsrLabel,peerPool,cleanPool,totalBSR,peerAvg};
   const colourOf=r=>String(col(r,'Color','Colour','COLOR','COLOUR','colour','color')).trim();
 
+  // Step 2 — the Entry / Mid / Fashion minimum (DecisionEngine/Common/EmfMapping.cs)
+  const EMF_MIN={Entry:0.02,Mid:0.015,Fashion:0.015};
+  const NOT_MAINTAINED='Planner has not maintained this MC-MRP in the master.';
+  const strip0=v=>{const t=String(v==null?'':v).trim(); return t.endsWith('.0')?t.slice(0,-2):t;};
+  const flagKey=f=>{const u=String(f||'').trim().toUpperCase(); return (u==='NON-BOGO'||u==='NON BOGO'||u==='NONBOGO'||u==='NON_BOGO')?'NORMAL':u;};
+  const emfKey=(b,m,f,p)=>[String(b||'').trim().toUpperCase(),strip0(m),flagKey(f),strip0(p)].join('|');
+  const emfTagOf=raw=>{
+    const t=String(raw==null?'':raw).trim(); if(!t) return null;
+    const n=t.replace(/^\s*\d+\s*[.)\-:]?\s*/,'').trim().toLowerCase();
+    return n==='entry'?'Entry':n==='mid'?'Mid':n==='fashion'?'Fashion':null;
+  };
+  const emfLookup=()=>{
+    const rows=S.files.emf; if(!rows||!rows.length) return null;
+    const m=new Map();
+    for(const r of rows){const t=emfTagOf(r['EMF']); if(t){const k=emfKey(r['Brand Type'],r['MC CD'],r['Flag'],r['MRP']); if(!m.has(k)) m.set(k,t);}}
+    return m.get(emfKey(brand,mcCd,flag,mrp))||null;
+  };
+  const meets=(pd,min)=>Math.round(pd*10000)>=Math.round(min*10000);
+  const describe=()=>String(brand||'').trim()+' · MC '+strip0(mcCd)+' · Flag '+(String(flag||'').trim()||'(blank)')+' · MRP '+strip0(mrp);
+
   if(optionType==='BOBs'){
     const allSibs=(S.files.bsr||[]).filter(r=>{
       const gmc=String(col(r,'Generic Material','generic material','GENERIC MATERIAL')).trim();
@@ -91,15 +116,29 @@ function runEngineA(gm, colour, optionType, info) {
       let decisionReason=hasLow
         ?`BOBs: ${low.length} of ${qualSibs.length} sibling colourway(s) with WOF ≥ ${wofGate}w rank below Q1 (${low.map(s=>colourOf(s.row)+' '+s.q).join(', ')}). Every other colour must rank Q1 (top 25%) — new colour blocked.`
         :`BOBs: All ${qualSibs.length} sibling colourway(s) with WOF ≥ ${wofGate}w rank Q1 (top 25%) — parent style is a top seller. New colour permitted.`;
+      let emf={};
       if(decision==='Allow'){
         const _ab=absBlock('Allow',getPDSTR(best),getWOF(best),'best sibling colourway ('+gm+')');
         if(_ab.overridden){decision=_ab.decision;decisionReason=_ab.decisionReason;}
+        else {
+          const oc=colourOf(best), ow=getWOF(best), opd=getPDSTR(best), tag=emfLookup();
+          const allQ1=`BOBs: All ${qualSibs.length} sibling colourway(s) with WOF ≥ ${wofGate}w rank Q1 (top 25%)`;
+          if(!tag){
+            emf={emfCheck:'notMapped',emfPdstr:opd}; decision="Hold — Don't Raise";
+            decisionReason=NOT_MAINTAINED+' ('+describe()+' is not in the Entry / Mid / Fashion mapping. '+allQ1+'.)';
+          } else {
+            const min=EMF_MIN[tag], minTxt=`the ${tag} minimum ${(min*100).toFixed(1)}%/day`;
+            const oldTxt=`the oldest colour ${oc} (${ow}w on floor) sells ${(opd*100).toFixed(1)}%/day`;
+            if(meets(opd,min)){ emf={emfTag:tag,emfMin:min,emfCheck:'ok',emfPdstr:opd}; decisionReason=allQ1+' and '+oldTxt+' — at least '+minTxt+'. New colour permitted.'; }
+            else { emf={emfTag:tag,emfMin:min,emfCheck:'below',emfPdstr:opd}; decision='Block'; decisionReason=allQ1+', but '+oldTxt+' — below '+minTxt+'. New colour blocked.'; }
+          }
+        }
       }
       const qOrder={Q4:0,Q3:1,Q2:2,Q1:3};
       const repSib=hasLow
         ? sibRanked.reduce((w,s)=>(qOrder[s.q]<qOrder[w.q]||(qOrder[s.q]===qOrder[w.q]&&s.pdstr<w.pdstr))?s:w, sibRanked[0])
         : sibRanked.reduce((b,s)=>(qOrder[s.q]>qOrder[b.q]||(qOrder[s.q]===qOrder[b.q]&&s.pdstr>b.pdstr))?s:b, sibRanked[0]);
-      return {decision,decisionReason,...base,siblings:allSibs,qualSibs,sibRanked,wof:getWOF(repSib.row),pdstr:repSib.pdstr,quartile_:repSib.q,percentile:pctRank(repSib.pdstr,rankPool),repSibling:repSib.row};
+      return {decision,decisionReason,...base,siblings:allSibs,qualSibs,sibRanked,wof:getWOF(repSib.row),pdstr:repSib.pdstr,quartile_:repSib.q,percentile:pctRank(repSib.pdstr,rankPool),repSibling:repSib.row,...emf};
     }
     if(allSibs.length>0){
       const bestSib=allSibs.reduce((b,r)=>getWOF(r)>getWOF(b)?r:b,allSibs[0]);
@@ -133,15 +172,26 @@ function runEngineA(gm, colour, optionType, info) {
   const pct=pctRank(pdstr,cleanPool);
   const gap=peerAvg>0?(peerAvg-pdstr)/peerAvg*100:0;
   const head=`True Repeat: ranks ${q} (${pct}th pct) in peer group of ${cleanPool.length} styles (${bsrLabel}). `;
-  let dec,reason;
+  let dec,reason,emf={};
   if(q==='Q1'){
     dec='Allow'; reason=head+`PDSTR = ${(pdstr*100).toFixed(1)}%/day — top 25% (Q1). Allow.`;
     const _ab=absBlock(dec,pdstr,wof,label);
     if(_ab.overridden){dec=_ab.decision;reason=_ab.decisionReason;}
+    else {
+      const tag=emfLookup();
+      if(!tag){
+        emf={emfCheck:'notMapped',emfPdstr:pdstr}; dec="Hold — Don't Raise";
+        reason=NOT_MAINTAINED+' ('+describe()+' is not in the Entry / Mid / Fashion mapping. '+head+`PDSTR = ${(pdstr*100).toFixed(1)}%/day.)`;
+      } else {
+        const min=EMF_MIN[tag], minTxt=`the ${tag} minimum ${(min*100).toFixed(1)}%/day`;
+        if(meets(pdstr,min)){ emf={emfTag:tag,emfMin:min,emfCheck:'ok',emfPdstr:pdstr}; reason=head+`PDSTR = ${(pdstr*100).toFixed(1)}%/day — top 25% (Q1) and at least ${minTxt}. Allow.`; }
+        else { emf={emfTag:tag,emfMin:min,emfCheck:'below',emfPdstr:pdstr}; dec='Block'; reason=head+`PDSTR = ${(pdstr*100).toFixed(1)}%/day — Q1 but below ${minTxt} (first 3 weeks). Block. Do not raise PO.`; }
+      }
+    }
   } else {
     dec='Block'; reason=head+`PDSTR = ${(pdstr*100).toFixed(1)}%/day (peer avg ${(peerAvg*100).toFixed(1)}%/day). Only Q1 (top 25%) is allowed for multi concept — Block. Do not raise PO.`;
   }
-  return {decision:dec,decisionReason:reason,...base,siblings:[],qualSibs:[],sibRanked:[],wof,pdstr,quartile_:q,percentile:pct,gapPct:Math.round(gap*10)/10};
+  return {decision:dec,decisionReason:reason,...base,siblings:[],qualSibs:[],sibRanked:[],wof,pdstr,quartile_:q,percentile:pct,gapPct:Math.round(gap*10)/10,...emf};
 }
 /* eslint-enable no-undef */
 
@@ -156,6 +206,10 @@ const REPLACEMENTS = [
   { fn: 'renderResult',
     find: '          <span style="flex:1;text-align:center">Q4 Slow</span><span style="flex:1;text-align:center">Q3 Watch</span><span style="flex:1;text-align:center">Q2 Healthy</span><span style="flex:1;text-align:center">Q1 Top</span>',
     replace: '          <span style="flex:1;text-align:center">Q4 Block</span><span style="flex:1;text-align:center">Q3 Block</span><span style="flex:1;text-align:center">Q2 Block</span><span style="flex:1;text-align:center">Q1 Allow</span>' },
+  // Tool 2 batch (processChunk): Step 2 — an MC-MRP not in the Entry / Mid / Fashion mapping is Cannot Validate, not Cancel
+  { fn: 'processChunk',
+    find: "result={...rawA, decision:decMap[rawA.decision]||rawA.decision, artSTR:null, recQty:null};",
+    replace: "result={...rawA, decision:rawA.emfCheck==='notMapped'?'Cannot Validate':(decMap[rawA.decision]||rawA.decision), artSTR:null, recQty:null};" },
   // Tool 2 line detail (buildDetailedReason)
   { fn: 'buildDetailedReason',
     find: "if(r.pdstr!=null&&r.peerAvg!=null&&r.pdstr<r.peerAvg&&(r.quartile_==='Q4'||r.quartile_==='Q3')){",
@@ -180,4 +234,15 @@ function apply(src, fns, withEngine = true) {
   return out + '\n\n// multi concept rule, Step 1 (tests/parity/rules/multi-concept.js)\n' + runEngineA.toString() + '\n';
 }
 
-module.exports = { apply, runEngineA, REPLACEMENTS };
+/**
+ * The Entry / Mid / Fashion mapping of the parity fixtures (tool1 / tool2 make-fixture.js), rows as the Data Setup upload
+ * stores them. Covers: mapped (Mid), the NON-BOGO = "Normal" alias (Fashion), and two keys left out on purpose
+ * (NON-PL 4407 with a blank flag, MAVIE 5509 BOGO 499) so their Q1 options are a Hold "not maintained".
+ */
+const FIXTURE_EMF = [
+  { 'Brand Type': 'NON-PL', 'Division': 'LADIES', 'MC CD': '2203', 'MC DESC': 'L-JEANS', 'Flag': 'BOGO', 'MRP': '599', 'EMF': 'Mid' },
+  { 'Brand Type': 'MAVIE', 'Division': 'LADIES', 'MC CD': '3305', 'MC DESC': 'L-TOPS', 'Flag': 'Normal', 'MRP': '799', 'EMF': 'Fashion' },
+  { 'Brand Type': 'NON-PL', 'Division': 'LADIES', 'MC CD': '2203', 'MC DESC': 'L-JEANS', 'Flag': 'NOOS', 'MRP': '599', 'EMF': 'Entry' }
+];
+
+module.exports = { apply, runEngineA, REPLACEMENTS, FIXTURE_EMF };

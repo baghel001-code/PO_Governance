@@ -24,10 +24,10 @@ namespace POGovernance.Tests.Sap
             BFirst = new Tool1EngineBResult { Decision = Decisions.Hold, NoPlan = true, MaxPermQty = 0, DecisionReason = "No Plan Available: there is no F4 plan for …" }
         };
 
-        private static Tool1Outcome A(string decision, string? quartile, string reason, string optionType = "True Repeat") => new()
+        private static Tool1Outcome A(string decision, string? quartile, string reason, string optionType = "True Repeat", string? emfCheck = null) => new()
         {
             Engine = "A", OptionType = optionType, Decision = decision,
-            A = new Tool1EngineAResult { Decision = decision, Quartile = quartile, DecisionReason = reason, OptionType = optionType }
+            A = new Tool1EngineAResult { Decision = decision, Quartile = quartile, DecisionReason = reason, OptionType = optionType, EmfCheck = emfCheck }
         };
 
         public static IEnumerable<object[]> Cases() => new[]
@@ -50,6 +50,11 @@ namespace POGovernance.Tests.Sap
             new object[] { "A Block Q4", A(Decisions.Block, "Q4", "True Repeat: ranks Q4 (10th pct) … Block. Do not raise PO."), SapOutcomePath.BlockBelowQ1, "HOLD", "BLOCK", "BLOCK", "BLOCK-PEER" },
             new object[] { "A Absolute Block", A(Decisions.Block, null, "Absolute Block override: GM+Colour (…) has AVG PERDAY SELL THRU% = 0.5% < 1%"), SapOutcomePath.BlockAbsolute, "HOLD", "BLOCK", "BLOCK", "BLOCK-ABS" },
             new object[] { "A Absolute Block of a Q1 BOBs", A(Decisions.Block, "Q1", "Absolute Block override: best sibling colourway (…) has AVG PERDAY SELL THRU% = 0.5% < 1%", "BOBs"), SapOutcomePath.BlockAbsolute, "HOLD", "BLOCK", "BLOCK", "BLOCK-ABS" },
+            // Step 2: the Entry / Mid / Fashion minimum of a Q1
+            new object[] { "A Q1 below the minimum", A(Decisions.Block, "Q1", "True Repeat: ranks Q1 … — Q1 but below the Mid minimum 1.5%/day (first 3 weeks). Block.", emfCheck: "below"), SapOutcomePath.BlockBelowEmfMinimum, "HOLD", "BLOCK", "BLOCK", "BLOCK-EMF-MIN" },
+            new object[] { "A Q1 not in the mapping", A(Decisions.Hold, "Q1", "Planner has not maintained this MC-MRP in the master. (…)", emfCheck: "notMapped"), SapOutcomePath.EmfNotMaintained, "HOLD", "HOLD", "EMF_NOT_MAINTAINED", "EMF-00" },
+            new object[] { "A BOBs oldest colour below the minimum", A(Decisions.Block, "Q1", "BOBs: All 2 sibling colourway(s) … rank Q1 (top 25%), but the oldest colour …", "BOBs", "below"), SapOutcomePath.BlockBelowEmfMinimum, "HOLD", "BLOCK", "BLOCK", "BLOCK-EMF-MIN" },
+            new object[] { "A BOBs not in the mapping", A(Decisions.Hold, "Q1", "Planner has not maintained this MC-MRP in the master. (…)", "BOBs", "notMapped"), SapOutcomePath.EmfNotMaintained, "HOLD", "HOLD", "EMF_NOT_MAINTAINED", "EMF-00" },
             new object[] { "A Allow, WOF below gate", A(Decisions.Allow, null, "WOF = 2w < 4w gate. Insufficient selling history — Auto Allow."), SapOutcomePath.LowHistory, "ALLOW", "ALLOW", "LOW_HISTORY", "WOF-00" },
             new object[] { "A Allow, no peer pool", A(Decisions.Allow, null, "No peer pool available. Auto Allow."), SapOutcomePath.NoPeerPool, "ALLOW", "ALLOW", "NO_PEER_POOL", "PEER-00" },
             // Multi Concept — BOBs: every other colour with WOF ≥ gate must rank Q1
@@ -88,7 +93,7 @@ namespace POGovernance.Tests.Sap
                 Assert.Equal("BLOCK", SapVerdictMap.VerdictFor(r, "BLOCK"));
                 Assert.Equal("B", SapVerdicts.Code(SapVerdictMap.VerdictFor(r, "BLOCK")));
             }
-            Assert.Equal(3, SapVerdictMap.Table.Count(r => r.IsBlock));   // below Q1, BOBs sibling below Q1, absolute
+            Assert.Equal(4, SapVerdictMap.Table.Count(r => r.IsBlock));   // below Q1, below the EMF minimum, BOBs sibling below Q1, absolute
             // nothing else changes with the switch
             foreach (var r in SapVerdictMap.Table.Where(r => !r.IsBlock))
                 Assert.Equal(SapVerdictMap.VerdictFor(r, "HOLD"), SapVerdictMap.VerdictFor(r, "BLOCK"));

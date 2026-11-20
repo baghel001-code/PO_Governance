@@ -16,6 +16,11 @@ namespace DecisionEngine.Tool1
     /// No other colours, or none with WOF ≥ gate → Allow as before.</item>
     /// <item>Unchanged: WOF below the gate → Allow; no peer pool → Allow; the absolute-block override (<see cref="AbsBlock"/>);
     /// new articles (engine NEW) → Auto Allow.</item>
+    /// <item><b>Step 2</b> (Nov 2026): a Q1 is allowed only when its per-day sell-thru is at least the minimum of the option's
+    /// Entry / Mid / Fashion type (<see cref="EmfMapping"/>: Entry 2.0 %, Mid 1.5 %, Fashion 1.5 %/day); below → Block. The
+    /// option's Brand × MC × Flag × MRP not in the uploaded mapping → Hold "Planner has not maintained this MC-MRP in the
+    /// master." BOBs: the minimum is checked on the oldest other colour (most weeks on floor). Only a ranking that would
+    /// otherwise Allow is checked — Q2–Q4 stay Block, the WOF / no-peer-pool / new-article allows are unchanged.</item>
     /// </list>
     /// The JavaScript reference of the same rule, used by the parity harnesses, is <c>tests/parity/rules/multi-concept.js</c>.
     /// Tool 2 runs this engine through <see cref="Tool2.Tool2EngineA"/> (an adapter to Tool 2's line model).
@@ -166,10 +171,46 @@ namespace DecisionEngine.Tool1
                           "). Every other colour must rank Q1 (top 25%) — new colour blocked."
                         : "BOBs: All " + qualSibs.Count + " sibling colourway(s) with WOF ≥ " + Js.NumberToString(wofGate) +
                           "w rank Q1 (top 25%) — parent style is a top seller. New colour permitted.";
+                    string? emfTag = null, emfCheck = null;
+                    double? emfMin = null, emfPd = null;
                     if (decision == Decisions.Allow)
                     {
                         var ab = AbsBlock(Decisions.Allow, BsrPeerRank.GetPdstr(best), BsrPeerRank.GetWof(best), "best sibling colourway (" + gm + ")");
                         if (ab.Overridden) { decision = ab.Decision!; reason = ab.Reason!; }
+                        else
+                        {
+                            // Step 2: the minimum of the option's type, checked on the oldest other colour (most weeks on floor)
+                            var oldest = best;
+                            var oc = oldest.Col("Color", "Colour", "COLOR", "COLOUR", "colour", "color").Trim();
+                            var ow = BsrPeerRank.GetWof(oldest);
+                            emfPd = BsrPeerRank.GetPdstr(oldest);
+                            emfTag = EmfMapping.Lookup(data, brand, mcCd, flag, mrp);
+                            var allQ1 = "BOBs: All " + qualSibs.Count + " sibling colourway(s) with WOF ≥ " + Js.NumberToString(wofGate) + "w rank Q1 (top 25%)";
+                            if (emfTag == null)
+                            {
+                                emfCheck = EmfMapping.CheckNotMapped;
+                                decision = Decisions.Hold;
+                                reason = EmfMapping.NotMaintainedMessage + " (" + EmfMapping.Describe(brand, mcCd, flag, mrp) +
+                                         " is not in the Entry / Mid / Fashion mapping. " + allQ1 + ".)";
+                            }
+                            else
+                            {
+                                emfMin = EmfMapping.MinPdstr(emfTag);
+                                var minTxt = "the " + emfTag + " minimum " + Js.ToFixed(emfMin!.Value * 100, 1) + "%/day";
+                                var oldTxt = "the oldest colour " + oc + " (" + Js.NumberToString(ow) + "w on floor) sells " + Js.ToFixed(emfPd.Value * 100, 1) + "%/day";
+                                if (EmfMapping.MeetsMinimum(emfPd.Value, emfMin.Value))
+                                {
+                                    emfCheck = EmfMapping.CheckOk;
+                                    reason = allQ1 + " and " + oldTxt + " — at least " + minTxt + ". New colour permitted.";
+                                }
+                                else
+                                {
+                                    emfCheck = EmfMapping.CheckBelow;
+                                    decision = Decisions.Block;
+                                    reason = allQ1 + ", but " + oldTxt + " — below " + minTxt + ". New colour blocked.";
+                                }
+                            }
+                        }
                     }
                     // the sibling that drove the decision: Block → the worst-ranked colour, Allow → the best-ranked one
                     var qOrder = new Dictionary<string, int> { ["Q4"] = 0, ["Q3"] = 1, ["Q2"] = 2, ["Q1"] = 3 };
@@ -181,7 +222,7 @@ namespace DecisionEngine.Tool1
                         Decision = decision, DecisionReason = reason, OptionType = optionType, BsrLabel = bsrLabel, PeerPool = peerPool,
                         CleanPool = cleanPool, TotalBSR = totalBSR, PeerAvg = peerAvg, Siblings = allSibs, QualSibs = qualSibs, SibRanked = sibRanked,
                         Wof = BsrPeerRank.GetWof(rep.Row), Pdstr = rep.Pdstr, Quartile = rep.Q, Percentile = BsrPeerRank.PctRank(rep.Pdstr, rankPool),
-                        RepSibling = rep.Row
+                        RepSibling = rep.Row, EmfTag = emfTag, EmfMin = emfMin, EmfCheck = emfCheck, EmfPdstr = emfPd
                     };
                 }
                 if (allSibs.Count > 0)
@@ -225,12 +266,42 @@ namespace DecisionEngine.Tool1
             var head = "True Repeat: ranks " + qa + " (" + Js.NumberToString(pcta) + "th pct) in peer group of " + cleanPool.Count + " styles (" + bsrLabel + "). ";
             var pdTxt = Js.ToFixed(pd * 100, 1);
             string decA, reasonA;
+            string? tagA = null, checkA = null;
+            double? minA = null;
             if (qa == AllowQuartile)
             {
                 decA = Decisions.Allow;
                 reasonA = head + "PDSTR = " + pdTxt + "%/day — top 25% (Q1). Allow.";
                 var ab = AbsBlock(decA, pd, wofA, label);
                 if (ab.Overridden) { decA = ab.Decision!; reasonA = ab.Reason!; }
+                else
+                {
+                    // Step 2: Q1 and at least the minimum of the option's Entry / Mid / Fashion type
+                    tagA = EmfMapping.Lookup(data, brand, mcCd, flag, mrp);
+                    if (tagA == null)
+                    {
+                        checkA = EmfMapping.CheckNotMapped;
+                        decA = Decisions.Hold;
+                        reasonA = EmfMapping.NotMaintainedMessage + " (" + EmfMapping.Describe(brand, mcCd, flag, mrp) +
+                                  " is not in the Entry / Mid / Fashion mapping. " + head + "PDSTR = " + pdTxt + "%/day.)";
+                    }
+                    else
+                    {
+                        minA = EmfMapping.MinPdstr(tagA);
+                        var minTxt = "the " + tagA + " minimum " + Js.ToFixed(minA!.Value * 100, 1) + "%/day";
+                        if (EmfMapping.MeetsMinimum(pd, minA.Value))
+                        {
+                            checkA = EmfMapping.CheckOk;
+                            reasonA = head + "PDSTR = " + pdTxt + "%/day — top 25% (Q1) and at least " + minTxt + ". Allow.";
+                        }
+                        else
+                        {
+                            checkA = EmfMapping.CheckBelow;
+                            decA = Decisions.Block;
+                            reasonA = head + "PDSTR = " + pdTxt + "%/day — Q1 but below " + minTxt + " (first 3 weeks). Block. Do not raise PO.";
+                        }
+                    }
+                }
             }
             else
             {
@@ -240,6 +311,7 @@ namespace DecisionEngine.Tool1
             }
             var ra = Res(decA, reasonA, new(), wofA, pd, qa, pcta);
             ra.GapPct = Js.Round(gap * 10) / 10;   // shown as "Gap from Avg" (information only — no border zone any more)
+            ra.EmfTag = tagA; ra.EmfMin = minA; ra.EmfCheck = checkA; ra.EmfPdstr = checkA != null ? pd : null;
             return ra;
         }
     }

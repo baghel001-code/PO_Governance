@@ -16,6 +16,9 @@ namespace DecisionEngine.Sap
         PeerQ1,
         BlockBelowQ1,
         BlockAbsolute,
+        // Multi Concept rule Step 2 — the Entry / Mid / Fashion minimum of a Q1 (BOBs: of the oldest other colour)
+        BlockBelowEmfMinimum,
+        EmfNotMaintained,
         // Multi Concept — BOBs: every other colour must rank Q1
         BobsSiblingsOk,
         BlockBobsSibling,
@@ -61,10 +64,12 @@ namespace DecisionEngine.Sap
             new SapVerdictRule(SapOutcomePath.CoverAboveNorm, Decisions.Hold, SapVerdicts.Reduce, "COVER_ABOVE_NORM", "COVER-01", "Cover above the norm: reduce to Max Permissible"),
             new SapVerdictRule(SapOutcomePath.CoverNoHeadroom, Decisions.Hold, SapVerdicts.Hold, "COVER_NO_HEADROOM", "COVER-02", "Existing stock + pending already above the norm: Max Permissible 0"),
             new SapVerdictRule(SapOutcomePath.MixBelowMin, Decisions.WatchList, SapVerdicts.Watch, "MIX_BELOW_MIN", "MIX-01", "Colour mix below the minimum share of its MC-MRP"),
-            new SapVerdictRule(SapOutcomePath.PeerQ1, Decisions.Allow, SapVerdicts.Allow, "PEER_Q1", "PEER-Q1", "Ranks Q1 (top 25 %) in its BSR peer group (same Brand, MC, MRP, Flag)"),
+            new SapVerdictRule(SapOutcomePath.PeerQ1, Decisions.Allow, SapVerdicts.Allow, "PEER_Q1", "PEER-Q1", "Ranks Q1 (top 25 %) in its BSR peer group (same Brand, MC, MRP, Flag) and meets its Entry / Mid / Fashion minimum"),
             new SapVerdictRule(SapOutcomePath.BlockBelowQ1, Decisions.Block, SapVerdicts.Block, BlockReasonCode, "BLOCK-PEER", "Block: ranks below Q1 (top 25 %) in its BSR peer group", IsBlock: true),
             new SapVerdictRule(SapOutcomePath.BlockAbsolute, Decisions.Block, SapVerdicts.Block, BlockReasonCode, "BLOCK-ABS", "Block: sell-thru below 1 %/day after 4+ weeks on floor", IsBlock: true),
-            new SapVerdictRule(SapOutcomePath.BobsSiblingsOk, Decisions.Allow, SapVerdicts.Allow, "BOBS_SIBLINGS_OK", "BOBS-01", "New colour: all other colours of the option rank Q1"),
+            new SapVerdictRule(SapOutcomePath.BlockBelowEmfMinimum, Decisions.Block, SapVerdicts.Block, BlockReasonCode, "BLOCK-EMF-MIN", "Block: ranks Q1 but below the minimum sell-thru of its Entry / Mid / Fashion type", IsBlock: true),
+            new SapVerdictRule(SapOutcomePath.EmfNotMaintained, Decisions.Hold, SapVerdicts.Hold, "EMF_NOT_MAINTAINED", "EMF-00", "Planner has not maintained this MC-MRP in the master (Entry / Mid / Fashion mapping)"),
+            new SapVerdictRule(SapOutcomePath.BobsSiblingsOk, Decisions.Allow, SapVerdicts.Allow, "BOBS_SIBLINGS_OK", "BOBS-01", "New colour: all other colours of the option rank Q1 and the oldest meets the Entry / Mid / Fashion minimum"),
             new SapVerdictRule(SapOutcomePath.BlockBobsSibling, Decisions.Block, SapVerdicts.Block, BlockReasonCode, "BLOCK-BOBS", "Block: new colour, another colour of the option ranks below Q1", IsBlock: true),
             new SapVerdictRule(SapOutcomePath.LowHistory, Decisions.Allow, SapVerdicts.Allow, "LOW_HISTORY", "WOF-00", "Too little selling history (weeks on floor below the gate), allowed"),
             new SapVerdictRule(SapOutcomePath.NoPeerPool, Decisions.Allow, SapVerdicts.Allow, "NO_PEER_POOL", "PEER-00", "No BSR peer group available, allowed"),
@@ -109,6 +114,9 @@ namespace DecisionEngine.Sap
                 var d = a?.Decision ?? o.Decision;
                 var reason = a?.DecisionReason ?? o.DecisionReason ?? "";
                 var q = a?.Quartile;
+                // Step 2 first: the BOBs reasons of these start like an allowed one ("BOBs: All …")
+                if (a?.EmfCheck == Common.EmfMapping.CheckNotMapped) return SapOutcomePath.EmfNotMaintained;
+                if (d == Decisions.Block && a?.EmfCheck == Common.EmfMapping.CheckBelow) return SapOutcomePath.BlockBelowEmfMinimum;
                 if (d == Decisions.Block)
                 {
                     if (reason.StartsWith("Absolute Block override", StringComparison.Ordinal)) return SapOutcomePath.BlockAbsolute;

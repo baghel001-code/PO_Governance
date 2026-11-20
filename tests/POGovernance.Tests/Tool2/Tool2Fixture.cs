@@ -31,8 +31,9 @@ namespace POGovernance.Tests.Tool2
             var drop = sc["drop"]!.AsArray().Select(x => x!.GetValue<string>()).ToHashSet();
             var files = new Dictionary<string, IReadOnlyList<SheetRow>?>();
             var fjson = DatasetJson.Value["files"]!.AsObject();
-            foreach (var key in new[] { "f1", "f2", "f3", "f4", "um", "bsr", "artmaster", "colmaster", "attrrel", "catheadmap" })
+            foreach (var key in new[] { "f1", "f2", "f3", "f4", "um", "bsr", "artmaster", "colmaster", "attrrel", "catheadmap", "emf" })
             {
+                if (fjson[key] is null) continue;   // emf: the Entry / Mid / Fashion mapping (multi concept rule Step 2)
                 if (drop.Contains(key)) { files[key] = null; continue; }
                 using var doc = JsonDocument.Parse(fjson[key]!.ToJsonString());
                 files[key] = doc.RootElement.EnumerateArray().Select(SheetRow.FromJson).ToList();

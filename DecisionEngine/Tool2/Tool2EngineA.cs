@@ -27,6 +27,9 @@ namespace DecisionEngine.Tool2
         public bool? InBorderZone { get; set; }
         public double? BorderTolUsed { get; set; }
         public SheetRow? RepSibling { get; set; }
+        /// <summary>Multi concept rule Step 2: "ok" / "below" / "notMapped" (DecisionEngine.Common.EmfMapping), null when not checked.</summary>
+        public string? EmfCheck { get; set; }
+        public string? EmfTag { get; set; }
     }
 
     /// <summary>
@@ -54,7 +57,8 @@ namespace DecisionEngine.Tool2
                 Siblings = r.Siblings, QualSibs = r.QualSibs,
                 SibRanked = r.SibRanked.Select(s => new SibRank { Row = s.Row, Q = s.Q, Pdstr = s.Pdstr }).ToList(),
                 Wof = r.Wof, Pdstr = r.Pdstr, Quartile = r.Quartile, Percentile = r.Percentile,
-                GapPct = r.GapPct, InBorderZone = r.InBorderZone, BorderTolUsed = r.BorderTolUsed, RepSibling = r.RepSibling
+                GapPct = r.GapPct, InBorderZone = r.InBorderZone, BorderTolUsed = r.BorderTolUsed, RepSibling = r.RepSibling,
+                EmfCheck = r.EmfCheck, EmfTag = r.EmfTag
             };
         }
     }

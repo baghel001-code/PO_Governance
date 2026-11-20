@@ -115,6 +115,9 @@ for (const dm of ['10.2026', '01.2027'])
   files.f2.push(Object.assign({ 'PO Number': '450000940' + dm.slice(0, 2), 'Generic Material': '8811000801', 'Color': 'RED', 'Delivery Month': dm,
     'Pending Qty': '900', 'Vendor Name': 'Cap Co' }, B8));
 
+// multi concept rule Step 2: the Entry / Mid / Fashion mapping (tests/parity/rules/multi-concept.js)
+files.emf = require('../rules/multi-concept').FIXTURE_EMF.map(r => Object.assign({}, r));
+
 const out = { files, requests: src.requests };
 const dest = path.join(ROOT, 'tests/POGovernance.Tests/Tool2/Fixtures/dataset.json');
 fs.writeFileSync(dest, JSON.stringify(out, null, 1));

@@ -81,6 +81,9 @@ F.artmaster.push({ 'Generic Material': '7700000001', 'Brand Type': 'NON-PL', 'Di
 // B1 NVY: huge pending PO → no headroom
 F.f2.push({ 'PO Number': '4500099999', 'Generic Material': '1101000103', 'Color': 'NVY', 'Brand Type': 'NON-PL', 'MC CD': '1101', 'MRP': '399', 'Flag': 'NON-BOGO', 'Delivery Month': '11.2026', 'Pending Qty': '250000', 'Vendor Name': 'Vendor X' });
 
+// multi concept rule Step 2: the Entry / Mid / Fashion mapping (tests/parity/rules/multi-concept.js)
+F.emf = require('../rules/multi-concept').FIXTURE_EMF.map(r => Object.assign({}, r));
+
 const dest = path.join(ROOT, 'tests/POGovernance.Tests/Tool1/Fixtures/dataset.json');
 fs.writeFileSync(dest, JSON.stringify(d, null, 1));
 console.log('wrote', dest, Object.fromEntries(Object.entries(F).map(([k, v]) => [k, v.length])), 'requests', d.requests.length);

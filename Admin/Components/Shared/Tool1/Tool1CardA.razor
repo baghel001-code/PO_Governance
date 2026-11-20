@@ -71,6 +71,15 @@
     </div>
 }
 
+@if (A.Minimum is { } mn)
+{
+    @* multi concept rule Step 2: the Entry / Mid / Fashion minimum of a Q1 *@
+    <div class="t1-a-sec" data-testid="emf-minimum">
+        <div class="t1-a-h">@mn.Heading</div>
+        <div class="t1-strip" style="background:@(mn.Check == "ok" ? "#DCFCE7" : mn.Check == "below" ? "#FEF2F2" : "#FFFBEB");border-color:@mn.Colour;color:@mn.Colour">@mn.Text</div>
+    </div>
+}
+
 @if (!string.IsNullOrEmpty(A.AbsoluteBlockNote))
 {
     <div class="t1-a-sec t1-strip" style="background:#FEF2F2;border-color:#DC2626;color:#DC2626">@A.AbsoluteBlockNote</div>

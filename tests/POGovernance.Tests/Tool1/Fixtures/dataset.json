@@ -6365,6 +6365,35 @@
     "Level 1 Buyer": "buyer@x",
     "Category Head": "ch@x"
    }
+  ],
+  "emf": [
+   {
+    "Brand Type": "NON-PL",
+    "Division": "LADIES",
+    "MC CD": "2203",
+    "MC DESC": "L-JEANS",
+    "Flag": "BOGO",
+    "MRP": "599",
+    "EMF": "Mid"
+   },
+   {
+    "Brand Type": "MAVIE",
+    "Division": "LADIES",
+    "MC CD": "3305",
+    "MC DESC": "L-TOPS",
+    "Flag": "Normal",
+    "MRP": "799",
+    "EMF": "Fashion"
+   },
+   {
+    "Brand Type": "NON-PL",
+    "Division": "LADIES",
+    "MC CD": "2203",
+    "MC DESC": "L-JEANS",
+    "Flag": "NOOS",
+    "MRP": "599",
+    "EMF": "Entry"
+   }
   ]
  },
  "requests": [

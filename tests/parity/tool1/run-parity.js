@@ -246,7 +246,7 @@ function runScenario(sc) {
     static now() { return FIXED; }
   }
   const files = {};
-  for (const k of ['f1', 'f2', 'f3', 'f4', 'um', 'bsr', 'artmaster', 'colmaster', 'attrrel', 'catheadmap'])
+  for (const k of ['f1', 'f2', 'f3', 'f4', 'um', 'bsr', 'artmaster', 'colmaster', 'attrrel', 'catheadmap', 'emf'])
     files[k] = sc.drop && sc.drop.includes(k) ? null : JSON.parse(JSON.stringify(dataset.files[k]));
   const params = Object.assign({ T1: 75, T2: 100, D: 75, mix: 2, N: 2, wof: 4, peer: 5, mixWindowDays: 45, borderTolerance: 10, strBuffer: 5, prevMonthPendingCutoffDay: 5, seasonCurrent: ['AW26'], seasonFallback: ['SS26'] }, sc.params || {});
   const S = { files, params, requests: [], reqCount: 0, role: 'category' };

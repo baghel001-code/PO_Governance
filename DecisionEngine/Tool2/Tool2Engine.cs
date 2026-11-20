@@ -120,7 +120,9 @@ namespace DecisionEngine.Tool2
                             if (info == null) throw new InvalidOperationException("Cannot read properties of null (reading 'mcCd')");
                             caution = rec.StrCaution(ctx, info.McCd, info.Mrp, info.Brand, info.Flag, colour, gm, dm);
                         }
-                        line.Decision = MapA(rawA.Decision);
+                        // multi concept rule Step 2: an MC-MRP the planner has not maintained in the Entry / Mid / Fashion
+                        // mapping cannot be judged → Cannot Validate (a Tool 1 Hold), not Cancel
+                        line.Decision = rawA.EmfCheck == DecisionEngine.Common.EmfMapping.CheckNotMapped ? Decisions.CannotValidate : MapA(rawA.Decision);
                         line.DecisionReason = rawA.DecisionReason;
                         line.StrCaution = caution;
                         line.OptionType = rawA.OptionType;

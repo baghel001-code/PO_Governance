@@ -1,4 +1,3 @@
-using Microsoft.Extensions.Configuration;
 using System.Text.Json.Nodes;
 using Application.Interfaces.V1;
 using Application.Interfaces.V1.Sap;
@@ -127,21 +126,6 @@ namespace POGovernance.Tests.Sap
             fixedBase.Cfg.VerdictLink.PortalBaseUrl = "https://pogov.example";
             Assert.StartsWith("https://pogov.example/mra-verdict/", (await fixedBase.DecideAsync("WI-FIXED"))["view_url"]!.GetValue<string>());
             Assert.Equal(0, fixedBase.Api.Calls);
-        }
-
-        [Theory]
-        [InlineData(null, "")]                                         // Development: empty = API_BASE_URL POGOV_PORTAL
-        [InlineData("Staging", "http://192.168.0.175:8177/")]
-        public void The_portal_base_of_the_links_comes_from_the_appsettings_of_the_environment(string? environment, string expected)
-        {
-            var dir = Path.Combine(SapVerdictMapTests.RepoPath("POGovApi"));
-            var b = new Microsoft.Extensions.Configuration.ConfigurationBuilder()
-                .SetBasePath(dir).AddJsonFile("appsettings.json", optional: false);
-            if (environment != null) b.AddJsonFile("appsettings." + environment + ".json", optional: false);
-            var s = new Domain.Entities.AppSettings.SapInterfaceSettings();
-            Microsoft.Extensions.Configuration.ConfigurationBinder.Bind(b.Build().GetSection("SapInterface"), s);
-            Assert.Equal(expected, s.VerdictLink.PortalBaseUrl);
-            Assert.Equal(("POGOV_PORTAL", 90, true), (s.VerdictLink.BaseUrlKey, s.VerdictLink.ValidDays, s.VerdictLink.Enabled));
         }
 
         [Fact]

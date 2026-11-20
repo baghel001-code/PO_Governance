@@ -36,16 +36,9 @@ namespace Application.Services.V1.Sap
         /// <summary>The token of a decision link (PO verdict page or MRA page), or null when the link is not one.</summary>
         public static string? Token(string? viewUrl) => Split(viewUrl)?.Token;
 
-        /// <summary>
-        /// The MRA page link for <paramref name="mraNo"/> (GET /verdict-url), or null when <paramref name="viewUrl"/> is not a
-        /// decision link. <paramref name="portalBase"/> = the portal base URL of this environment now (SapInterface:VerdictLink:
-        /// PortalBaseUrl, else API_BASE_URL POGOV_PORTAL), so the link follows a changed setting; without it the host of the
-        /// stored link is kept.
-        /// </summary>
-        public static string? PageUrl(string? viewUrl, string mraNo, string? portalBase = null) =>
-            Split(viewUrl) is { } s
-                ? (string.IsNullOrWhiteSpace(portalBase) ? s.Base : portalBase.Trim().TrimEnd('/')) + MraVerdict + Uri.EscapeDataString(s.Token) + "/" + Uri.EscapeDataString(mraNo)
-                : null;
+        /// <summary>The MRA page link for <paramref name="mraNo"/> (GET /verdict-url), or null when <paramref name="viewUrl"/> is not a decision link.</summary>
+        public static string? PageUrl(string? viewUrl, string mraNo) =>
+            Split(viewUrl) is { } s ? s.Base + MraVerdict + Uri.EscapeDataString(s.Token) + "/" + Uri.EscapeDataString(mraNo) : null;
 
         /// <summary>The PO verdict page (/verdict/&lt;token&gt;) of a decision link, or null.</summary>
         public static string? PoVerdictUrl(string? viewUrl) =>

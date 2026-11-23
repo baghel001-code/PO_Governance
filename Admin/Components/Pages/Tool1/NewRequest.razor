@@ -293,7 +293,8 @@
             {
                 // v1.1.6 S5: "Why introduce this colour?" — "Don't send" saves nothing
                 StateHasChanged();
-                var why = await _why.AskAsync(current.Card?.Gm ?? input.Gm ?? "", current.Card?.Colour ?? "", input.Month ?? "", input.Qty ?? 0, current.DecisionReason);
+                var why = await _why.AskAsync(current.Card?.Gm ?? input.Gm ?? "", current.Card?.Colour ?? "", input.Month ?? "", input.Qty ?? 0, current.DecisionReason,
+                                              exception: current.Decision == DecisionEngine.Model.Decisions.Exception);
                 if (why == null)
                 {
                     Snackbar.Add(current.NotSentMessage ?? "Not sent: nothing was saved.", Severity.Info);

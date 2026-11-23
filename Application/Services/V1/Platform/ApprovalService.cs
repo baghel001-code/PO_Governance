@@ -1,6 +1,7 @@
 using System.Text.Json.Nodes;
 using Application.DTOs.Platform;
 using Application.Interfaces.V1;
+using DecisionEngine.Model;
 using Domain.Constants;
 using Domain.Entities.Store;
 using Domain.Exceptions;
@@ -41,13 +42,20 @@ namespace Application.Services.V1.Platform
 
         private static JsonObject Appr(JsonObject r) => r.GetObj("approval") ?? new JsonObject();
 
+        /// <summary>Multi concept rule Step 3: an exception (20–30% band) — only the B&amp;M Head (its approver) or an admin decides it.</summary>
+        private static bool IsException(JsonObject r) => r.GetStr("decision") == Decisions.Exception;
+
+        /// <summary>Whether <paramref name="me"/> may decide (and so sees) the approval of <paramref name="r"/>.</summary>
+        private static bool CanDecide(JsonObject r, AppUserContext me) =>
+            Appr(r).GetStrList("approvers").Contains(me.Email) ||
+            (IsException(r) ? me.Has(Roles.Admin) : me.Has(Roles.Admin, Roles.Planner));
+
         public async Task<ApprovalsResponse> GetAsync(int days, AppUserContext me, CancellationToken ct = default)
         {
             List<JsonObject> items;
             using (await _store.LockAsync(ct)) items = await ApprovalItemsAsync(days, ct);
-            var admin = me.Has(Roles.Admin, Roles.Planner);
-            var mine = items.Where(r => admin || Appr(r).GetStrList("approvers").Contains(me.Email)
-                                        || (!Appr(r).GetTruthy("approvers") && admin)).ToList();
+            // planners and admins see every Watch List approval; an exception only its B&M Head and the admins
+            var mine = items.Where(r => CanDecide(r, me)).ToList();
             // your own requests are approved by someone else (category head / admin / planner)
             var pending = mine.Where(r => Appr(r).GetStr("status") == ApprovalStatus.Pending && r.GetStrOrEmpty("requestedByEmail") != me.Email)
                               .OrderBy(r => r.GetStrOrEmpty("savedAt"), StringComparer.Ordinal).ToList();
@@ -64,8 +72,7 @@ namespace Application.Services.V1.Platform
             foreach (var r in await ApprovalItemsAsync(30, ct))
             {
                 var a = Appr(r);
-                if (a.GetStr("status") == ApprovalStatus.Pending && r.GetStrOrEmpty("requestedByEmail") != me.Email
-                    && (staff || a.GetStrList("approvers").Contains(me.Email)))
+                if (a.GetStr("status") == ApprovalStatus.Pending && r.GetStrOrEmpty("requestedByEmail") != me.Email && CanDecide(r, me))
                     n++;
             }
             return n;
@@ -98,8 +105,10 @@ namespace Application.Services.V1.Platform
                 var approvers = a.GetStrList("approvers");
                 if (r.GetStrOrEmpty("requestedByEmail") == me.Email)
                     throw new ForbiddenException("You cannot approve or reject your own request");
-                if (!(me.Has(Roles.Admin, Roles.Planner) || approvers.Contains(me.Email)))
-                    throw new ForbiddenException($"This request is waiting for {(approvers.Count > 0 ? string.Join(", ", approvers) : "an admin")}");
+                if (!CanDecide(r, me))
+                    throw new ForbiddenException(IsException(r)
+                        ? $"This exception is waiting for the B&M Head ({(approvers.Count > 0 ? string.Join(", ", approvers) : "an admin")})"
+                        : $"This request is waiting for {(approvers.Count > 0 ? string.Join(", ", approvers) : "an admin")}");
                 if (status == ApprovalStatus.Approved)
                 {
                     var q = body.Get("qty");

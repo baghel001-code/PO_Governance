@@ -119,6 +119,22 @@ namespace Application.Services.V1.Platform
                         ["approverNames"] = names
                     };
                 }
+                else if (r.GetStr("decision") == Decisions.Exception)
+                {
+                    // multi concept rule Step 3: the exception goes to the B&M Head (PoGovSettings:BmHeadEmail), else an admin
+                    var email = (_cfg.BmHeadEmail ?? "").Trim().ToLowerInvariant();
+                    var names = new JsonArray();
+                    if (email.Length > 0)
+                        names.Add(await _acc.GetUserAsync(email, ct) is { } u && !string.IsNullOrWhiteSpace(u.Name) ? u.Name
+                                  : string.IsNullOrWhiteSpace(_cfg.BmHeadName) ? email : _cfg.BmHeadName.Trim());
+                    r["approval"] = new JsonObject
+                    {
+                        ["status"] = ApprovalStatus.Pending,
+                        ["approvers"] = email.Length > 0 ? new JsonArray(email) : new JsonArray(),
+                        ["approverNames"] = names,
+                        ["kind"] = "exception"
+                    };
+                }
                 await _store.AppendLogAsync(LogStreams.Requests,
                     new JsonObject { ["type"] = RequestEventTypes.Request, ["seq"] = seq, ["request"] = r.DeepClone() }, date, ct);
             }

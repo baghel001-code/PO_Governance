@@ -44,6 +44,13 @@ namespace Domain.Entities.AppSettings
         public int LockoutMinutes { get; set; } = 15;
         /// <summary>Buyers / category heads only see requests on their own MCs (SCR products file).</summary>
         public bool RestrictToOwnMcs { get; set; } = true;
+        /// <summary>
+        /// Multi concept rule Step 3: the B&amp;M Head who approves the exceptions (20–30% band, MRA Level 8) on the Approvals
+        /// page — needs a portal login (Category Head role or admin). Empty = waiting for an admin.
+        /// </summary>
+        public string BmHeadEmail { get; set; } = "";
+        /// <summary>Name shown for the B&amp;M Head when the email has no portal login yet.</summary>
+        public string BmHeadName { get; set; } = "B&M Head";
 
         public string BackupDir { get; set; } = "backups";
         /// <summary>Nightly backup after this hour (24h clock, business time zone); negative = off.</summary>

@@ -166,8 +166,9 @@ v1.1.4 did everything in one click. The server splits it into two calls, so the 
 - **Step 3 — {Heading}** (when present):
   - Line: `PoolText` left, `RankText` right (in `RankColour`).
   - Rank bar with lines at 25/50/75 % and a dot at `Position` %.
-  - Labels under the bar: Q4 Block, Q3 Block, Q2 Block, Q1 Allow (multi concept rule Step 1: only Q1 is allowed).
-- **Step 4 — Minimum Sell-Thru** (`Minimum`, multi concept rule Step 2 — only when a Q1 was checked): heading with the type and
+  - Lines at 70 % and 80 %; labels under the bar: "Below 30% · Block", "20–30%", "Top 20% · Allow" (multi concept rule Step 3:
+    percentile bands; `RankText` = "<n>th percentile — Top 20% (Allow) / 20–30% (Exception — B&M Head) / Below 30% (Block)").
+- **Step 4 — Minimum Sell-Thru** (`Minimum`, multi concept rule Step 2 — only when a top-20% option was checked): heading with the type and
   minimum ("Step 4 — Minimum Sell-Thru (Mid ≥ 1.5%/day)", or "(not in the master)"), and a strip with the value checked
   ("4.6%/day ≥ 1.5%/day → Allow" green, "… < … → Block" red, the planner message "→ Hold" amber; BOBs: "the oldest other colour: …").
 - **Step 4 — Border Zone Check (PDSTR Gap)** (only for a result that went through the old border zone check — `BorderTolUsed` set; never since the multi concept rule Step 1):
@@ -179,7 +180,7 @@ v1.1.4 did everything in one click. The server splits it into two calls, so the 
 
 - **Reason box**: background / border in the decision colours, left border `DecisionColour`. Title
   `ReasonTitle` (small caps), then `Reason`.
-- **STR caution** (`StrCaution`, Multi Concept Q1/Q2 Allow only): a separate amber box, never inside the
+- **STR caution** (`StrCaution`, Multi Concept top-20% Allow only): a separate amber box, never inside the
   green reason. It uses the same component as View Recommendation: `Items[].Text`, with an expandable
   breakdown that has `Footer`.
 - **Footer**: `FooterHint` on the left, then the **📊 View Recommendation** button. It opens the

@@ -66,7 +66,7 @@ and `view.statusText` under the Run button (line count = `lines.length`).
      Recommended Action pill in `actionColor`, Max Permissible Qty = `recQty` or "0") + TOTAL row (`totalQty`,
      `totalRetain`).
    - **Tab A** (`rows` = line idx): PO Number, Gen. Material, Colour, Brand, Division, MC Desc, ₹MRP, Del. Month,
-     Released Qty, Option Type, Quartile chip (Q1 `#00873E`, Q2 `#059669`, Q3 `#D97706`, Q4 `#DC2626`), Percentile
+     Released Qty, Option Type, band chip (Top 20% `#00873E`, 20–30% `#7C3AED`, Below 30% `#DC2626`; Q1–Q4 of older runs as before), Percentile
      ("58th"), Decision pill (hover `tooltip`), ▼ → "{decision} — Detailed Computation" + the line's reason.
 6. **Charts** (two cards): "By Division" (`divisionChart`, top 8) and "By Delivery Month" (`monthChart`): label +
    `note` on one line, an 8 px stacked bar with `widths` = [Retain `#00873E`, Reduce `#D97706`, Cancel `#DC2626`,
@@ -85,13 +85,13 @@ and `view.statusText` under the Run button (line count = `lines.length`).
 
 1. `kvs` — chips (small grey uppercase label over bold mono value).
 2. "**Why this action:**" + `why` segments (bold where `bold`).
-3. `caution` (Multi Concept Q1/Q2 Retain only) — amber box "⚠ Caution — STR"; per item `text` + "▾ Show
+3. `caution` (Multi Concept top-20% Retain only) — amber box "⚠ Caution — STR"; per item `text` + "▾ Show
    calculation" toggle revealing a table of `cs.chain[0..3]` (Month — first row suffixed " (a)", row `cs.d1Idx`
    highlighted `#FEF3C7` —, Open, +PO, −Fcst, =Close, all `fmt`) and `footer`.
 4. `strSteps` (Single Concept with STR) — grey box "**STR Computation Steps:**" with 4 lines.
 5. `steps` (Multi Concept with a quartile): "Step 1 — Article & Peer Pool" 5 tiles (`value` over `label`, value in
    `color`); "Step 2 — PDSTR vs Peer Average" 4 tiles; `step3Heading` + a rank bar with lines at 25/50/75 % and a
-   13 px dot in `decisionColor` at `step3MarkerPos`%, labels Q4 Block | Q3 Block | Q2 Block | Q1 Allow; `step4` (only for a line with `borderTolUsed` — not since the
+   13 px dot in `decisionColor` at `step3MarkerPos`%, lines at 70 / 80 %, labels Below 30% · Block | 20–30% | Top 20% · Allow; `step4` (only for a line with `borderTolUsed` — not since the
    multi concept rule Step 1) "Step 4 — Border Zone Check (PDSTR Gap)" mono box (`threshold`, `gap`, "Result : **{result}**" coloured) + verdict
    bar `message` (`color` on `bg`, left border); `absBlockNote` red bar.
 

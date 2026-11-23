@@ -180,7 +180,7 @@ the right) and the **reason**:
 | Engine chip | When | What it looks at |
 |---|---|---|
 | **Single Concept MRP · Colour STR** | GM is in the Universe Master | Stock + open POs + your PO against the sales plan → days of cover ("Colour STR") |
-| **Multi Concept MRP · Peer BSR** | GM is in the Best Seller Report | How fast this option sells compared with similar options — same Brand, MC, MRP and Flag (quartile Q1–Q4); only Q1 is allowed |
+| **Multi Concept MRP · Peer BSR** | GM is in the Best Seller Report | How fast this option sells compared with similar options — same Brand, MC, MRP and Flag (its percentile band: top 20 %, 20–30 %, below 30 %) |
 | **New Product** | GM is in neither | New article — allowed |
 
 ![Watch List result card](img/04-result-watch-list.png)
@@ -193,32 +193,39 @@ The **decisions**:
 | **Watch List** | Borderline — the category head must approve (Single Concept: colour share below 2 %, or no sale in F3). Not used for Multi Concept | Wait; the card shows "⏳ Awaiting <name>". The decision appears in **Requests** |
 | **Hold — Don't Raise** (Single Concept) | Stock + open POs already cover more than the norm; the reason shows the Max Permissible (often 0) | Do not raise, or raise at most the quantity shown |
 | **Hold — Don't Raise** (Multi Concept) | The option's MC-MRP is not in the Entry / Mid / Fashion mapping: "Planner has not maintained this MC-MRP in the master." | Ask the planner to maintain it, then request again |
-| **Block** | Multi Concept: ranks Q2, Q3 or Q4 among its peers (only the top 25 % — Q1 — is allowed), a Q1 below the minimum of its Entry / Mid / Fashion type, a new colour whose other colours do not all rank Q1, or sell-through below 1 %/day after 4+ weeks | Do not raise |
+| **Exception — B&M Head** (Multi Concept) | The option is in the **20–30 % band** of its peers (new colour: the worst other colour) | Type your reason to raise the exception (MRA Level 8) — it goes to the B&M Head for approval — or choose **Don't raise** (nothing is saved) |
+| **Block** | Multi Concept: below the top 30 % of its peers, in the top 20 % but below the minimum of its Entry / Mid / Fashion type, a new colour with another colour below the top 30 %, or sell-through below 1 %/day after 4+ weeks | Do not raise |
 | **Cannot Validate** | The article could not be identified (not in the masters) or the month is invalid | Check the GM and month; tell the planner if the article is missing |
 
 Single Concept cards show the key figures — **Op Stock, Mix %, Daily Rate, Colour STR, Max Permissible** — and
 **▼ Show Step-by-Step Computation** explains every step (stock, colour mix, month-by-month stock roll, STR, Max
-Permissible). Multi Concept cards show the peer pool, the sell-through vs. the peer average and the quartile
-(Q1 → Allow, Q2–Q4 → Block).
+Permissible). Multi Concept cards show the peer pool, the sell-through vs. the peer average and the **percentile band**
+(top 20 % → Allow, 20–30 % → Exception, below 30 % → Block).
 
-**Multi Concept rule (since 19 Nov 2026, Step 1)** — for articles not in the Universe Master:
+**Multi Concept rule** — for articles not in the Universe Master (Step 1: 19 Nov, Step 2: 20 Nov, Step 3: 23 Nov 2026):
 
-- The option is ranked against similar options (same **Brand**, MC, MRP and Flag) on its per-day sell-through.
-- **Q1 (top 25 %) → Allow. Q2, Q3 and Q4 → Block.** There is no Watch List for Multi Concept any more.
-- **New colour of an existing option (BOBs):** every other colour of the option with 4+ weeks on floor must rank Q1,
-  otherwise Block. No other colours, or none with 4 weeks on floor → Allow.
-- Unchanged: less than 4 weeks on floor → Allow; new articles → Allow; below 1 %/day after 4+ weeks → Block.
+- The option is placed by its position among similar options (same **Brand**, MC, MRP and Flag) on its per-day
+  sell-through of the first 3 weeks — the share of those options selling at or below it:
+  - **Top 20 %** (above the 80th percentile) **and** the minimum of its Entry / Mid / Fashion type (below) → **Allow**.
+  - **20–30 %** (above the 70th, up to the 80th percentile) → **Exception — B&M Head**: you may raise an exception at MRA
+    Level 8 with your reason; the B&M Head approves or rejects it (section 4.1). No minimum check.
+  - **Below the top 30 %** → **Block**.
+- There is no Watch List for Multi Concept.
+- **New colour of an existing option (BOBs):** the other colours of the option with 4+ weeks on floor are placed the
+  same way and the **worst** one decides: any below 30 % → Block; any in 20–30 % → Exception; all in the top 20 % → Allow
+  when the **oldest** colour meets the minimum. No other colours, or none with 4 weeks on floor → Allow.
+- Unchanged: less than 4 weeks on floor → Allow; new articles → Allow; below 1 %/day after 4+ weeks → Block (any band).
 
-**Step 2 (since 20 Nov 2026)** — a Q1 is allowed only if it also sells at least the minimum per day (first 3 weeks) of
-its type in the **Entry / Mid / Fashion Mapping** (section 5.1):
+**The minimum (Step 2)** — a top-20 % option is allowed only if it also sells at least the minimum per day (first 3
+weeks) of its type in the **Entry / Mid / Fashion Mapping** (section 5.1):
 
 | Type | Allowed when |
 |---|---|
-| Entry | Q1 and at least **2.0 %** per day |
-| Mid | Q1 and at least **1.5 %** per day |
-| Fashion | Q1 and at least **1.5 %** per day |
+| Entry | top 20 % and at least **2.0 %** per day |
+| Mid | top 20 % and at least **1.5 %** per day |
+| Fashion | top 20 % and at least **1.5 %** per day |
 
-- Q1 but below the minimum → **Block**.
+- Top 20 % but below the minimum → **Block**.
 - The option's Brand × MC × Flag × MRP is not in the mapping → **Hold — "Planner has not maintained this MC-MRP in the
   master."** Ask the planner to add it to the mapping and upload it again.
 - New colour of an existing option: the minimum is checked on the **oldest** other colour (most weeks on floor).
@@ -270,13 +277,18 @@ download. Cleared requests are shown faded with "cleared by …".
 You can do everything in the buyer guide (section 3). In addition you **approve or reject Watch List requests** on the
 MCs mapped to you.
 
+**B&M Head:** the Multi Concept **exceptions** (20–30 % band, MRA Level 8) wait for the B&M Head — the portal login set
+as `PoGovSettings:BmHeadEmail` in the API settings (Category Head role is enough). Only the B&M Head and admins see and
+decide them — not the category heads or planners. Until a B&M Head is set, an admin decides them.
+
 ### 4.1 Approve or reject
 
 ![Approvals](img/08-approvals.png)
 
 1. Tab **✅ Approvals** (the red number = requests waiting for you).
 2. **⏳ Waiting for me** lists each request with the article, colour, MC, MRP, delivery month, requested units, engine
-   and **Why Watch List** (the reason).
+   and **Why Watch List** (the reason) — or, for an exception, **Why an exception (20–30 % band)** and the buyer's
+   **Reason for the exception**.
 3. To approve: keep or lower **Approve quantity** (0 up to the requested quantity) and click **✓ Approve**.
 4. To reject: write a **Comment** (required) and click **✕ Reject**.
 5. **📜 Decided** shows what you decided earlier (last 120 days).
@@ -314,7 +326,7 @@ every version.
 | F4 — Forecast | ✓ | Monthly plan by Brand × MC × MRP × Flag (`MM.YYYY` columns) |
 | Universe Master | ✓ | GMs of the Single Concept universe |
 | BSR — All Seasons | ✓ | Weeks on floor and per-day sell-through % per GM and colour (several files allowed) |
-| Entry / Mid / Fashion Mapping | optional | Brand × MC × Flag × MRP → Entry, Mid or Fashion (Multi Concept: the minimum sell-through of a Q1; missing → Hold) |
+| Entry / Mid / Fashion Mapping | optional | Brand × MC × Flag × MRP → Entry, Mid or Fashion (Multi Concept: the minimum sell-through of a top-20 % option; missing → Hold) |
 | Article Master | optional | Article attributes (season, style, fit, material, design, vendor) |
 | Attr Relevance Master | optional | Which attribute matters per Brand × MC × MRP × Flag |
 | Colour Master | optional | Colour codes and descriptions |
@@ -365,7 +377,7 @@ In the Data Setup sidebar:
 | WOF Gate (weeks) | 4 | minimum weeks on floor before a style is judged |
 | Peer Min (styles) | 5 | minimum comparable styles for a peer ranking |
 | STR Buffer % (Single Concept) | 5 | tolerance on T (75 d + 5 % = 79 d) |
-| Border Zone % (Multi Concept) | 10 | not used since the Multi Concept rule Step 1 (Q1 Allow, Q2–Q4 Block) |
+| Border Zone % (Multi Concept) | 10 | not used since the Multi Concept rule (percentile bands) |
 | Mix Window (days) | 45 | days of F3 used for the colour mix |
 | Late PO counts until day (Single Concept MRP) | 5 | whole days 1–28: from the 1st to this day of the month, a pending PO of last month still counts (PO Assessment: as stock at the window start) |
 
@@ -581,16 +593,17 @@ The link works for 90 days. **Anyone with the link can open the page — do not 
 | Decision | Colour | Meaning |
 |---|---|---|
 | Auto Allow | green | Single Concept within the cover norm, or a new article |
-| Allow | green | Multi Concept: ranks Q1 (top 25 %) among its peers and meets its Entry / Mid / Fashion minimum, or too little history to judge |
+| Allow | green | Multi Concept: in the top 20 % of its peers and meets its Entry / Mid / Fashion minimum, or too little history to judge |
 | Watch List | brown | Category head must approve (Single Concept only): colour share below the minimum, or no sale in F3 |
 | Hold — Don't Raise | red | Single Concept: cover already above the norm — no or limited headroom (Max Permissible). Multi Concept: the MC-MRP is not in the Entry / Mid / Fashion mapping |
-| Block | red | Multi Concept ranks Q2–Q4, or a confirmed slow seller — do not raise |
+| Exception — B&M Head | purple | Multi Concept 20–30 % band: raise an exception with a reason for the B&M Head, or don't raise |
+| Block | red | Multi Concept below the top 30 %, or a confirmed slow seller — do not raise |
 | Cannot Validate | grey | Article or month not recognised |
 
-**PO Assessment (Tool 2):** Retain · Reduce Qty · Cancel · Watch List · Cannot Validate (also a Multi Concept PO whose MC-MRP is not in the Entry / Mid / Fashion mapping).
+**PO Assessment (Tool 2):** Retain · Reduce Qty · Cancel · Watch List · Exception — B&M Head (Multi Concept 20–30 % band) · Cannot Validate (also a Multi Concept PO whose MC-MRP is not in the Entry / Mid / Fashion mapping).
 
 **SAP verdicts:** ALLOW · REDUCE (order at most the max qty; Commercial) · WATCH (category head) · HOLD (do not release as is;
-Commercial decides) · BLOCK (confirmed slow seller — do not release; Commercial decides).
+Commercial decides; a Multi Concept exception goes to the B&M Head at MRA Level 8) · BLOCK (confirmed slow seller — do not release; Commercial decides).
 
 ### 8.2 Terms
 
@@ -607,7 +620,7 @@ Commercial decides) · BLOCK (confirmed slow seller — do not release; Commerci
 | **Colour Mix %** | The colour's share of the bucket's recent sales; below 2 % → Watch List |
 | **PDSTR** | Average per-day sell-through % (from BSR) |
 | **WOF** | Weeks on floor |
-| **Q1–Q4** | Quartile of an option's sell-through among its peers — same Brand, MC, MRP, Flag (Q1 top = Allow, Q2–Q4 = Block) |
+| **Percentile band** | Position of an option's sell-through among its peers — same Brand, MC, MRP, Flag: top 20 % = Allow, 20–30 % = Exception (B&M Head), below 30 % = Block (replaced Q1–Q4 on 23 Nov 2026) |
 | **Border zone** | Former Multi Concept tolerance around the peer average — not used since the Multi Concept rule Step 1 |
 | **Watch List** | Request that needs the category head's approval |
 | **SCR products file** | Mapping of Brand × MC × MRP to buyers and category heads; creates logins |

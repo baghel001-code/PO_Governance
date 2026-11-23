@@ -148,18 +148,24 @@ up to Max Permissible).
 | Hold, quantity above Max Permissible, Max Permissible > 0 | **REDUCE** + `max_qty` | COVER_ABOVE_NORM | COVER-01 |
 | Hold — Don't Raise, Max Permissible 0 | HOLD | COVER_NO_HEADROOM | COVER-02 |
 | Watch List — colour mix below the minimum, or no F3 sale for the MC (v1.1.6 D3) | WATCH (route CATHEAD) | MIX_BELOW_MIN | MIX-01 |
-| Allow — ranks Q1 (top 25 %) in its peer group (Multi Concept: same Brand, MC, MRP, Flag) and meets its Entry / Mid / Fashion minimum (Entry 2.0 %, Mid / Fashion 1.5 %/day) | ALLOW | PEER_Q1 | PEER-Q1 |
-| **Block** — ranks Q1 but below the minimum of its Entry / Mid / Fashion type (Step 2, 20 Nov 2026; BOBs: the oldest other colour) | **BLOCK** (or HOLD) | BLOCK | BLOCK-EMF-MIN |
+| Allow — in the **top 20 %** of its peer group (Multi Concept: same Brand, MC, MRP, Flag; rule Step 3) and meets its Entry / Mid / Fashion minimum (Entry 2.0 %, Mid / Fashion 1.5 %/day) | ALLOW | PEER_Q1 | PEER-Q1 |
+| **Hold for the B&M Head** — the **20–30 % band** (rule Step 3, 23 Nov 2026; BOBs: the worst other colour): an exception the buyer may raise with a reason, approved by the B&M Head at MRA **Level 8**; `bm_head_required` = true, `route_to` = BMHEAD | **HOLD** | PEER_EXCEPTION | EXC-L8 |
+| **Block** — top 20 % but below the minimum of its Entry / Mid / Fashion type (Step 2; BOBs: the oldest other colour) | **BLOCK** (or HOLD) | BLOCK | BLOCK-EMF-MIN |
 | Hold — "Planner has not maintained this MC-MRP in the master": the option's Brand × MC × Flag × MRP is not in the Entry / Mid / Fashion mapping (Step 2) | HOLD | EMF_NOT_MAINTAINED | EMF-00 |
-| **Block** — ranks Q2, Q3 or Q4 (Multi Concept rule Step 1, 19 Nov 2026) | **BLOCK** (or HOLD, see below) | BLOCK | BLOCK-PEER |
-| **Block** — absolute block (sell-thru < 1 %/day after ≥ 4 weeks, even for Q1) | **BLOCK** (or HOLD) | BLOCK | BLOCK-ABS |
-| Allow — BOBs: every other colour (WOF ≥ 4 w) ranks Q1 and the oldest meets the minimum | ALLOW | BOBS_SIBLINGS_OK | BOBS-01 |
-| **Block** — BOBs: another colour ranks Q2, Q3 or Q4 | **BLOCK** (or HOLD) | BLOCK | BLOCK-BOBS |
+| **Block** — below the **top 30 %** of its peer group (Step 3) | **BLOCK** (or HOLD, see below) | BLOCK | BLOCK-PEER |
+| **Block** — absolute block (sell-thru < 1 %/day after ≥ 4 weeks, in any band) | **BLOCK** (or HOLD) | BLOCK | BLOCK-ABS |
+| Allow — BOBs: every other colour (WOF ≥ 4 w) in the top 20 % and the oldest meets the minimum | ALLOW | BOBS_SIBLINGS_OK | BOBS-01 |
+| **Block** — BOBs: another colour below the top 30 % | **BLOCK** (or HOLD) | BLOCK | BLOCK-BOBS |
 | Allow — too little selling history (WOF gate) | ALLOW | LOW_HISTORY | WOF-00 |
 | Allow — no peer pool | ALLOW | NO_PEER_POOL | PEER-00 |
 | Auto Allow — new article (not in Universe Master or BSR) | ALLOW | NEW_ARTICLE | NEW-00 |
 | Cannot Validate / article unknown to the tool / no colour / no delivery date | **422** `CANNOT_DECIDE` (SAP: NOT_CHECKED) — or WATCH `CANNOT_VALIDATE` (CV-00) with `UnknownItemPolicy = WATCH` | | |
 
+* **Multi concept rule, Step 3 (23 Nov 2026)**: percentile bands replace Q1–Q4 — top 20 % ALLOW (with the Entry / Mid / Fashion
+  minimum), **20–30 % HOLD `PEER_EXCEPTION` with `bm_head_required` = true and `route_to` = BMHEAD** (SAP raises it at MRA
+  Level 8 for the B&M Head's approval), below 30 % BLOCK. The codes `PEER_Q1`, `BLOCK-PEER`, `BLOCK-BOBS` keep their names
+  (texts now in bands). In the portal the buyer gives the exception's reason and the B&M Head (`PoGovSettings:BmHeadEmail`)
+  approves it on the Approvals page.
 * **Multi concept rule, Step 1 (19 Nov 2026)**: Multi Concept no longer produces WATCH — Q1 is ALLOW, Q2 / Q3 / Q4 BLOCK, no
   border zone; the peer group also matches the Brand. The reason codes `PEER_Q2`, `PEER_Q3`, `PEER_Q4` and `BOBS_SIBLING_LOW`
   (rule ids PEER-Q2, PEER-Q3-OK, PEER-Q3-GAP, PEER-Q4-WATCH, BOBS-02, BLOCK-Q4) are no longer sent; `05_sap_interface.sql`

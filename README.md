@@ -22,7 +22,7 @@ Multi concept is unchanged.
 
 * Peer group: same **Brand**, MC, MRP and Flag (Brand added; a peer's brand is its BSR "Brand Type", else the Article
   Master / Universe Master / F2 brand), WOF ≥ gate, current seasons with fallback.
-* Ranked on AVG PERDAY SELL THRU%: **Q1 (top 25 %) → Allow, Q2 / Q3 / Q4 → Block**. No Watch List and no border zone for
+* Ranked on AVG PERDAY SELL THRU%: **Q1 (top 25 %) → Allow, Q2 / Q3 / Q4 → Block** (replaced by percentile bands in Step 3, below). No Watch List and no border zone for
   multi concept (the Border Zone % parameter is kept but not used).
 * BOBs (new colour of an existing option): every other colour with WOF ≥ gate must rank Q1, else Block; no other colours,
   or none with 4 weeks on floor → Allow.
@@ -44,6 +44,20 @@ other colour (most weeks on floor). Q2–Q4, WOF below the gate, no peer pool an
 Allow as before). The flag NON-BOGO of the data files matches the mapping's "Normal". PO Assessment: not maintained →
 Cannot Validate, below the minimum → Cancel. SAP: HOLD `EMF_NOT_MAINTAINED` (EMF-00), BLOCK rule id `BLOCK-EMF-MIN`.
 **Upload the mapping before deploying Step 2** — without it every multi concept Q1 is a Hold.
+
+**Multi concept rule, Step 3 (23 Nov 2026)** — percentile bands replace Q1–Q4: the option's position = share of its peers
+selling at or below it (`BsrPeerRank.Band`; `quartile_` now holds the band).
+* **Top 20 %** (above the 80th percentile) and the Entry / Mid / Fashion minimum → **Allow** (Step 2 checks unchanged).
+* **20–30 %** (above the 70th, up to the 80th) → **"Exception — B&M Head"**: the buyer raises it with a reason (the colour
+  reason dialog, "Don't raise" saves nothing); it waits on the Approvals page for the **B&M Head** —
+  `PoGovSettings:BmHeadEmail` / `BmHeadName` in `POGovApi/appsettings.json` (empty = an admin decides) — and only the B&M Head
+  and admins can approve or reject it. No minimum check; the < 1 %/day absolute block still applies.
+* **Below the top 30 %** → **Block**.
+* BOBs: the **worst** band of the other colours decides (below 30 % Block, 20–30 % Exception, all top 20 % → Allow with the
+  minimum on the oldest colour).
+* PO Assessment: action "Exception — B&M Head". SAP: **HOLD `PEER_EXCEPTION` (EXC-L8) with `bm_head_required` = true and
+  `route_to` = BMHEAD** (MRA Level 8); other codes keep their names with texts in bands.
+* GRC back-testing and the colour recommendations keep their own quartile measures (reports, not decisions).
 
 ## Solution layout
 
@@ -271,7 +285,7 @@ IP allow-list, and contract tests that compare the classes and real answers with
 project only); `tests/POGovernance.Tests/SqlServer/SapSqlServerTests` runs the PRO_SAP_* procedures on SQL Server.
 `tests/POGovernance.Tests/Mapping/MapperTests` covers the object mapper (conventions, conversions, nested maps, collections,
 records, `ForMember` / `ReverseMap` / `AfterMap` / `ConvertUsing`, errors, validation, DI registration).
-`tests/POGovernance.Tests/Tool1/MultiConceptStep1Tests` / `MultiConceptStep2Tests` cover the multi concept rule beyond the shared
+`tests/POGovernance.Tests/Tool1/MultiConceptStep1Tests` / `Step2Tests` / `Step3Tests` and `Platform/ExceptionApprovalTests` cover the multi concept rule beyond the shared
 fixture (several brands, absolute block on a Q1, BOBs, the Entry / Mid / Fashion minimum and the Hold); `Ingest/EmfUploadTests` and `Portal/EmfRejectedBoxTests` the Entry / Mid / Fashion upload.
 
 ## Documents

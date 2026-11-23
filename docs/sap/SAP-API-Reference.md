@@ -349,19 +349,24 @@ HOLD and BLOCK go to `BMHEAD` instead when `bm_head_required = true` (business r
 |---|---|---|---|
 | ALLOW | `COVER_WITHIN_NORM` | COVER-00 | Stock + pending + this PO within the cover norm |
 | HOLD | `NO_PLAN_DATA` | PLAN-00 | No Plan Available: no F4 plan for the bucket in the requirement window — ask the planning team to add it (v1.1.6; was ALLOW) |
-| ALLOW | `PEER_Q1` | PEER-Q1 | Multi Concept: ranks Q1 (top 25 %) among options of the same Brand, MC, MRP and Flag, and sells at least the minimum of its Entry / Mid / Fashion type (Entry 2.0 %, Mid / Fashion 1.5 %/day) |
-| ALLOW | `BOBS_SIBLINGS_OK` | BOBS-01 | New colour of an existing option; every other colour (4+ weeks on floor) ranks Q1 and the oldest meets the minimum |
+| ALLOW | `PEER_Q1` | PEER-Q1 | Multi Concept: in the top 20 % of the options of the same Brand, MC, MRP and Flag, and sells at least the minimum of its Entry / Mid / Fashion type (Entry 2.0 %, Mid / Fashion 1.5 %/day) |
+| ALLOW | `BOBS_SIBLINGS_OK` | BOBS-01 | New colour of an existing option; every other colour (4+ weeks on floor) is in the top 20 % and the oldest meets the minimum |
 | ALLOW | `LOW_HISTORY` | WOF-00 | Too little selling history to judge |
 | ALLOW | `NO_PEER_POOL` | PEER-00 | No comparable styles |
 | ALLOW | `NEW_ARTICLE` | NEW-00 | New article (not in the tool's history) |
 | REDUCE | `COVER_ABOVE_NORM` | COVER-01 | Cover above the norm — reduce to `max_qty` |
 | WATCH | `MIX_BELOW_MIN` | MIX-01 | Colour share below the minimum mix (broken / cut size likely) |
 | HOLD | `COVER_NO_HEADROOM` | COVER-02 | Stock + pending already above the norm — no headroom (max 0) |
-| HOLD | `EMF_NOT_MAINTAINED` | EMF-00 | Multi Concept Q1 whose Brand × MC × Flag × MRP is not in the Entry / Mid / Fashion mapping — "Planner has not maintained this MC-MRP in the master" |
-| BLOCK | `BLOCK` | BLOCK-PEER | Multi Concept: ranks Q2, Q3 or Q4 — only Q1 is allowed |
-| BLOCK | `BLOCK` | BLOCK-EMF-MIN | Multi Concept: ranks Q1 but below the minimum of its Entry / Mid / Fashion type (new colour: the oldest other colour) |
-| BLOCK | `BLOCK` | BLOCK-BOBS | New colour of an existing option: another colour ranks below Q1 |
+| HOLD | `EMF_NOT_MAINTAINED` | EMF-00 | Multi Concept top-20 % option whose Brand × MC × Flag × MRP is not in the Entry / Mid / Fashion mapping — "Planner has not maintained this MC-MRP in the master" |
+| HOLD | `PEER_EXCEPTION` | EXC-L8 | Multi Concept 20–30 % band (new colour: the worst other colour): exception for the **B&M Head** — the answer has `bm_head_required` = true and `route_to` = `BMHEAD`; SAP raises it at MRA Level 8 |
+| BLOCK | `BLOCK` | BLOCK-PEER | Multi Concept: below the top 30 % of its peer group |
+| BLOCK | `BLOCK` | BLOCK-EMF-MIN | Multi Concept: top 20 % but below the minimum of its Entry / Mid / Fashion type (new colour: the oldest other colour) |
+| BLOCK | `BLOCK` | BLOCK-BOBS | New colour of an existing option: another colour is below the top 30 % |
 | BLOCK | `BLOCK` | BLOCK-ABS | Absolute block: sell-thru below 1 %/day after 4+ weeks on floor |
+
+**Multi concept rule, Step 3 (23 Nov 2026):** percentile bands replace Q1–Q4. Top 20 % → ALLOW (with the minimum below),
+**20–30 % → HOLD `PEER_EXCEPTION` (EXC-L8) with `bm_head_required` = true and `route_to` = `BMHEAD`** — the exception that SAP
+raises at MRA Level 8 for the B&M Head — and below the top 30 % → BLOCK (`BLOCK-PEER`). Codes and rule ids keep their names.
 
 **Multi concept rule, Step 1 (19 Nov 2026):** Multi Concept items are ALLOW (Q1) or BLOCK (Q2–Q4) — never WATCH. The
 codes `PEER_Q2`, `PEER_Q3`, `PEER_Q4`, `BOBS_SIBLING_LOW` and rule ids PEER-Q3-OK, PEER-Q3-GAP, PEER-Q4-WATCH, BOBS-02,
@@ -413,14 +418,25 @@ head). If the SAP side is not ready, the tool's setting `SapInterface:BlockVerdi
                "rule_id": "MIX-01", "metrics": { "stock_qty": 874, "open_po_qty": 0 } } ] }
 ```
 
-**Block** (Multi Concept, ranks below Q1):
+**Block** (Multi Concept, below the top 30 %):
 
 ```json
 { "...": "...", "overall_verdict": "BLOCK", "verdict_code": "B", "route_to": "COMMERCIAL",
-  "summary_text": "Item 10: block - Ranks Q4 in its peer group (sell-thru 1.0%/day): only Q1 (top 25%) is allowed",
+  "summary_text": "Item 10: block - Below the top 30% of its peer group (25th pct, sell-thru 1.0%/day)",
   "items": [ { "po_item": 10, "verdict": "BLOCK", "verdict_code": "B", "max_qty": null,
-               "reason_code": "BLOCK", "reason_text": "Ranks Q4 in its peer group (sell-thru 1.0%/day): only Q1 (top 25%) is allowed",
+               "reason_code": "BLOCK", "reason_text": "Below the top 30% of its peer group (25th pct, sell-thru 1.0%/day)",
                "rule_id": "BLOCK-PEER", "metrics": { "sell_through_pct": 0.97 } } ] }
+```
+
+**Hold for the B&M Head** (Multi Concept, the 20–30 % band — multi concept rule Step 3): `bm_head_required` is true and
+`route_to` is `BMHEAD`; SAP raises the exception at MRA Level 8.
+
+```json
+{ "...": "...", "overall_verdict": "HOLD", "verdict_code": "H", "route_to": "BMHEAD", "bm_head_required": true,
+  "summary_text": "Item 10: hold - In the 20–30% band of its peer group (71th pct, sell-thru 4.0%/day): exception, needs the B&M Head's approval (MRA Level 8)",
+  "items": [ { "po_item": 10, "verdict": "HOLD", "verdict_code": "H", "max_qty": null, "reason_code": "PEER_EXCEPTION",
+               "reason_text": "In the 20–30% band of its peer group (71th pct, sell-thru 4.0%/day): exception, needs the B&M Head's approval (MRA Level 8)",
+               "rule_id": "EXC-L8", "metrics": { "sell_through_pct": 4.03 } } ] }
 ```
 
 **Several items:** two size variants of one generic article and colour (decided together, `max_qty` split 9,557 + 6,371
@@ -438,7 +454,7 @@ head). If the SAP side is not ready, the tool's setting `SapInterface:BlockVerdi
       "reason_text": "Stock + pending + this PO cover 265 days, above the 79-day norm; max 15,928 pcs for 2 items together (50,000 pcs ordered)",
       "rule_id": "COVER-01", "metrics": { "plan_qty": 6303, "stock_qty": 2707, "open_po_qty": 2703, "headroom_qty": 15928, "cover_days": 265 } },
     { "po_item": 30, "verdict": "ALLOW", "verdict_code": "A", "max_qty": null, "reason_code": "PEER_Q1",
-      "reason_text": "Ranks Q1 (top 25%) in its peer group (sell-thru 5.2%/day): top seller", "rule_id": "PEER-Q1",
+      "reason_text": "In the top 20% of its peer group (100th pct, sell-thru 5.2%/day): top seller (Mid minimum 1.5%/day met)", "rule_id": "PEER-Q1",
       "metrics": { "sell_through_pct": 5.2 } } ] }
 ```
 

@@ -8,8 +8,8 @@ using DecisionEngine.Tool2;
 namespace POGovernance.Tests.Tool1
 {
     /// <summary>
-    /// Multi concept rule, Step 1 (articles not in the Universe Master): peers = same Brand, MC, MRP and Flag;
-    /// Q1 → Allow, Q2 / Q3 / Q4 → Block, no Watch List; BOBs: every other colour with WOF ≥ gate must rank Q1.
+    /// Multi concept rule (articles not in the Universe Master): peers = same Brand, MC, MRP and Flag (Step 1); bands since
+    /// Step 3 — top 20% → Allow, 20–30% → Exception, below 30% → Block, no Watch List; BOBs: the worst band of the other colours.
     /// The parity tests check the same rule on the shared fixture against tests/parity/rules/multi-concept.js;
     /// these cases cover what that fixture does not (several brands, a Q1 below 1 %/day, BOBs without a peer pool).
     /// </summary>
@@ -70,27 +70,27 @@ namespace POGovernance.Tests.Tool1
         // ── True Repeat ─────────────────────────────────────────────────────
 
         [Fact]
-        public void Q1_is_allowed()
+        public void The_top_20_percent_is_allowed()
         {
             var d = new Builder().Peers().Add("T1", "BLU", 0.09).Data();
             var a = Run(d, "T1", "BLU");
-            Assert.Equal("Q1", a.Quartile);
+            Assert.Equal("Top 20%", a.Quartile);
             Assert.Equal(Decisions.Allow, a.Decision);
-            Assert.StartsWith("True Repeat: ranks Q1 (100th pct) in peer group of 9 styles (CY BSR (AW26)). PDSTR = 9.0%/day — top 25% (Q1) and at least the Mid minimum 1.5%/day. Allow.", a.DecisionReason);
+            Assert.StartsWith("True Repeat: 100th pct (Top 20%) in peer group of 9 styles (CY BSR (AW26)). PDSTR = 9.0%/day — top 20% and at least the Mid minimum 1.5%/day. Allow.", a.DecisionReason);
             Assert.Equal(SapOutcomePath.PeerQ1, Sap(a));
         }
 
         [Theory]
-        [InlineData(0.055, "Q2")]   // 6 of 9 at or below → 67th pct
-        [InlineData(0.035, "Q3")]
-        [InlineData(0.015, "Q4")]
-        public void Q2_Q3_and_Q4_are_blocked_and_never_a_Watch_List(double pdstr, string q)
+        [InlineData(0.055)]   // 6 of 9 at or below → 67th pct
+        [InlineData(0.035)]
+        [InlineData(0.015)]
+        public void Below_the_top_30_percent_is_blocked_and_never_a_Watch_List(double pdstr)
         {
             var d = new Builder().Peers().Add("T1", "BLU", pdstr).Data();
             var a = Run(d, "T1", "BLU");
-            Assert.Equal(q, a.Quartile);
+            Assert.Equal("Below 30%", a.Quartile);
             Assert.Equal(Decisions.Block, a.Decision);
-            Assert.Contains("Only Q1 (top 25%) is allowed for multi concept — Block. Do not raise PO.", a.DecisionReason);
+            Assert.EndsWith("— below the top 30%. Block. Do not raise PO.", a.DecisionReason);
             Assert.Null(a.InBorderZone);            // no border zone any more
             Assert.Null(a.BorderTolUsed);
             Assert.Equal(SapOutcomePath.BlockBelowQ1, Sap(a));
@@ -100,20 +100,20 @@ namespace POGovernance.Tests.Tool1
         [Fact]
         public void Peers_are_the_same_brand_from_the_BSR_or_the_Article_Master()
         {
-            // eight BELONG options sell far better (20 … 27 %/day): with them, T1 (9 %/day) would rank Q2 or lower.
+            // eight BELONG options sell far better (20 … 27 %/day): with them, T1 (9 %/day) would rank below the top 30%.
             // Four have Brand Type in the BSR, four only in the Article Master — both are left out of a NON-PL article's peers.
             var b = new Builder().Peers().Add("T1", "BLU", 0.09);
             for (var i = 0; i < 8; i++) b.Add("B" + i, "RED", 0.20 + 0.01 * i, brand: "BELONG", brandInBsr: i % 2 == 0);
             var a = Run(b.Data(), "T1", "BLU");
             Assert.Equal(9, a.PeerPool.Count);
             Assert.All(a.PeerPool, r => Assert.Equal("NON-PL", Tool1EngineA.PeerBrand(r, ResolveIndex.ResolveMap(b.Data()))));
-            Assert.Equal("Q1", a.Quartile);
+            Assert.Equal("Top 20%", a.Quartile);
             Assert.Equal(Decisions.Allow, a.Decision);
 
             // the BELONG article is ranked among BELONG options only
             var belong = Run(b.Data(), "B7", "RED");
             Assert.Equal(8, belong.PeerPool.Count);
-            Assert.Equal("Q1", belong.Quartile);
+            Assert.Equal("Top 20%", belong.Quartile);
         }
 
         [Fact]
@@ -131,16 +131,16 @@ namespace POGovernance.Tests.Tool1
             }
             var a = Run(b.Data(), "T1", "BLU");
             Assert.Equal(12, a.PeerPool.Count);      // the lower-case "non-pl" peer and the two without a brand count
-            Assert.Equal("Q2", a.Quartile);          // 9 of 12 at or below = 75th pct (Q1 without them)
-            Assert.Equal(Decisions.Block, a.Decision);
+            Assert.Equal("20–30%", a.Quartile);      // 9 of 12 at or below = 75th pct (top 20% without them)
+            Assert.Equal(Decisions.Exception, a.Decision);
         }
 
         [Fact]
-        public void A_Q1_below_1_percent_per_day_is_still_an_absolute_block()
+        public void The_top_20_percent_below_1_percent_per_day_is_still_an_absolute_block()
         {
             var d = new Builder().Peers(start: 0.001, step: 0.001).Add("T1", "BLU", 0.009).Data();
             var a = Run(d, "T1", "BLU");
-            Assert.Equal("Q1", a.Quartile);
+            Assert.Equal("Top 20%", a.Quartile);
             Assert.Equal(Decisions.Block, a.Decision);
             Assert.StartsWith("Absolute Block override", a.DecisionReason);
             Assert.Equal(SapOutcomePath.BlockAbsolute, Sap(a));
@@ -161,26 +161,26 @@ namespace POGovernance.Tests.Tool1
         // ── BOBs (new colour of an existing option) ─────────────────────────
 
         [Fact]
-        public void BOBs_is_allowed_when_every_other_colour_ranks_Q1()
+        public void BOBs_is_allowed_when_every_other_colour_is_in_the_top_20_percent()
         {
             var d = new Builder().Peers().Add("T1", "BLU", 0.085, wof: 6).Add("T1", "RED", 0.09, wof: 8).Add("T1", "GRN", 0.02, wof: 2).Data();
             var a = Run(d, "T1", "NEW");                       // GRN has < 4 weeks on floor: not ranked
             Assert.Equal("BOBs", a.OptionType);
             Assert.Equal(2, a.QualSibs.Count);
-            Assert.All(a.SibRanked, s => Assert.Equal("Q1", s.Q));
+            Assert.All(a.SibRanked, s => Assert.Equal("Top 20%", s.Q));
             Assert.Equal(Decisions.Allow, a.Decision);
-            Assert.Equal("BOBs: All 2 sibling colourway(s) with WOF ≥ 4w rank Q1 (top 25%) and the oldest colour RED (8w on floor) sells 9.0%/day — at least the Mid minimum 1.5%/day. New colour permitted.", a.DecisionReason);
+            Assert.Equal("BOBs: All 2 sibling colourway(s) with WOF ≥ 4w are in the top 20% (Allow band) and the oldest colour RED (8w on floor) sells 9.0%/day — at least the Mid minimum 1.5%/day. New colour permitted.", a.DecisionReason);
             Assert.Equal(SapOutcomePath.BobsSiblingsOk, Sap(a));
         }
 
         [Fact]
-        public void BOBs_is_blocked_when_another_colour_ranks_below_Q1()
+        public void BOBs_is_blocked_when_another_colour_is_below_the_top_30_percent()
         {
             var d = new Builder().Peers().Add("T1", "BLU", 0.09, wof: 6).Add("T1", "RED", 0.055, wof: 8).Data();
             var a = Run(d, "T1", "NEW");
             Assert.Equal(Decisions.Block, a.Decision);
-            Assert.Equal("BOBs: 1 of 2 sibling colourway(s) with WOF ≥ 4w rank below Q1 (RED Q2). Every other colour must rank Q1 (top 25%) — new colour blocked.", a.DecisionReason);
-            Assert.Equal("Q2", a.Quartile);                    // the worst-ranked colour drives the decision
+            Assert.Equal("BOBs: 1 of 2 sibling colourway(s) with WOF ≥ 4w rank below the top 30% (RED). Every other colour must be in the top 20% (Allow band) — new colour blocked.", a.DecisionReason);
+            Assert.Equal("Below 30%", a.Quartile);             // the worst-ranked colour drives the decision
             Assert.Equal(SapOutcomePath.BlockBobsSibling, Sap(a));
         }
 
@@ -208,7 +208,7 @@ namespace POGovernance.Tests.Tool1
             for (var i = 0; i < 8; i++) b.Add("B" + i, "RED", 0.20 + 0.01 * i, brand: "BELONG");
             var d = b.Data();
             var line = Tool2EngineA.Run(d, "T1", "BLU", "True Repeat", ResolveIndex.ResolveGm(d, "T1"));
-            Assert.Equal("Q1", line.Quartile);
+            Assert.Equal("Top 20%", line.Quartile);
             Assert.Equal(Decisions.Retain, Tool2Engine.MapA(line.Decision));
         }
     }

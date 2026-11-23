@@ -115,7 +115,7 @@ namespace DecisionEngine.Tool2
                     {
                         var rawA = Tool2EngineA.Run(data, gm, colour, route.OptionType, info);
                         StrCautionDto? caution = null;
-                        if (rawA.Decision == "Allow" && (rawA.Quartile == "Q1" || rawA.Quartile == "Q2"))
+                        if (rawA.Decision == "Allow" && rawA.Quartile == DecisionEngine.Tool1.Tool1EngineA.AllowBand)
                         {
                             if (info == null) throw new InvalidOperationException("Cannot read properties of null (reading 'mcCd')");
                             caution = rec.StrCaution(ctx, info.McCd, info.Mrp, info.Brand, info.Flag, colour, gm, dm);

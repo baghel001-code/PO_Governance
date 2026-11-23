@@ -85,8 +85,12 @@ namespace Application.Services.V1.Tool1
             return ToResult(o, data.Params, today, seq, o.NeedsConfirmation ? "needsConfirmation" : "decided", null);
         }
 
-        /// <summary>v1.1.6 S5 <c>_needsColourReason(r)</c>: a single concept Watch List needs the buyer's reason before it is sent.</summary>
-        public static bool NeedsColourReason(Tool1Outcome o) => o.Engine == "B" && o.Decision == Decisions.WatchList;
+        /// <summary>
+        /// v1.1.6 S5 <c>_needsColourReason(r)</c>: a single concept Watch List needs the buyer's reason before it is sent; so does
+        /// a multi concept exception (rule Step 3: the 20–30% band — the reason goes to the B&amp;M Head; "don't raise" saves nothing).
+        /// </summary>
+        public static bool NeedsColourReason(Tool1Outcome o) =>
+            (o.Engine == "B" && o.Decision == Decisions.WatchList) || (o.Engine == "A" && o.Decision == Decisions.Exception);
 
         /// <summary>The reason as the v1.1.6 dialog keeps it: trimmed, at most 1,000 characters; null when empty.</summary>
         public static string? CleanColourReason(string? s)
@@ -189,7 +193,9 @@ namespace Application.Services.V1.Tool1
                 if (saved["approval"] is JsonObject ap)
                 {
                     var who = ap["approverNames"] is JsonArray names ? string.Join(", ", names.Select(n => Js.ToJsString(Tool1Requests.NodeValue(n)))) : "";
-                    toasts.Add("Watch List — sent to " + (who.Length > 0 ? who : "the admin (no category head mapped)") + " for approval");
+                    toasts.Add(o.Decision == Decisions.Exception
+                        ? "Exception — sent to " + (who.Length > 0 ? who + " (B&M Head)" : "the admin (no B&M Head set)") + " for approval (MRA Level 8)"
+                        : "Watch List — sent to " + (who.Length > 0 ? who : "the admin (no category head mapped)") + " for approval");
                 }
             }
 

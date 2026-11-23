@@ -11,6 +11,9 @@ namespace DecisionEngine.Model
         public const string Block = "Block";
         public const string WatchList = "Watch List";
         public const string CannotValidate = "Cannot Validate";
+        /// <summary>Multi concept rule Step 3: the 20–30% band — the buyer may raise an exception (MRA Level 8) with a reason,
+        /// approved by the B&amp;M Head. Tool 1 decision and Tool 2 action alike.</summary>
+        public const string Exception = "Exception — B&M Head";
 
         // Tool 2 (released PO assessment)
         public const string Retain = "Retain";

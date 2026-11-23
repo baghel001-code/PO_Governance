@@ -277,9 +277,14 @@ namespace DecisionEngine.Tool1
             return m;
         }
 
-        /// <summary>The rank label of a percentile (multi concept rule Step 1: only Q1 is allowed).</summary>
-        public static string QuartileLabel(double pct) =>
-            pct <= 25 ? "Q4 — Slow Seller (Block)" : pct <= 50 ? "Q3 — Block" : pct <= 75 ? "Q2 — Block" : "Q1 — Top 25% (Allow)";
+        /// <summary>The label of a band (multi concept rule Step 3: Top 20% Allow, 20–30% Exception, below 30% Block).</summary>
+        public static string BandLabel(string? band) => band switch
+        {
+            BsrPeerRank.BandTop => "Top 20% (Allow)",
+            BsrPeerRank.BandException => "20–30% (Exception — B&M Head)",
+            BsrPeerRank.BandBelow => "Below 30% (Block)",
+            _ => band ?? ""
+        };
 
         private static Tool1CardADto BuildA(Tool1EngineAResult r, EngineParams p, string dc, string decision)
         {
@@ -304,11 +309,11 @@ namespace DecisionEngine.Tool1
             if (!string.IsNullOrEmpty(r.Quartile) && r.Percentile != null)
             {
                 var pct = r.Percentile.Value;
-                var label = QuartileLabel(pct);
+                var label = BandLabel(r.Quartile);
                 var n = r.CleanPool.Count > 0 ? N(r.CleanPool.Count) : r.PeerPool.Count > 0 ? N(r.PeerPool.Count) : "?";
                 dto.Step3 = new Tool1QuartileDto
                 {
-                    Heading = "Step 3 — Quartile Ranking (" + N(pct) + "th pct — " + n + " styles)",
+                    Heading = "Step 3 — Percentile Band (" + N(pct) + "th pct — " + n + " styles)",
                     PoolText = "Rank within peer group of " + n + " styles",
                     RankText = N(pct) + "th percentile — " + label, RankColour = dc,
                     Position = Math.Min(Math.Max(pct, 2), 98), Percentile = pct

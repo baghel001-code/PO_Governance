@@ -33,7 +33,7 @@ namespace POGovernance.Tests.Tool1
         public void A_Q1_needs_the_minimum_of_its_type(string tag, double pdstr, string decision)
         {
             var a = Run(LowPeers(tag).Add("T1", "BLU", pdstr).Data(), "T1", "BLU");
-            Assert.Equal("Q1", a.Quartile);
+            Assert.Equal("Top 20%", a.Quartile);
             Assert.Equal(decision, a.Decision);
             Assert.Equal(tag, a.EmfTag);
             Assert.Equal(EmfMapping.MinPdstr(tag), a.EmfMin);
@@ -41,13 +41,13 @@ namespace POGovernance.Tests.Tool1
             if (decision == "Allow")
             {
                 Assert.Equal(EmfMapping.CheckOk, a.EmfCheck);
-                Assert.EndsWith("— top 25% (Q1) and at least the " + tag + " minimum " + min + "%/day. Allow.", a.DecisionReason);
+                Assert.EndsWith("— top 20% and at least the " + tag + " minimum " + min + "%/day. Allow.", a.DecisionReason);
                 Assert.Equal(SapOutcomePath.PeerQ1, MultiConceptStep1Tests.Sap(a));
             }
             else
             {
                 Assert.Equal(EmfMapping.CheckBelow, a.EmfCheck);
-                Assert.EndsWith("— Q1 but below the " + tag + " minimum " + min + "%/day (first 3 weeks). Block. Do not raise PO.", a.DecisionReason);
+                Assert.EndsWith("— top 20% but below the " + tag + " minimum " + min + "%/day (first 3 weeks). Block. Do not raise PO.", a.DecisionReason);
                 Assert.Equal(SapOutcomePath.BlockBelowEmfMinimum, MultiConceptStep1Tests.Sap(a));
                 Assert.Equal(Decisions.Cancel, Tool2Engine.MapA(a.Decision));
             }
@@ -59,7 +59,7 @@ namespace POGovernance.Tests.Tool1
             var b = LowPeers().Add("T1", "BLU", 0.05, mrp: "599");      // only MRP 499 is mapped
             for (var i = 0; i < 8; i++) b.Add("Q" + i, "BLK", 0.001 * (i + 1), mrp: "599");
             var a = Run(b.Data(), "T1", "BLU");
-            Assert.Equal("Q1", a.Quartile);
+            Assert.Equal("Top 20%", a.Quartile);
             Assert.Equal(Decisions.Hold, a.Decision);
             Assert.StartsWith("Planner has not maintained this MC-MRP in the master. (NON-PL · MC 100 · Flag Normal · MRP 599 is not in the Entry / Mid / Fashion mapping.", a.DecisionReason);
             Assert.Equal(EmfMapping.CheckNotMapped, a.EmfCheck);
@@ -87,7 +87,7 @@ namespace POGovernance.Tests.Tool1
             var b = new Builder().Peers().Add("T1", "BLU", 0.055).Add("YOUNG", "BLU", 0.001, wof: 3);
             b.Emf.Clear();                                              // nothing mapped
             var q2 = Run(b.Data(), "T1", "BLU");
-            Assert.Equal(("Q2", Decisions.Block), (q2.Quartile, q2.Decision));
+            Assert.Equal(("Below 30%", Decisions.Block), (q2.Quartile, q2.Decision));
             Assert.Null(q2.EmfCheck);
             var young = Run(b.Data(), "YOUNG", "BLU");
             Assert.Equal(Decisions.Allow, young.Decision);             // less than 4 weeks on floor
@@ -132,7 +132,7 @@ namespace POGovernance.Tests.Tool1
             // both other colours rank Q1; RED is the oldest (10 weeks) and sells below the Mid minimum
             var blocked = Run(LowPeers().Add("T1", "RED", 0.014, wof: 10).Add("T1", "BLU", 0.09, wof: 6).Data(), "T1", "NEW");
             Assert.Equal(Decisions.Block, blocked.Decision);
-            Assert.Equal("BOBs: All 2 sibling colourway(s) with WOF ≥ 4w rank Q1 (top 25%), but the oldest colour RED (10w on floor) sells 1.4%/day — below the Mid minimum 1.5%/day. New colour blocked.", blocked.DecisionReason);
+            Assert.Equal("BOBs: All 2 sibling colourway(s) with WOF ≥ 4w are in the top 20% (Allow band), but the oldest colour RED (10w on floor) sells 1.4%/day — below the Mid minimum 1.5%/day. New colour blocked.", blocked.DecisionReason);
             Assert.Equal(0.014, blocked.EmfPdstr);
             Assert.Equal(SapOutcomePath.BlockBelowEmfMinimum, MultiConceptStep1Tests.Sap(blocked));
 

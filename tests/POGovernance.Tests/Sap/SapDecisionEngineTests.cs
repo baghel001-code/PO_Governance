@@ -104,7 +104,7 @@ namespace POGovernance.Tests.Sap
         [InlineData("2203000202", "BLK", 100, "BLOCK", "BLOCK", "BLOCK-PEER", "COMMERCIAL")]   // Q3 below the average (was WATCH)
         [InlineData("2203009106", "BLU", 100, "BLOCK", "BLOCK", "BLOCK-PEER", "COMMERCIAL")]   // Q3 near the average (was ALLOW)
         [InlineData("2203000201", "ZZZ", 100, "BLOCK", "BLOCK", "BLOCK-BOBS", "COMMERCIAL")]   // a sibling Q4 (was WATCH)
-        [InlineData("2203000203", "ZZZ", 100, "BLOCK", "BLOCK", "BLOCK-BOBS", "COMMERCIAL")]   // a sibling Q2 (was ALLOW)
+        [InlineData("2203000203", "ZZZ", 100, "HOLD", "PEER_EXCEPTION", "EXC-L8", "BMHEAD")]   // Step 3: a sibling in the 20–30% band → exception for the B&M Head
         [InlineData("2203000204", "BLK", 100, "ALLOW", "LOW_HISTORY", "WOF-00", "NONE")]
         [InlineData("8800000001", "BLK", 100, "HOLD", "NO_PLAN_DATA", "PLAN-00", "COMMERCIAL")]   // v1.1.6 D1: No Plan Available → HOLD (was ALLOW)
         [InlineData("8800000002", "WHT", 100, "WATCH", "MIX_BELOW_MIN", "MIX-01", "CATHEAD")]  // v1.1.6 D3: no F3 sale → Watch List
@@ -121,10 +121,24 @@ namespace POGovernance.Tests.Sap
             Assert.Equal(rule, i.RuleId);
             Assert.Equal(verdict, r.OverallVerdict);
             Assert.Equal(route, r.RouteTo);
-            Assert.False(r.BmHeadRequired);
+            Assert.Equal(route == "BMHEAD", r.BmHeadRequired);   // only the Step 3 exception needs the B&M Head (rule hook off)
             Assert.InRange(i.ReasonText.Length, 1, SapDecisionEngine.ReasonTextMax);
             Assert.InRange(r.SummaryText.Length, 1, SapDecisionEngine.SummaryTextMax);
             Assert.Equal(verdict == "REDUCE", i.MaxQty != null);
+        }
+
+        [Fact]
+        public void An_exception_needs_the_BM_head_even_next_to_allowed_items()
+        {
+            // multi concept rule Step 3: the 20–30% band is HOLD + bm_head_required = true → route BMHEAD (MRA Level 8)
+            var r = Decide(null, Item(10, "2203000203", "ZZZ", 100), Item(20, "2203000201", "BLU", 100));
+            Assert.Equal(new[] { "HOLD", "ALLOW" }, r.Items.Select(i => i.Verdict));
+            Assert.Equal("PEER_EXCEPTION", r.Items[0].ReasonCode);
+            Assert.StartsWith("In the 20–30% band of its peer group", r.Items[0].ReasonText);
+            Assert.True(r.BmHeadRequired);
+            Assert.Equal(("HOLD", "BMHEAD"), (r.OverallVerdict, r.RouteTo));
+            // without an exception item the flag stays off (the BmHead rule hook is off)
+            Assert.False(Decide(null, Item(10, "2203000201", "BLU", 100)).BmHeadRequired);
         }
 
         [Fact]

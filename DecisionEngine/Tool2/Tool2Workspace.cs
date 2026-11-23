@@ -70,8 +70,10 @@ namespace DecisionEngine.Tool2
             {
                 var opt = string.IsNullOrEmpty(r.OptionType) ? "Article" : r.OptionType;
                 if (r.Decision == Decisions.Cancel)
-                    return r.Quartile != null ? opt + " ranks " + r.Quartile + " (" + pctTh + ") — bottom quartile. Confirmed slow seller. Do not raise PO."
+                    return r.Quartile != null ? opt + " ranks " + r.Quartile + " (" + pctTh + ") — not allowed by the multi concept rule. Do not raise PO."
                                               : Or(r.DecisionReason, "Confirmed slow seller. Do not raise PO.");
+                if (r.Decision == Decisions.Exception)
+                    return opt + " ranks " + r.Quartile + " (" + pctTh + ") — 20–30% band. Exception: needs the B&M Head's approval (MRA Level 8).";
                 if (r.Decision == Decisions.WatchList)
                     return r.Quartile != null ? opt + " ranks " + r.Quartile + " (" + pctTh + ") — lower-mid quartile. Escalate to Category Head."
                                               : Or(r.DecisionReason, "Escalate to Category Head before proceeding.");
@@ -241,7 +243,7 @@ namespace DecisionEngine.Tool2
                 if (r.Percentile != null)
                 {
                     var n = r.CleanPool is { Count: > 0 } ? r.CleanPool.Count.ToString() : peerN > 0 ? peerN.ToString() : "?";
-                    s.Step3Heading = "Step 3 — Quartile Ranking (" + N(r.Percentile) + "th pct — " + n + " styles)";
+                    s.Step3Heading = "Step 3 — Percentile Band (" + N(r.Percentile) + "th pct — " + n + " styles)";
                     s.Step3MarkerPos = Math.Min(Math.Max(r.Percentile.Value, 2), 98);
                 }
                 // only a line that went through the (pre-Step 1) border zone check carries BorderTolUsed

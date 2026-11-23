@@ -81,7 +81,7 @@ const helperSrc = MULTI_CONCEPT.apply([
   'function renderPlannerDashboard(){}',
   'function $g(id){ return document.getElementById(id); }'
 ].join('\n\n'), []);
-const tool2Src = MULTI_CONCEPT.apply(extractTool2Block(), ['buildDetailedReason', 'processChunk'], false);
+const tool2Src = MULTI_CONCEPT.apply(extractTool2Block(), ['buildDetailedReason', 'processChunk', 'buildDecisionTooltip'], false);
 const recSrc = extractRecScript();
 const sharedSrc = extractShared();
 // The workbook is captured instead of being zipped and downloaded.

@@ -86,7 +86,7 @@ const pageSrc = MULTI_CONCEPT.apply([
     'formColChange', 'formGetColour', 'formClear', 'formSubmit', 'renderCatHistory', 'populateMonths'].map(extractFunction),
   'function renderCatInsights(){}',
   'let _runACache = null;', 'let _runBCache = null;'
-].join('\n\n'), ['renderResult']);
+].join('\n\n'), ['renderResult', 'formSubmit', '_bobsSibList', '_needsColourReason']);
 const recSrc = extractRecScript();
 
 // ── fake DOM ───────────────────────────────────────────────────────────────
@@ -145,7 +145,8 @@ const driverSrc = String.raw`
     const a1 = /Step 1 — Article & Peer Pool<\/div>([\s\S]*?)Step 2 —|Step 1 — Article & Peer Pool<\/div>([\s\S]*?)— Reason/.exec(html);
     if (a1) c.aStep1 = all(/<div style="font-size:14px;font-weight:700;color:([^;]+);font-family:var\(--mono\);line-height:1\.2;word-break:break-all">(.*?)<\/div>\s*<div[^>]*>([\s\S]*?)<\/div>/g, html).map(m => [m[3], norm(m[2]), m[1]]);
     c.aStep2 = all(/<div style="font-size:15px;font-weight:700;color:([^;]+);font-family:var\(--mono\)">(.*?)<\/div>\s*<div[^>]*>(.*?)<\/div>/g, html).map(m => [m[3], norm(m[2]), m[1]]);
-    const q3 = /(Step 3 — Quartile Ranking \([^)]*\))/.exec(html); if (q3) {
+    // "Percentile Band": multi concept rule Step 3
+    const q3 = /(Step 3 — (?:Quartile Ranking|Percentile Band) \([^)]*\))/.exec(html); if (q3) {
       c.aStep3 = [norm(q3[1]), norm((/(Rank within peer group of [^<]*)<\/span>/.exec(html) || [])[1] || ''), norm((/<span style="font-size:12px;font-weight:700;color:[^"]*">(\d+th percentile — [^<]*)<\/span>/.exec(html) || [])[1] || ''),
         (/position:absolute;left:([\d.]+)%;top:50%/.exec(html) || [])[1] || ''];
     }

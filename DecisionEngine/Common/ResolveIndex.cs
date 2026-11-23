@@ -147,6 +147,26 @@ namespace DecisionEngine.Common
             return "Q1";
         }
 
+        /// <summary>Multi concept rule Step 3: the option's band among its peers (replaces Q1–Q4).</summary>
+        public const string BandTop = "Top 20%", BandException = "20–30%", BandBelow = "Below 30%";
+
+        /// <summary>
+        /// The band of <paramref name="val"/>: share of the pool selling at or below it (as <see cref="PctRank"/>, not rounded)
+        /// above 80 % → <see cref="BandTop"/>; above 70 % → <see cref="BandException"/>; else <see cref="BandBelow"/>
+        /// (exactly 80 % / 70 % is the lower band, like <see cref="Quartile"/>). Compared on whole counts — no rounding error.
+        /// </summary>
+        public static string Band(double val, IReadOnlyList<SheetRow>? pool)
+        {
+            if (pool == null || pool.Count == 0) return BandBelow;
+            var cnt = pool.Count(r => GetPdstr(r) <= val);
+            if (cnt * 100 > 80 * pool.Count) return BandTop;
+            if (cnt * 100 > 70 * pool.Count) return BandException;
+            return BandBelow;
+        }
+
+        /// <summary>Order of the bands: Below 30% = 0, 20–30% = 1, Top 20% = 2 (anything else -1).</summary>
+        public static int BandOrder(string? band) => band switch { BandTop => 2, BandException => 1, BandBelow => 0, _ => -1 };
+
         /// <summary>Port of <c>pctRank(val, pool)</c>.</summary>
         public static double PctRank(double val, IReadOnlyList<SheetRow>? pool)
         {

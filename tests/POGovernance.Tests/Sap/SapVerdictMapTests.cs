@@ -44,7 +44,10 @@ namespace POGovernance.Tests.Sap
             new object[] { "B Watch List (mix gate)", B(Decisions.WatchList), SapOutcomePath.MixBelowMin, "WATCH", "WATCH", "MIX_BELOW_MIN", "MIX-01" },
             new object[] { "B Cannot Validate", B(Decisions.CannotValidate), SapOutcomePath.CannotValidate, "WATCH", "WATCH", "CANNOT_VALIDATE", "CV-00" },
             // Multi Concept (Tool1EngineA, rule Step 1: Q1 → Allow, Q2–Q4 → Block, no Watch List) — True Repeat
-            new object[] { "A Allow Q1", A(Decisions.Allow, "Q1", "True Repeat: ranks Q1 (90th pct) … top 25% (Q1). Allow."), SapOutcomePath.PeerQ1, "ALLOW", "ALLOW", "PEER_Q1", "PEER-Q1" },
+            new object[] { "A Allow top 20%", A(Decisions.Allow, "Top 20%", "True Repeat: 90th pct (Top 20%) … top 20% and at least the Mid minimum 1.5%/day. Allow."), SapOutcomePath.PeerQ1, "ALLOW", "ALLOW", "PEER_Q1", "PEER-Q1" },
+            // Step 3: the 20–30% band → HOLD for the B&M Head (exception, MRA Level 8)
+            new object[] { "A Exception 20–30%", A(Decisions.Exception, "20–30%", "True Repeat: 75th pct (20–30%) … Exception: raise it to the B&M Head …"), SapOutcomePath.PeerException, "HOLD", "HOLD", "PEER_EXCEPTION", "EXC-L8" },
+            new object[] { "A BOBs Exception 20–30%", A(Decisions.Exception, "20–30%", "BOBs: 1 of 2 … are in the 20–30% band …", "BOBs"), SapOutcomePath.PeerException, "HOLD", "HOLD", "PEER_EXCEPTION", "EXC-L8" },
             new object[] { "A Block Q2", A(Decisions.Block, "Q2", "True Repeat: ranks Q2 (60th pct) … Only Q1 (top 25%) is allowed for multi concept — Block. Do not raise PO."), SapOutcomePath.BlockBelowQ1, "HOLD", "BLOCK", "BLOCK", "BLOCK-PEER" },
             new object[] { "A Block Q3", A(Decisions.Block, "Q3", "True Repeat: ranks Q3 (40th pct) … Block. Do not raise PO."), SapOutcomePath.BlockBelowQ1, "HOLD", "BLOCK", "BLOCK", "BLOCK-PEER" },
             new object[] { "A Block Q4", A(Decisions.Block, "Q4", "True Repeat: ranks Q4 (10th pct) … Block. Do not raise PO."), SapOutcomePath.BlockBelowQ1, "HOLD", "BLOCK", "BLOCK", "BLOCK-PEER" },

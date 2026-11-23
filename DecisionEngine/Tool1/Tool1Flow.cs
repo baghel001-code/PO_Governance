@@ -184,7 +184,7 @@ namespace DecisionEngine.Tool1
                 o.Engine = "A"; o.OptionType = optionType ?? "";
                 var eng = _a.Run(data, gm, colour, o.OptionType, info);
                 o.A = eng;
-                if (eng.Decision == Decisions.Allow && (eng.Quartile == "Q1" || eng.Quartile == "Q2"))
+                if (eng.Decision == Decisions.Allow && eng.Quartile == Tool1EngineA.AllowBand)
                 {
                     if (info == null) throw new EngineValidationException("Error: Cannot read properties of null (reading 'mcCd')");
                     o.StrCaution = _rec.StrCaution(new RecommendationContext(data, ledger, today), info.McCd, info.Mrp, info.Brand, info.Flag, colour, gm, month);
@@ -194,7 +194,7 @@ namespace DecisionEngine.Tool1
                 // v1.1.6 B1: result.bobsSiblings = _bobsSibList(eng) (null when not BOBs)
                 o.BobsSiblings = BobsSiblingList(eng);
                 o.Result["bobsSiblings"] = Tool1Json.ToNode(o.BobsSiblings);
-                if (eng.Decision == Decisions.Allow && (eng.Quartile == "Q1" || eng.Quartile == "Q2"))
+                if (eng.Decision == Decisions.Allow && eng.Quartile == Tool1EngineA.AllowBand)
                     o.Result["strCaution"] = CautionJson(o.StrCaution);
                 o.Decision = eng.Decision; o.DecisionReason = eng.DecisionReason;
             }
@@ -257,7 +257,7 @@ namespace DecisionEngine.Tool1
                 First3 = Js.Num(r.Col("First 3 Weeks Sale", "FIRST 3 WEEKS SALE")), First3St = F3St(r),
                 Season = r.Col("SEASON", "Season").Trim()
             }).ToList();
-            static double Qo(string? q) => q switch { "Q1" => 0, "Q2" => 1, "Q3" => 2, "Q4" => 3, _ => 9 };
+            static double Qo(string? q) => q == null ? 9 : 2 - BsrPeerRank.BandOrder(q);   // Top 20%, 20–30%, Below 30%, not ranked
             JsSort.StableSort(outL, (a, b) => Qo(a.Q) - Qo(b.Q) is var d && d != 0 ? d : b.Wof - a.Wof);
             return outL.Take(60).ToList();
         }

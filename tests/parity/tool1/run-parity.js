@@ -86,7 +86,7 @@ const pageSrc = MULTI_CONCEPT.apply([
     'formColChange', 'formGetColour', 'formClear', 'formSubmit', 'renderCatHistory', 'populateMonths'].map(extractFunction),
   'function renderCatInsights(){}',
   'let _runACache = null;', 'let _runBCache = null;'
-].join('\n\n'), ['renderResult', 'formSubmit', '_bobsSibList', '_needsColourReason']);
+].join('\n\n'), ['renderResult', 'formSubmit', '_bobsSibList', '_needsColourReason', 'dpill']);
 const recSrc = extractRecScript();
 
 // ── fake DOM ───────────────────────────────────────────────────────────────

@@ -37,12 +37,12 @@
             <span style="font-size:12px;font-weight:700;color:@q.RankColour">@q.RankText</span>
         </div>
         <div class="rank-bar">
-            <div class="rank-line" style="left:25%"></div>
-            <div class="rank-line" style="left:50%"></div>
-            <div class="rank-line" style="left:75%"></div>
+            @* multi concept rule Step 3: bands — below 30% | 20–30% | top 20% *@
+            <div class="rank-line" style="left:70%"></div>
+            <div class="rank-line" style="left:80%"></div>
             <div class="rank-dot" style="left:@(q.Position.ToString(System.Globalization.CultureInfo.InvariantCulture))%;background:@q.RankColour"></div>
         </div>
-        <div class="rank-labels"><span>Q4 Block</span><span>Q3 Block</span><span>Q2 Block</span><span>Q1 Allow</span></div>
+        <div class="rank-labels"><span style="flex:7">Below 30% · Block</span><span style="flex:1;white-space:nowrap">20–30%</span><span style="flex:2">Top 20% · Allow</span></div>
     </div>
 }
 

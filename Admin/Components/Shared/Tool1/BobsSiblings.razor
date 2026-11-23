@@ -46,14 +46,18 @@
 
     protected override void OnParametersSet() => _has3 = List.Any(s => s.First3St != null);
 
-    private static string RankColour(string? q) => q switch { "Q1" or "Q2" => "#0B6B2E", "Q3" => "#8A5A00", "Q4" => "#B42318", _ => "#6B7280" };
+    // multi concept rule Step 3 bands (Q1–Q4 for requests saved before it)
+    private static string RankColour(string? q) => q switch
+    {
+        "Top 20%" or "Q1" or "Q2" => "#0B6B2E", "20–30%" => "#6D28D9", "Q3" => "#8A5A00", "Below 30%" or "Q4" => "#B42318", _ => "#6B7280"
+    };
 
     // "Show the sibling colours of this style: 3 colours, 4 BSR rows (one per season) (1 Q1, 2 Q3, 1 not ranked)"
     private string Summary()
     {
         var cnt = new Dictionary<string, int>();
         foreach (var s in List) { var k = s.Q ?? "not ranked"; cnt[k] = cnt.GetValueOrDefault(k) + 1; }
-        var sum = string.Join(", ", new[] { "Q1", "Q2", "Q3", "Q4", "not ranked" }.Where(cnt.ContainsKey).Select(k => cnt[k] + " " + k));
+        var sum = string.Join(", ", new[] { "Top 20%", "20–30%", "Below 30%", "Q1", "Q2", "Q3", "Q4", "not ranked" }.Where(cnt.ContainsKey).Select(k => cnt[k] + " " + k));
         var ncol = List.Select(s => s.Gm + "|" + s.Colour).Distinct().Count();
         return "Show the sibling colours of this style: " + ncol + " colour" + (ncol == 1 ? "" : "s") +
                (List.Count != ncol ? ", " + List.Count + " BSR rows (one per season)" : "") + " (" + sum + ")";

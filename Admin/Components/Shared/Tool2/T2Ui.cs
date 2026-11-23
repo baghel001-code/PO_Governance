@@ -24,11 +24,12 @@ namespace Admin.Components.Shared.Tool2
         public static string TreeColor(string decision) =>
             decision == DecisionEngine.Model.Decisions.NoPlanReview ? "#3B5B92" : ReasonColors(decision).Color;
 
-        /// <summary>Quartile chip colour of the Multi Concept table.</summary>
+        /// <summary>Band chip colour of the Multi Concept table (multi concept rule Step 3; Q1–Q2 / Q3 for older runs).</summary>
         public static string QuartileColor(string? q) => q switch
         {
-            "Q1" => "#00873E",
+            "Top 20%" or "Q1" => "#00873E",
             "Q2" => "#059669",
+            "20–30%" => "#7C3AED",
             "Q3" => "#D97706",
             _ => "#DC2626",
         };

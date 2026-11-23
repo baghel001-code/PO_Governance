@@ -26,7 +26,8 @@ namespace DecisionEngine.Tool1
                 [Decisions.Hold] = ("#DC2626", "#FEF2F2", "#FECACA"),
                 [Decisions.ReduceRecommended] = ("#D97706", "#FFFBEB", "#FDE68A"),
                 [Decisions.WatchList] = ("#854F0B", "#FFF3CD", "#FCD34D"),
-                [Decisions.CannotValidate] = ("#6B7280", "#F5F5F5", "#D1D5DB")
+                [Decisions.CannotValidate] = ("#6B7280", "#F5F5F5", "#D1D5DB"),
+                [Decisions.Exception] = ("#7C3AED", "#F3E8FF", "#C4B5FD")   // multi concept rule Step 3
             };
 
         /// <summary>dpill class of a decision (Today's Requests table).</summary>
@@ -37,6 +38,7 @@ namespace DecisionEngine.Tool1
             Decisions.WatchList => "dp-watch",
             Decisions.Hold => "dp-hold",
             Decisions.Block => "dp-block",
+            Decisions.Exception => "dp-exception",
             _ => "dp-nodata"
         };
 

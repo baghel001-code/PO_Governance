@@ -99,10 +99,10 @@
         {
             <div class="t2-step-h" style="margin-top:0">@st.Step3Heading</div>
             <div class="t2-rank-bar">
-                <div class="q" style="left:25%"></div><div class="q" style="left:50%"></div><div class="q" style="left:75%"></div>
+                <div class="q" style="left:70%"></div><div class="q" style="left:80%"></div>
                 <div class="dot" style="left:@(Pos(st.Step3MarkerPos))%;background:@st.DecisionColor" title="@st.Step3Heading"></div>
             </div>
-            <div class="t2-rank-lbls"><span>Q4 Block</span><span>Q3 Block</span><span>Q2 Block</span><span>Q1 Allow</span></div>
+            <div class="t2-rank-lbls"><span style="flex:7">Below 30% · Block</span><span style="flex:1;white-space:nowrap">20–30%</span><span style="flex:2">Top 20% · Allow</span></div>
         }
         @if (st.Step4 is { } bz)
         {

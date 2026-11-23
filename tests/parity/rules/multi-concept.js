@@ -227,7 +227,20 @@ const REPLACEMENTS = [
     replace: "if(r.borderTolUsed && r.pdstr!=null && r.peerAvg!=null && r.pdstr<r.peerAvg && r.quartile_&&(r.quartile_==='Q4'||r.quartile_==='Q3')){" },
   { fn: 'renderResult',
     find: '          <span style="flex:1;text-align:center">Q4 Slow</span><span style="flex:1;text-align:center">Q3 Watch</span><span style="flex:1;text-align:center">Q2 Healthy</span><span style="flex:1;text-align:center">Q1 Top</span>',
-    replace: '          <span style="flex:7;text-align:center">Below 30% Block</span><span style="flex:1;text-align:center">20–30% Exception</span><span style="flex:2;text-align:center">Top 20% Allow</span>' },
+    replace: '          <span style="flex:7;text-align:center">Below 30% · Block</span><span style="flex:1;text-align:center">20–30%</span><span style="flex:2;text-align:center">Top 20% · Allow</span>' },
+  // Tool 1 card colours (renderResult) and the decision pill (dpill): the exception is purple
+  { fn: 'renderResult',
+    find: "'Watch List':'#854F0B','Cannot Validate':'#6B7280'};",
+    replace: "'Watch List':'#854F0B','Cannot Validate':'#6B7280','Exception — B&M Head':'#7C3AED'};" },
+  { fn: 'renderResult',
+    find: "'Watch List':'#FFF3CD','Cannot Validate':'#F5F5F5'};",
+    replace: "'Watch List':'#FFF3CD','Cannot Validate':'#F5F5F5','Exception — B&M Head':'#F3E8FF'};" },
+  { fn: 'renderResult',
+    find: "'Watch List':'#FCD34D','Cannot Validate':'#D1D5DB'};",
+    replace: "'Watch List':'#FCD34D','Cannot Validate':'#D1D5DB','Exception — B&M Head':'#C4B5FD'};" },
+  { fn: 'dpill',
+    find: "'Block':'dp-block',",
+    replace: "'Block':'dp-block','Exception — B&M Head':'dp-exception'," },
   // Tool 1 decision (formSubmit): the STR caution comes with an allowed top 20%
   { fn: 'formSubmit',
     find: "if(eng2.decision==='Allow'&&(eng2.quartile_==='Q1'||eng2.quartile_==='Q2')){",
@@ -263,7 +276,7 @@ const REPLACEMENTS = [
     replace: "if(r.borderTolUsed&&r.pdstr!=null&&r.peerAvg!=null&&r.pdstr<r.peerAvg&&(r.quartile_==='Q4'||r.quartile_==='Q3')){" },
   { fn: 'buildDetailedReason',
     find: '<span style="flex:1;text-align:center">Q4 Slow</span><span style="flex:1;text-align:center">Q3 Watch</span><span style="flex:1;text-align:center">Q2 Healthy</span><span style="flex:1;text-align:center">Q1 Top</span></div>\';',
-    replace: '<span style="flex:1;text-align:center">Q4 Block</span><span style="flex:1;text-align:center">Q3 Block</span><span style="flex:1;text-align:center">Q2 Block</span><span style="flex:1;text-align:center">Q1 Allow</span></div>\';' },
+    replace: '<span style="flex:7;text-align:center">Below 30% · Block</span><span style="flex:1;text-align:center">20–30%</span><span style="flex:2;text-align:center">Top 20% · Allow</span></div>\';' },
 ];
 
 /**

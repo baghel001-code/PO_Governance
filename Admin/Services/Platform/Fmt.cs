@@ -133,6 +133,7 @@ namespace Admin.Services.Platform
             "Watch List" => "dp-watch",
             "Hold — Don't Raise" => "dp-hold",
             "Block" => "dp-block",
+            "Exception — B&M Head" => "dp-exception",
             _ => "dp-nodata"
         };
 

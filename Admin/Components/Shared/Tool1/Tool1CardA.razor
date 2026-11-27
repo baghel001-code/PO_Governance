@@ -36,13 +36,14 @@
             <span style="font-size:11px;font-weight:600;color:var(--ink2)">@q.PoolText</span>
             <span style="font-size:12px;font-weight:700;color:@q.RankColour">@q.RankText</span>
         </div>
-        <div class="rank-bar">
-            @* multi concept rule Step 3: bands — below 30% | 20–30% | top 20% *@
-            <div class="rank-line" style="left:70%"></div>
-            <div class="rank-line" style="left:80%"></div>
+        <div class="rank-bar rank-bands">
+            @* multi concept rule Step 3: bands — below the top 30% (0–70) | 20–30% (70–80) | top 20% (80–100) *@
+            <div class="rank-seg rank-seg-block" style="width:70%"></div>
+            <div class="rank-seg rank-seg-exc" style="width:10%"></div>
+            <div class="rank-seg rank-seg-allow" style="width:20%"></div>
             <div class="rank-dot" style="left:@(q.Position.ToString(System.Globalization.CultureInfo.InvariantCulture))%;background:@q.RankColour"></div>
         </div>
-        <div class="rank-labels"><span style="flex:7">Below 30% · Block</span><span style="flex:1;white-space:nowrap">20–30%</span><span style="flex:2">Top 20% · Allow</span></div>
+        <div class="rank-labels"><span style="flex:7">Below top 30% · Block</span><span style="flex:1;white-space:nowrap">20–30% · Exception</span><span style="flex:2">Top 20% · Allow</span></div>
     </div>
 }
 
@@ -73,10 +74,15 @@
 
 @if (A.Minimum is { } mn)
 {
-    @* multi concept rule Step 2: the Entry / Mid / Fashion minimum of a Q1 *@
+    @* multi concept rule Step 4: the Entry / Mid / Fashion minimum (top 20% and 20–30% bands) *@
     <div class="t1-a-sec" data-testid="emf-minimum">
         <div class="t1-a-h">@mn.Heading</div>
-        <div class="t1-strip" style="background:@(mn.Check == "ok" ? "#DCFCE7" : mn.Check == "below" ? "#FEF2F2" : "#FFFBEB");border-color:@mn.Colour;color:@mn.Colour">@mn.Text</div>
+        <div class="t1-border-box t1-emf-box">
+            @foreach (var l in mn.Lines)
+            {
+                <div><span class="t1-emf-k">@l.Key</span>= <span style="color:@(l.Colour ?? "inherit");font-weight:@(l.Colour == null ? "400" : "700")">@l.Value</span></div>
+            }
+        </div>
     </div>
 }
 

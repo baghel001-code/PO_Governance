@@ -116,6 +116,13 @@
 .t1 .t1-a-v { font-size: 14px; font-weight: 700; font-family: var(--mono); line-height: 1.2; word-break: break-all; }
 .t1 .t1-a-k { font-size: 8px; color: var(--ink3); margin-top: 4px; text-transform: uppercase; letter-spacing: .04em; white-space: pre-line; }
 .t1 .rank-bar { height: 30px; border-radius: 8px; overflow: hidden; position: relative; border: 1px solid var(--brd); box-shadow: inset 0 1px 4px rgba(0,0,0,.05); background: linear-gradient(90deg, #fef2f2 0%, #fef2f2 25%, #fffbeb 25%, #fffbeb 50%, #dcfce7 50%, #dcfce7 75%, #bbf7d0 75%, #bbf7d0 100%); }
+.t1 .rank-bar.rank-bands { display: flex; background: none; }
+.t1 .rank-seg { height: 100%; }
+.t1 .rank-seg-block { background: #FECACA; }
+.t1 .rank-seg-exc { background: #FDE68A; border-left: 1px solid rgba(0,0,0,.18); border-right: 1px solid rgba(0,0,0,.18); }
+.t1 .rank-seg-allow { background: #BBF7D0; }
+.t1 .t1-emf-box { font-size: 12px; }
+.t1 .t1-emf-k { display: inline-block; min-width: 9.5em; white-space: pre; }
 .t1 .rank-line { position: absolute; top: 0; bottom: 0; width: 1px; background: rgba(0,0,0,.15); }
 .t1 .rank-dot { position: absolute; top: 50%; transform: translate(-50%, -50%); width: 14px; height: 14px; border-radius: 50%; border: 2.5px solid #fff; box-shadow: 0 1px 6px rgba(0,0,0,.3); z-index: 1; }
 .t1 .rank-labels { display: flex; font-size: 9px; font-weight: 700; color: var(--ink4); margin-top: 4px; }

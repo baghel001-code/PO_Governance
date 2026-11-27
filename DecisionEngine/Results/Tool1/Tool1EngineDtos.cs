@@ -160,5 +160,9 @@ namespace DecisionEngine.Results.Tool1
         [JsonPropertyName("emfCheck"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] public string? EmfCheck { get; set; }
         /// <summary>Step 2: the per-day sell-thru the minimum was checked on (BOBs: the oldest other colour).</summary>
         [JsonPropertyName("emfPdstr"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] public double? EmfPdstr { get; set; }
+        /// <summary>Step 2/3: what the minimum was checked on — "this option" or "oldest other colour EML (9w)".</summary>
+        [JsonPropertyName("emfOn"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] public string? EmfOn { get; set; }
+        /// <summary>BOBs: which other colour the percentile bar shows — "Worst other colour: KHA (8w) at 76.5 percentile (20–30%). Shown: worst colour".</summary>
+        [JsonPropertyName("rankNote"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] public string? RankNote { get; set; }
     }
 }

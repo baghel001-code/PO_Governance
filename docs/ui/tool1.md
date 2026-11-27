@@ -166,8 +166,12 @@ v1.1.4 did everything in one click. The server splits it into two calls, so the 
 - **Step 3 — {Heading}** (when present):
   - Line: `PoolText` left, `RankText` right (in `RankColour`).
   - Rank bar with lines at 25/50/75 % and a dot at `Position` %.
-  - Lines at 70 % and 80 %; labels under the bar: "Below 30% · Block", "20–30%", "Top 20% · Allow" (multi concept rule Step 3:
-    percentile bands; `RankText` = "<n>th percentile — Top 20% (Allow) / 20–30% (Exception — B&M Head) / Below 30% (Block)").
+  - Segments 0–70 % `#FECACA`, 70–80 % `#FDE68A`, 80–100 % `#BBF7D0`; labels under the bar: "Below top 30% · Block",
+    "20–30% · Exception", "Top 20% · Allow" (multi concept rule Step 3, reference view 27 Nov 2026). Heading "Step 3 — Rank in
+    peer group (<p> percentile — <n> styles, Brand + MC + MRP + Flag)"; `PoolText` = `rankNote` (BOBs: "Worst / Best other
+    colour: X (8w) at <p> percentile (<band>). Shown: worst / best colour") or "Rank within peer group of <n> styles";
+    `RankText` = "<p> percentile — <band>" (one decimal). Step 4 — EMF minimum: mono box EMF tag / Checked on / Sell-thru/day /
+    Result (✓ MEETS / ✗ BELOW THE MINIMUM / ✗ NOT MAINTAINED). Exception colour orange `#C2410C` / `#FFF7ED` / `#FDBA74`.
 - **Step 4 — Minimum Sell-Thru** (`Minimum`, multi concept rule Step 2 — only when a top-20% option was checked): heading with the type and
   minimum ("Step 4 — Minimum Sell-Thru (Mid ≥ 1.5%/day)", or "(not in the master)"), and a strip with the value checked
   ("4.6%/day ≥ 1.5%/day → Allow" green, "… < … → Block" red, the planner message "→ Hold" amber; BOBs: "the oldest other colour: …").

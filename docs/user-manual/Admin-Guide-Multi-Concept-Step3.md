@@ -1,7 +1,7 @@
 # PO Governance — Administrator Guide: Multi Concept Rule, Step 3
 
 **For:** PO Governance administrators · **Change:** multi concept rule Step 3 (percentile bands and the B&M Head
-exception) · **Date:** 23 Nov 2026
+exception) · **Date:** 23 Nov 2026, updated 27 Nov 2026 (the exception needs the minimum; new card view)
 
 This guide covers only what an administrator has to do for Step 3: set it up, check it works, and keep it running.
 The full rule for buyers and planners is in the User Manual (section 3.4).
@@ -19,14 +19,17 @@ first 3 weeks:
 | **Top 20 %** | above the 80th percentile | **Allow** — if it also meets its Entry / Mid / Fashion minimum (Entry 2.0 %, Mid 1.5 %, Fashion 1.5 % per day) | Retain | ALLOW `PEER_Q1` |
 | Top 20 %, below the minimum | | **Block** | Cancel | BLOCK `BLOCK-EMF-MIN` |
 | Top 20 %, MC-MRP not in the mapping | | **Hold** — "Planner has not maintained this MC-MRP in the master." | Cannot Validate | HOLD `EMF_NOT_MAINTAINED` |
-| **20–30 %** | above the 70th, up to the 80th percentile | **Exception — B&M Head** | Exception — B&M Head | **HOLD `PEER_EXCEPTION`, `route_to` = BMHEAD, `bm_head_required` = true** |
+| **20–30 %** | above the 70th, up to the 80th percentile | **Exception — B&M Head** — only if it also meets its Entry / Mid / Fashion minimum | Exception — B&M Head | **HOLD `PEER_EXCEPTION`, `route_to` = BMHEAD, `bm_head_required` = true** |
+| 20–30 %, below the minimum | | **Block** (never reaches Level 8) | Cancel | BLOCK `BLOCK-EMF-MIN` |
+| 20–30 %, MC-MRP not in the mapping | | **Hold** — "Planner has not maintained this MC-MRP in the master." | Cannot Validate | HOLD `EMF_NOT_MAINTAINED` |
 | **Below the top 30 %** | 70th percentile or lower | **Block** | Cancel | BLOCK `BLOCK-PEER` |
 
 - **New colour of an existing option (BOBs):** the other colours with 4+ weeks on floor are placed the same way and the
-  **worst** one decides — any below 30 % → Block; any in 20–30 % → Exception; all in the top 20 % → Allow when the
-  **oldest** colour meets the minimum.
+  **worst** one decides — any below 30 % → Block; any in 20–30 % → Exception; all in the top 20 % → Allow. In both the
+  Exception and the Allow case the **oldest** other colour must meet the minimum (below → Block, not mapped → Hold).
 - **Unchanged:** less than 4 weeks on floor → Allow; new articles → Allow; below 1 %/day after 4+ weeks → Block (any band).
-- **The exception:** for an option in the 20–30 % band the buyer may **raise an exception** (MRA Level 8) by typing a
+- **The exception (from 27 Nov 2026):** only an option in the 20–30 % band that **meets its Entry / Mid / Fashion
+  minimum** goes to Level 8 — the buyer may **raise an exception** (MRA Level 8) by typing a
   reason, or choose **Don't raise** (nothing is saved). The exception waits for the **B&M Head** on the Approvals page.
   **Only the B&M Head and admins** can approve or reject it — category heads and planners cannot.
 
@@ -100,7 +103,10 @@ The buyer sees the decision immediately in Requests and History. You cannot deci
 **In the portal (Staging):**
 
 1. As a buyer, run a **New Request** for a multi concept article whose position is between the 70th and 80th percentile.
-   The card shows **Exception — B&M Head** (purple), with *Step 3 — Percentile Band (…th pct)*.
+   and that sells at least its Entry / Mid / Fashion minimum. The card shows **Exception — B&M Head** (orange), with
+   *Step 3 — Rank in peer group (… percentile — … styles, Brand + MC + MRP + Flag)*, the dot on the yellow
+   **20–30 % · Exception** part of the bar, and *Step 4 — EMF minimum* with **Result = ✓ MEETS THE MINIMUM**.
+   - A 20–30 % article that sells **below** its minimum shows **Block** (Step 4: ✗ BELOW THE MINIMUM) — no exception.
 2. Submit it: the dialog **"Raise an exception to the B&M Head?"** asks for a reason. Type one and **Send to the B&M
    Head**. The message reads **"Exception — sent to Anne (B&M Head) for approval (MRA Level 8)"**.
    - If it says **"… the admin (no B&M Head set)"**, the setting in 2.2 is missing or the API was not restarted.
@@ -134,8 +140,9 @@ The buyer sees the decision immediately in Requests and History. You cannot deci
 ## 6. For the SAP team (pass on)
 
 - New item answer for the **20–30 % band**: verdict **HOLD**, `reason_code` **`PEER_EXCEPTION`**, `rule_id` **`EXC-L8`**,
-  reason text *"In the 20–30% band of its peer group (…th pct, sell-thru …%/day): exception, needs the B&M Head's
-  approval (MRA Level 8)"*.
+  reason text *"In the 20–30% band of its peer group (… percentile, sell-thru …%/day), meets its Entry / Mid / Fashion
+  minimum: exception, needs the B&M Head's approval (MRA Level 8)"*. A 20–30 % item below its minimum is BLOCK
+  `BLOCK-EMF-MIN` ("In the 20–30% band but sells …"), never sent to Level 8.
 - The answer then has **`bm_head_required` = true** and **`route_to` = `BMHEAD`** (also when other items are ALLOW).
 - SAP should raise these at **MRA Level 8** for the **B&M Head** (today Level 8 exceptions go to Commercial).
 - Codes that keep their names, with texts now in bands: `PEER_Q1` (top 20 %), `BLOCK-PEER` (below the top 30 %),

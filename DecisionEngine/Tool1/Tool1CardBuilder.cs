@@ -27,7 +27,7 @@ namespace DecisionEngine.Tool1
                 [Decisions.ReduceRecommended] = ("#D97706", "#FFFBEB", "#FDE68A"),
                 [Decisions.WatchList] = ("#854F0B", "#FFF3CD", "#FCD34D"),
                 [Decisions.CannotValidate] = ("#6B7280", "#F5F5F5", "#D1D5DB"),
-                [Decisions.Exception] = ("#7C3AED", "#F3E8FF", "#C4B5FD")   // multi concept rule Step 3
+                [Decisions.Exception] = ("#C2410C", "#FFF7ED", "#FDBA74")   // multi concept rule Step 3 (orange, as the reference view)
             };
 
         /// <summary>dpill class of a decision (Today's Requests table).</summary>
@@ -296,7 +296,7 @@ namespace DecisionEngine.Tool1
             var aboveMean = r.Pdstr != null && r.Pdstr >= r.PeerAvg;
             var gapPct = r.GapPct != null ? (aboveMean ? "0.0% (at/above avg)" : Js.ToFixed(r.GapPct.Value, 1) + "%") : "—";
             dto.Step1.Add(new() { Key = "BSR Options\n(MC×MRP)", Value = N(JsOps.Or(r.TotalBSR, 0)), Colour = "#1A4FAF" });
-            dto.Step1.Add(new() { Key = "WOF ≥ " + N(p.Wof) + "w\n(Peer Pool)", Value = N(r.PeerPool.Count), Colour = "#0891B2" });
+            dto.Step1.Add(new() { Key = "WOF ≥ " + N(p.Wof) + "w\n(Peer Pool · Brand+MC+MRP+Flag)", Value = N(r.PeerPool.Count), Colour = "#0891B2" });
             dto.Step1.Add(new() { Key = "WOF This Article", Value = Js.ToFixed(r.Wof, 0) + "w", Colour = "#0891B2" });
             dto.Step1.Add(new() { Key = "BSR Source", Value = Or(r.BsrLabel, "—"), Colour = "#7C3AED" });
             dto.Step1.Add(new() { Key = "Option Type", Value = Or(r.OptionType, "—"), Colour = "#7C3AED" });
@@ -311,13 +311,13 @@ namespace DecisionEngine.Tool1
             if (!string.IsNullOrEmpty(r.Quartile) && r.Percentile != null)
             {
                 var pct = r.Percentile.Value;
-                var label = BandLabel(r.Quartile);
                 var n = r.CleanPool.Count > 0 ? N(r.CleanPool.Count) : r.PeerPool.Count > 0 ? N(r.PeerPool.Count) : "?";
+                // the reference view (27 Nov 2026): "Step 3 — Rank in peer group (76.5 percentile — 17 styles, Brand + MC + MRP + Flag)"
                 dto.Step3 = new Tool1QuartileDto
                 {
-                    Heading = "Step 3 — Percentile Band (" + N(pct) + "th pct — " + n + " styles)",
-                    PoolText = "Rank within peer group of " + n + " styles",
-                    RankText = N(pct) + "th percentile — " + label, RankColour = dc,
+                    Heading = "Step 3 — Rank in peer group (" + N(pct) + " percentile — " + n + " styles, Brand + MC + MRP + Flag)",
+                    PoolText = r.RankNote ?? "Rank within peer group of " + n + " styles",
+                    RankText = N(pct) + " percentile — " + r.Quartile, RankColour = dc,
                     Position = Math.Min(Math.Max(pct, 2), 98), Percentile = pct
                 };
             }
@@ -344,14 +344,27 @@ namespace DecisionEngine.Tool1
             }
             if (r.EmfCheck != null)
             {
-                var basis = r.OptionType == "BOBs" && r.RepSibling != null ? "the oldest other colour: " : "";
-                var val = r.EmfPdstr is double ep ? Js.ToFixed(ep * 100, 1) + "%/day" : "—";
-                var min = r.EmfMin is double em ? Js.ToFixed(em * 100, 1) + "%/day" : "";
-                dto.Minimum = r.EmfCheck switch
+                // Step 4 — EMF minimum (reference view): tag, what it was checked on, the sell-thru and the result
+                var val = r.EmfPdstr is double ep ? Js.ToFixed(ep * 100, 2) + "%" : "—";
+                var lines = new List<Tool1KvDto>
                 {
-                    Common.EmfMapping.CheckOk => new Tool1MinimumDto { Heading = "Step 4 — Minimum Sell-Thru (" + r.EmfTag + " ≥ " + min + ")", Text = basis + val + " ≥ " + min + " → Allow", Check = r.EmfCheck, Colour = Green },
-                    Common.EmfMapping.CheckBelow => new Tool1MinimumDto { Heading = "Step 4 — Minimum Sell-Thru (" + r.EmfTag + " ≥ " + min + ")", Text = basis + val + " < " + min + " → Block", Check = r.EmfCheck, Colour = Red },
-                    _ => new Tool1MinimumDto { Heading = "Step 4 — Minimum Sell-Thru (not in the master)", Text = Common.EmfMapping.NotMaintainedMessage + " → Hold", Check = r.EmfCheck, Colour = "#B45309" }
+                    new() { Key = "EMF tag", Value = r.EmfTag != null && r.EmfMin is double em
+                        ? r.EmfTag + " (minimum " + Js.ToFixed(em * 100, 2) + "%/day)"
+                        : "not in the Entry / Mid / Fashion master" },
+                    new() { Key = "Checked on", Value = r.EmfOn ?? "this option" },
+                    new() { Key = "Sell-thru/day", Value = val }
+                };
+                var (result, colour) = r.EmfCheck switch
+                {
+                    Common.EmfMapping.CheckOk => ("✓ MEETS THE MINIMUM", Green),
+                    Common.EmfMapping.CheckBelow => ("✗ BELOW THE MINIMUM", Red),
+                    _ => ("✗ NOT MAINTAINED — " + Common.EmfMapping.NotMaintainedMessage, "#B45309")
+                };
+                lines.Add(new() { Key = "Result", Value = result, Colour = colour });
+                dto.Minimum = new Tool1MinimumDto
+                {
+                    Heading = "Step 4 — EMF minimum (Entry 2.0% · Mid 1.5% · Fashion 1.5% per day)",
+                    Lines = lines, Text = result, Check = r.EmfCheck, Colour = colour
                 };
             }
             if (decision == Decisions.Block && r.Pdstr != null && r.Pdstr < 0.01 && r.Wof >= 4)

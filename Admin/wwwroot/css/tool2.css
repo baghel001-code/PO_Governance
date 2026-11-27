@@ -160,6 +160,8 @@
 .t2-tile-l { font-size: 8px; color: #9CA3AF; margin-top: 3px; text-transform: uppercase; letter-spacing: .04em; white-space: pre-line; }
 .t2-rank-bar { height: 30px; border-radius: 8px; overflow: hidden; position: relative; margin-bottom: 4px; border: 1px solid var(--brd); box-shadow: inset 0 1px 4px rgba(0,0,0,.05);
   background: linear-gradient(90deg,#fef2f2 0%,#fef2f2 25%,#fffbeb 25%,#fffbeb 50%,#dcfce7 50%,#dcfce7 75%,#bbf7d0 75%,#bbf7d0 100%); }
+.t2-rank-bar.t2-rank-bands { display: flex; background: none; }
+.t2-rank-bar .seg { height: 100%; }
 .t2-rank-bar .q { position: absolute; top: 0; bottom: 0; width: 1px; background: rgba(0,0,0,.15); }
 .t2-rank-bar .dot { position: absolute; top: 50%; transform: translate(-50%,-50%); width: 13px; height: 13px; border-radius: 50%; border: 2px solid #fff; box-shadow: 0 1px 5px rgba(0,0,0,.3); z-index: 1; margin: 0; }
 .t2-rank-lbls { display: flex; font-size: 8px; font-weight: 700; color: #9CA3AF; margin-bottom: 10px; }

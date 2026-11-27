@@ -37,17 +37,17 @@ namespace POGovernance.Tests.Tool1
             Assert.Equal(decision, a.Decision);
             Assert.Equal(tag, a.EmfTag);
             Assert.Equal(EmfMapping.MinPdstr(tag), a.EmfMin);
-            var min = tag == "Entry" ? "2.0" : "1.5";
+            var min = tag == "Entry" ? "2.00" : "1.50";
             if (decision == "Allow")
             {
                 Assert.Equal(EmfMapping.CheckOk, a.EmfCheck);
-                Assert.EndsWith("— top 20% and at least the " + tag + " minimum " + min + "%/day. Allow.", a.DecisionReason);
+                Assert.EndsWith("— meets the " + tag + " minimum of " + min + "%/day. Allow.", a.DecisionReason);
                 Assert.Equal(SapOutcomePath.PeerQ1, MultiConceptStep1Tests.Sap(a));
             }
             else
             {
                 Assert.Equal(EmfMapping.CheckBelow, a.EmfCheck);
-                Assert.EndsWith("— top 20% but below the " + tag + " minimum " + min + "%/day (first 3 weeks). Block. Do not raise PO.", a.DecisionReason);
+                Assert.EndsWith("— below the " + tag + " minimum of " + min + "%/day. Block. Do not raise PO.", a.DecisionReason);
                 Assert.Equal(SapOutcomePath.BlockBelowEmfMinimum, MultiConceptStep1Tests.Sap(a));
                 Assert.Equal(Decisions.Cancel, Tool2Engine.MapA(a.Decision));
             }
@@ -113,14 +113,18 @@ namespace POGovernance.Tests.Tool1
                     Decision = a.Decision, DecisionReason = a.DecisionReason
                 }, new EngineParams(), "2026-11-20").A!.Minimum;
 
+            string[] Lines(DecisionEngine.Results.Tool1.Tool1MinimumDto m) => m.Lines.Select(l => l.Key + " = " + l.Value).ToArray();
             var ok = Card(Run(LowPeers("Entry").Add("T1", "BLU", 0.046).Data(), "T1", "BLU"))!;
-            Assert.Equal(("Step 4 — Minimum Sell-Thru (Entry ≥ 2.0%/day)", "4.6%/day ≥ 2.0%/day → Allow"), (ok.Heading, ok.Text));
+            Assert.Equal("Step 4 — EMF minimum (Entry 2.0% · Mid 1.5% · Fashion 1.5% per day)", ok.Heading);
+            Assert.Equal(new[] { "EMF tag = Entry (minimum 2.00%/day)", "Checked on = this option", "Sell-thru/day = 4.60%", "Result = ✓ MEETS THE MINIMUM" }, Lines(ok));
+            Assert.Equal("#00873E", ok.Lines[^1].Colour);
             var below = Card(Run(LowPeers("Entry").Add("T1", "BLU", 0.019).Data(), "T1", "BLU"))!;
-            Assert.Equal("1.9%/day < 2.0%/day → Block", below.Text);
+            Assert.Equal("Result = ✗ BELOW THE MINIMUM", Lines(below)[^1]);
             var b = LowPeers().Add("T1", "BLU", 0.05);
             b.Emf.Clear();
             var hold = Card(Run(b.Data(), "T1", "BLU"))!;
-            Assert.Equal(("Step 4 — Minimum Sell-Thru (not in the master)", "Planner has not maintained this MC-MRP in the master. → Hold"), (hold.Heading, hold.Text));
+            Assert.Equal(new[] { "EMF tag = not in the Entry / Mid / Fashion master", "Checked on = this option", "Sell-thru/day = 5.00%",
+                "Result = ✗ NOT MAINTAINED — Planner has not maintained this MC-MRP in the master." }, Lines(hold));
             Assert.Null(Card(Run(new Builder().Peers().Add("T1", "BLU", 0.055).Data(), "T1", "BLU")));   // Q2: not checked
         }
 
@@ -132,7 +136,8 @@ namespace POGovernance.Tests.Tool1
             // both other colours rank Q1; RED is the oldest (10 weeks) and sells below the Mid minimum
             var blocked = Run(LowPeers().Add("T1", "RED", 0.014, wof: 10).Add("T1", "BLU", 0.09, wof: 6).Data(), "T1", "NEW");
             Assert.Equal(Decisions.Block, blocked.Decision);
-            Assert.Equal("BOBs: All 2 sibling colourway(s) with WOF ≥ 4w are in the top 20% (Allow band), but the oldest colour RED (10w on floor) sells 1.4%/day — below the Mid minimum 1.5%/day. New colour blocked.", blocked.DecisionReason);
+            Assert.StartsWith("BOBs: All 2 other colour(s) with WOF ≥ 4w rank in the top 20% (best: ", blocked.DecisionReason);
+            Assert.EndsWith("). Oldest colour RED (10w) sells 1.40%/day — below the Mid minimum of 1.50%/day. New colour blocked.", blocked.DecisionReason);
             Assert.Equal(0.014, blocked.EmfPdstr);
             Assert.Equal(SapOutcomePath.BlockBelowEmfMinimum, MultiConceptStep1Tests.Sap(blocked));
 

@@ -158,82 +158,86 @@ namespace DecisionEngine.Tool1
                         r0.QualSibs = qualSibs;
                         return r0;
                     }
-                    // Step 3: each other colour (WOF ≥ gate) gets its band; the worst band decides
+                    // Step 3: each other colour (WOF ≥ gate) gets its band; the worst band decides. Step 3 change (27 Nov 2026):
+                    // the 20–30% band, like the top 20%, must meet the Entry / Mid / Fashion minimum (on the oldest other colour)
+                    // before it goes to the B&M Head (Level 8).
                     string ColOf(SheetRow r) => r.Col("Color", "Colour", "COLOR", "COLOUR", "colour", "color").Trim();
+                    string Named(SheetRow r) => ColOf(r) + " (" + Js.NumberToString(BsrPeerRank.GetWof(r)) + "w)";
                     var sibRanked = qualSibs.Select(r => new Tool1SiblingRankDto
                     {
                         Row = r, Q = BsrPeerRank.Band(BsrPeerRank.GetPdstr(r), rankPool), Pdstr = BsrPeerRank.GetPdstr(r)
                     }).ToList();
                     var worst = sibRanked.Min(x => BsrPeerRank.BandOrder(x.Q));
-                    var n = qualSibs.Count + " sibling colourway(s) with WOF ≥ " + Js.NumberToString(wofGate) + "w";
+                    // the colour the bar shows: worst band → the worst-ranked colour, all top 20% → the best-ranked one
+                    var rep = worst < 2
+                        ? sibRanked.Aggregate(sibRanked[0], (w, x) => BsrPeerRank.BandOrder(x.Q) < BsrPeerRank.BandOrder(w.Q) || (x.Q == w.Q && x.Pdstr < w.Pdstr) ? x : w)
+                        : sibRanked.Aggregate(sibRanked[0], (b, x) => x.Pdstr > b.Pdstr ? x : b);
+                    var repPct = BsrPeerRank.PctRank1(rep.Pdstr, rankPool);
+                    string PeerOf(double pct) => Js.NumberToString(pct) + " percentile of " + rankPool.Count + " styles, Brand + MC + MRP + Flag, " + bsrLabel;
+                    string Group(List<Tool1SiblingRankDto> l) => l.Count == 1 ? "other colour " + Named(l[0].Row) + " ranks" : "other colours " + string.Join(", ", l.Select(x => Named(x.Row))) + " rank";
+                    var oldest = best;
+                    var emfOn = "oldest other colour " + Named(oldest);
+                    var rankNote = (worst < 2 ? "Worst other colour: " : "Best other colour: ") + Named(rep.Row) + " at " + Js.NumberToString(repPct) +
+                                   " percentile (" + rep.Q + "). Shown: " + (worst < 2 ? "worst" : "best") + " colour";
                     string decision, reason;
                     string? emfTag = null, emfCheck = null;
                     double? emfMin = null, emfPd = null;
-                    var abBest = AbsBlock(Decisions.Allow, BsrPeerRank.GetPdstr(best), BsrPeerRank.GetWof(best), "best sibling colourway (" + gm + ")");
                     if (worst == 0)
                     {
                         var below = sibRanked.Where(x => x.Q == BsrPeerRank.BandBelow).ToList();
                         decision = Decisions.Block;
-                        reason = "BOBs: " + below.Count + " of " + n + " rank below the top 30% (" + string.Join(", ", below.Select(x => ColOf(x.Row))) +
+                        reason = "BOBs: " + Group(below) + " below the top 30% (" + (below.Count > 1 ? "worst: " : "") + PeerOf(repPct) +
                                  "). Every other colour must be in the top 20% (Allow band) — new colour blocked.";
-                    }
-                    else if (worst == 1)
-                    {
-                        var mid = sibRanked.Where(x => x.Q == BsrPeerRank.BandException).ToList();
-                        decision = Decisions.Exception;
-                        reason = "BOBs: " + mid.Count + " of " + n + " are in the 20–30% band (" + string.Join(", ", mid.Select(x => ColOf(x.Row))) +
-                                 "), none below the top 30%. Exception: raise it to the B&M Head with a reason (MRA Level 8), or do not raise.";
-                        if (abBest.Overridden) { decision = abBest.Decision!; reason = abBest.Reason!; }
                     }
                     else
                     {
-                        var allTop = "BOBs: All " + n + " are in the top 20% (Allow band)";
-                        decision = Decisions.Allow;
-                        reason = allTop + " — parent style is a top seller. New colour permitted.";
-                        if (abBest.Overridden) { decision = abBest.Decision!; reason = abBest.Reason!; }
+                        var mid = sibRanked.Where(x => x.Q == BsrPeerRank.BandException).ToList();
+                        var bandTxt = worst == 1
+                            ? "BOBs: " + Group(mid) + " 20–30% (" + (mid.Count > 1 ? "worst: " : "") + PeerOf(repPct) + "). "
+                            : "BOBs: All " + qualSibs.Count + " other colour(s) with WOF ≥ " + Js.NumberToString(wofGate) + "w rank in the top 20% (best: " + PeerOf(repPct) + "). ";
+                        var ab = AbsBlock(Decisions.Allow, BsrPeerRank.GetPdstr(best), BsrPeerRank.GetWof(best), "best sibling colourway (" + gm + ")");
+                        if (ab.Overridden) { decision = ab.Decision!; reason = ab.Reason!; }
                         else
                         {
-                            // Step 2: the minimum of the option's type, checked on the oldest other colour (most weeks on floor)
-                            var oldest = best;
-                            var ow = BsrPeerRank.GetWof(oldest);
+                            // Step 2 (and Step 3 for the 20–30% band): the minimum of the option's type, on the oldest other colour
                             emfPd = BsrPeerRank.GetPdstr(oldest);
                             emfTag = EmfMapping.Lookup(data, brand, mcCd, flag, mrp);
+                            var sells = "Oldest colour " + Named(oldest) + " sells " + Js.ToFixed(emfPd.Value * 100, 2) + "%/day";
                             if (emfTag == null)
                             {
                                 emfCheck = EmfMapping.CheckNotMapped;
                                 decision = Decisions.Hold;
                                 reason = EmfMapping.NotMaintainedMessage + " (" + EmfMapping.Describe(brand, mcCd, flag, mrp) +
-                                         " is not in the Entry / Mid / Fashion mapping. " + allTop + ".)";
+                                         " is not in the Entry / Mid / Fashion mapping. " + bandTxt.TrimEnd() + ")";
                             }
                             else
                             {
                                 emfMin = EmfMapping.MinPdstr(emfTag);
-                                var minTxt = "the " + emfTag + " minimum " + Js.ToFixed(emfMin!.Value * 100, 1) + "%/day";
-                                var oldTxt = "the oldest colour " + ColOf(oldest) + " (" + Js.NumberToString(ow) + "w on floor) sells " + Js.ToFixed(emfPd.Value * 100, 1) + "%/day";
-                                if (EmfMapping.MeetsMinimum(emfPd.Value, emfMin.Value))
-                                {
-                                    emfCheck = EmfMapping.CheckOk;
-                                    reason = allTop + " and " + oldTxt + " — at least " + minTxt + ". New colour permitted.";
-                                }
-                                else
+                                var minTxt = "the " + emfTag + " minimum of " + Js.ToFixed(emfMin!.Value * 100, 2) + "%/day";
+                                if (!EmfMapping.MeetsMinimum(emfPd.Value, emfMin.Value))
                                 {
                                     emfCheck = EmfMapping.CheckBelow;
                                     decision = Decisions.Block;
-                                    reason = allTop + ", but " + oldTxt + " — below " + minTxt + ". New colour blocked.";
+                                    reason = bandTxt + sells + " — below " + minTxt + ". New colour blocked.";
+                                }
+                                else
+                                {
+                                    emfCheck = EmfMapping.CheckOk;
+                                    decision = worst == 1 ? Decisions.Exception : Decisions.Allow;
+                                    reason = bandTxt + sells + " — meets " + minTxt + ". " + (worst == 1
+                                        ? "Not all colours are in the top 20%: raise an Exception at Level 8 to the B&M Head with your reason. Counts as Block until approved."
+                                        : "New colour permitted.");
                                 }
                             }
                         }
                     }
-                    // the sibling that drove the decision: worst band → the worst-ranked colour, all top 20% → the best-ranked one
-                    var rep = worst < 2
-                        ? sibRanked.Aggregate(sibRanked[0], (w, x) => BsrPeerRank.BandOrder(x.Q) < BsrPeerRank.BandOrder(w.Q) || (x.Q == w.Q && x.Pdstr < w.Pdstr) ? x : w)
-                        : sibRanked.Aggregate(sibRanked[0], (b, x) => x.Pdstr > b.Pdstr ? x : b);
                     return new Tool1EngineAResult
                     {
                         Decision = decision, DecisionReason = reason, OptionType = optionType, BsrLabel = bsrLabel, PeerPool = peerPool,
                         CleanPool = cleanPool, TotalBSR = totalBSR, PeerAvg = peerAvg, Siblings = allSibs, QualSibs = qualSibs, SibRanked = sibRanked,
-                        Wof = BsrPeerRank.GetWof(rep.Row), Pdstr = rep.Pdstr, Quartile = rep.Q, Percentile = BsrPeerRank.PctRank(rep.Pdstr, rankPool),
-                        RepSibling = rep.Row, EmfTag = emfTag, EmfMin = emfMin, EmfCheck = emfCheck, EmfPdstr = emfPd
+                        Wof = BsrPeerRank.GetWof(rep.Row), Pdstr = rep.Pdstr, Quartile = rep.Q, Percentile = repPct,
+                        RepSibling = rep.Row, EmfTag = emfTag, EmfMin = emfMin, EmfCheck = emfCheck, EmfPdstr = emfPd,
+                        EmfOn = emfCheck != null ? emfOn : null, RankNote = rankNote
                     };
                 }
                 if (allSibs.Count > 0)
@@ -271,66 +275,58 @@ namespace DecisionEngine.Tool1
             }
 
             var pd = artRow != null ? BsrPeerRank.GetPdstr(artRow) : 0;
-            // Step 3: the option's band among its peers (replaces Q1–Q4)
+            // Step 3: the band among the peers (replaces Q1–Q4); the percentile with one decimal
             var band = BsrPeerRank.Band(pd, cleanPool);
-            var pcta = BsrPeerRank.PctRank(pd, cleanPool);
+            var pcta = BsrPeerRank.PctRank1(pd, cleanPool);
             var gap = peerAvg > 0 ? (peerAvg - pd) / peerAvg * 100 : 0;
-            var head = "True Repeat: " + Js.NumberToString(pcta) + "th pct (" + band + ") in peer group of " + cleanPool.Count + " styles (" + bsrLabel + "). ";
-            var pdTxt = Js.ToFixed(pd * 100, 1);
+            var ranks = band == BsrPeerRank.BandTop ? "ranks in the top 20%" : band == BsrPeerRank.BandException ? "ranks 20–30%" : "ranks below the top 30%";
+            var head = "True Repeat: " + ranks + " (" + Js.NumberToString(pcta) + " percentile of " + cleanPool.Count + " styles, Brand + MC + MRP + Flag, " + bsrLabel + "). ";
+            var sellsA = "Sells " + Js.ToFixed(pd * 100, 2) + "%/day";
             string decA, reasonA;
             string? tagA = null, checkA = null;
             double? minA = null;
             var abA = AbsBlock(Decisions.Allow, pd, wofA, label);
-            if (band == BsrPeerRank.BandTop)
+            if (band == BsrPeerRank.BandBelow)
             {
-                decA = Decisions.Allow;
-                reasonA = head + "PDSTR = " + pdTxt + "%/day — top 20%. Allow.";
-                if (abA.Overridden) { decA = abA.Decision!; reasonA = abA.Reason!; }
+                decA = Decisions.Block;
+                reasonA = head + sellsA + " (peer avg " + Js.ToFixed(peerAvg * 100, 2) + "%/day). Block. Do not raise PO.";
+            }
+            else if (abA.Overridden) { decA = abA.Decision!; reasonA = abA.Reason!; }
+            else
+            {
+                // Step 2 for the top 20%, and (Step 3 change, 27 Nov 2026) for the 20–30% band before it goes to the B&M Head
+                tagA = EmfMapping.Lookup(data, brand, mcCd, flag, mrp);
+                if (tagA == null)
+                {
+                    checkA = EmfMapping.CheckNotMapped;
+                    decA = Decisions.Hold;
+                    reasonA = EmfMapping.NotMaintainedMessage + " (" + EmfMapping.Describe(brand, mcCd, flag, mrp) +
+                              " is not in the Entry / Mid / Fashion mapping. " + head.TrimEnd() + ")";
+                }
                 else
                 {
-                    // Step 2: top 20% and at least the minimum of the option's Entry / Mid / Fashion type
-                    tagA = EmfMapping.Lookup(data, brand, mcCd, flag, mrp);
-                    if (tagA == null)
+                    minA = EmfMapping.MinPdstr(tagA);
+                    var minTxt = "the " + tagA + " minimum of " + Js.ToFixed(minA!.Value * 100, 2) + "%/day";
+                    if (!EmfMapping.MeetsMinimum(pd, minA.Value))
                     {
-                        checkA = EmfMapping.CheckNotMapped;
-                        decA = Decisions.Hold;
-                        reasonA = EmfMapping.NotMaintainedMessage + " (" + EmfMapping.Describe(brand, mcCd, flag, mrp) +
-                                  " is not in the Entry / Mid / Fashion mapping. " + head + "PDSTR = " + pdTxt + "%/day.)";
+                        checkA = EmfMapping.CheckBelow;
+                        decA = Decisions.Block;
+                        reasonA = head + sellsA + " — below " + minTxt + ". Block. Do not raise PO.";
                     }
                     else
                     {
-                        minA = EmfMapping.MinPdstr(tagA);
-                        var minTxt = "the " + tagA + " minimum " + Js.ToFixed(minA!.Value * 100, 1) + "%/day";
-                        if (EmfMapping.MeetsMinimum(pd, minA.Value))
-                        {
-                            checkA = EmfMapping.CheckOk;
-                            reasonA = head + "PDSTR = " + pdTxt + "%/day — top 20% and at least " + minTxt + ". Allow.";
-                        }
-                        else
-                        {
-                            checkA = EmfMapping.CheckBelow;
-                            decA = Decisions.Block;
-                            reasonA = head + "PDSTR = " + pdTxt + "%/day — top 20% but below " + minTxt + " (first 3 weeks). Block. Do not raise PO.";
-                        }
+                        checkA = EmfMapping.CheckOk;
+                        decA = band == BsrPeerRank.BandTop ? Decisions.Allow : Decisions.Exception;
+                        reasonA = head + sellsA + " — meets " + minTxt + ". " + (band == BsrPeerRank.BandTop
+                            ? "Allow."
+                            : "Not in the top 20%: raise an Exception at Level 8 to the B&M Head with your reason. Counts as Block until approved.");
                     }
                 }
-            }
-            else if (band == BsrPeerRank.BandException)
-            {
-                // Step 3: the 20–30% band — the buyer may raise an exception to the B&M Head (no minimum check)
-                decA = Decisions.Exception;
-                reasonA = head + "PDSTR = " + pdTxt + "%/day — in the 20–30% band. Exception: raise it to the B&M Head with a reason (MRA Level 8), or do not raise.";
-                if (abA.Overridden) { decA = abA.Decision!; reasonA = abA.Reason!; }
-            }
-            else
-            {
-                decA = Decisions.Block;
-                reasonA = head + "PDSTR = " + pdTxt + "%/day (peer avg " + Js.ToFixed(peerAvg * 100, 1) +
-                          "%/day) — below the top 30%. Block. Do not raise PO.";
             }
             var ra = Res(decA, reasonA, new(), wofA, pd, band, pcta);
             ra.GapPct = Js.Round(gap * 10) / 10;   // shown as "Gap from Avg" (information only — no border zone any more)
             ra.EmfTag = tagA; ra.EmfMin = minA; ra.EmfCheck = checkA; ra.EmfPdstr = checkA != null ? pd : null;
+            ra.EmfOn = checkA != null ? "this option" : null;
             return ra;
         }
     }

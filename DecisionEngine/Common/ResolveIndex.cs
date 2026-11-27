@@ -167,6 +167,17 @@ namespace DecisionEngine.Common
         /// <summary>Order of the bands: Below 30% = 0, 20–30% = 1, Top 20% = 2 (anything else -1).</summary>
         public static int BandOrder(string? band) => band switch { BandTop => 2, BandException => 1, BandBelow => 0, _ => -1 };
 
+        /// <summary>
+        /// The percentile of the multi concept rule (Step 3 view): share of the pool selling at or below <paramref name="val"/>,
+        /// one decimal (13 of 17 → 76.5). 50 for an empty pool.
+        /// </summary>
+        public static double PctRank1(double val, IReadOnlyList<SheetRow>? pool)
+        {
+            if (pool == null || pool.Count == 0) return 50;
+            var cnt = pool.Count(r => GetPdstr(r) <= val);
+            return Js.Round(cnt * 1000.0 / pool.Count) / 10;
+        }
+
         /// <summary>Port of <c>pctRank(val, pool)</c>.</summary>
         public static double PctRank(double val, IReadOnlyList<SheetRow>? pool)
         {

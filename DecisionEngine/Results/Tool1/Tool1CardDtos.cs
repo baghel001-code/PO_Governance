@@ -326,9 +326,11 @@ namespace DecisionEngine.Results.Tool1
         public Tool1MinimumDto? Minimum { get; set; }
     }
 
-    /// <summary>"Step 4 — Minimum sell-thru": the option's type, its minimum and the value checked.</summary>
+    /// <summary>"Step 4 — EMF minimum": the option's type, its minimum, what it was checked on, the value and the result.</summary>
     public sealed class Tool1MinimumDto
     {
+        /// <summary>"EMF tag" / "Checked on" / "Sell-thru/day" / "Result" (the result line carries its colour).</summary>
+        public List<Tool1KvDto> Lines { get; set; } = new();
         /// <summary>"Step 4 — Minimum Sell-Thru (Mid ≥ 1.5%/day)" or "Step 4 — Minimum Sell-Thru (not in the master)".</summary>
         public string Heading { get; set; } = "";
         /// <summary>"4.6%/day ≥ 1.5%/day → Allow" / "the oldest colour RED: 1.4%/day < 1.5%/day → Block" / the planner message.</summary>
@@ -340,11 +342,11 @@ namespace DecisionEngine.Results.Tool1
 
     public sealed class Tool1QuartileDto
     {
-        /// <summary>"Step 3 — Quartile Ranking (63th pct — 12 styles)".</summary>
+        /// <summary>"Step 3 — Rank in peer group (76.5 percentile — 17 styles, Brand + MC + MRP + Flag)".</summary>
         public string Heading { get; set; } = "";
-        /// <summary>"Rank within peer group of 12 styles".</summary>
+        /// <summary>"Worst other colour: KHA (8w) at 76.5 percentile (20–30%). Shown: worst colour" (BOBs) or "Rank within peer group of 12 styles".</summary>
         public string PoolText { get; set; } = "";
-        /// <summary>"63th percentile — Q2 — Block".</summary>
+        /// <summary>"76.5 percentile — 20–30%".</summary>
         public string RankText { get; set; } = "";
         public string RankColour { get; set; } = "";
         /// <summary>Marker position on the bar, 2 … 98 (%).</summary>

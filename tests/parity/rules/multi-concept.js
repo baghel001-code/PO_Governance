@@ -101,6 +101,8 @@ function runEngineA(gm, colour, optionType, info) {
     return cnt*100>80*pool.length?'Top 20%':cnt*100>70*pool.length?'20–30%':'Below 30%';
   };
   const bandOrd=b=>b==='Top 20%'?2:b==='20–30%'?1:b==='Below 30%'?0:-1;
+  // the percentile with one decimal (BsrPeerRank.PctRank1): 13 of 17 → 76.5
+  const pct1=(val,pool)=>{ if(!pool||!pool.length) return 50; const cnt=pool.filter(r=>getPDSTR(r)<=val).length; return Math.round(cnt*1000/pool.length)/10; };
 
   if(optionType==='BOBs'){
     const allSibs=(S.files.bsr||[]).filter(r=>{
@@ -117,42 +119,54 @@ function runEngineA(gm, colour, optionType, info) {
         if(_ab0.overridden) return {decision:_ab0.decision,decisionReason:_ab0.decisionReason,...base,siblings:allSibs,qualSibs,sibRanked:[],wof:bw,pdstr:bp,quartile_:null,percentile:null};
         return {decision:'Allow',decisionReason:`BOBs: ${qualSibs.length} sibling colourway(s) with WOF ≥ ${wofGate}w found, but no peer pool to rank them against. Auto Allow.`,...base,siblings:allSibs,qualSibs,sibRanked:[],wof:bw,pdstr:null,quartile_:null,percentile:null};
       }
-      // Step 3: each other colour gets its band; the worst band decides
-      const n=`${qualSibs.length} sibling colourway(s) with WOF ≥ ${wofGate}w`;
+      // Step 3: each other colour gets its band; the worst band decides. The 20–30% band, like the top 20%, must meet the
+      // Entry / Mid / Fashion minimum (on the oldest other colour) before it goes to the B&M Head (change of 27 Nov 2026).
+      const named=r=>colourOf(r)+' ('+getWOF(r)+'w)';
       const sibRanked=qualSibs.map(r=>({row:r,q:bandOf(getPDSTR(r),rankPool),pdstr:getPDSTR(r)}));
       const worst=Math.min(...sibRanked.map(x=>bandOrd(x.q)));
-      const abBest=absBlock('Allow',getPDSTR(best),getWOF(best),'best sibling colourway ('+gm+')');
+      const repSib=worst<2
+        ? sibRanked.reduce((w,x)=>(bandOrd(x.q)<bandOrd(w.q)||(x.q===w.q&&x.pdstr<w.pdstr))?x:w, sibRanked[0])
+        : sibRanked.reduce((b,x)=>x.pdstr>b.pdstr?x:b, sibRanked[0]);
+      const repPct=pct1(repSib.pdstr,rankPool);
+      const peerOf=p=>`${p} percentile of ${rankPool.length} styles, Brand + MC + MRP + Flag, ${bsrLabel}`;
+      const group=l=>l.length===1?'other colour '+named(l[0].row)+' ranks':'other colours '+l.map(x=>named(x.row)).join(', ')+' rank';
+      const oldest=best;
+      const emfOn='oldest other colour '+named(oldest);
+      const rankNote=(worst<2?'Worst other colour: ':'Best other colour: ')+named(repSib.row)+' at '+repPct+' percentile ('+repSib.q+'). Shown: '+(worst<2?'worst':'best')+' colour';
       let decision, decisionReason, emf={};
       if(worst===0){
         const below=sibRanked.filter(x=>x.q==='Below 30%');
         decision='Block';
-        decisionReason=`BOBs: ${below.length} of ${n} rank below the top 30% (${below.map(x=>colourOf(x.row)).join(', ')}). Every other colour must be in the top 20% (Allow band) — new colour blocked.`;
-      } else if(worst===1){
-        const mid=sibRanked.filter(x=>x.q==='20–30%');
-        decision='Exception — B&M Head';
-        decisionReason=`BOBs: ${mid.length} of ${n} are in the 20–30% band (${mid.map(x=>colourOf(x.row)).join(', ')}), none below the top 30%. Exception: raise it to the B&M Head with a reason (MRA Level 8), or do not raise.`;
-        if(abBest.overridden){decision=abBest.decision;decisionReason=abBest.decisionReason;}
+        decisionReason='BOBs: '+group(below)+' below the top 30% ('+(below.length>1?'worst: ':'')+peerOf(repPct)+'). Every other colour must be in the top 20% (Allow band) — new colour blocked.';
       } else {
-        const allTop=`BOBs: All ${n} are in the top 20% (Allow band)`;
-        decision='Allow'; decisionReason=allTop+' — parent style is a top seller. New colour permitted.';
-        if(abBest.overridden){decision=abBest.decision;decisionReason=abBest.decisionReason;}
+        const mid=sibRanked.filter(x=>x.q==='20–30%');
+        const bandTxt=worst===1
+          ? 'BOBs: '+group(mid)+' 20–30% ('+(mid.length>1?'worst: ':'')+peerOf(repPct)+'). '
+          : `BOBs: All ${qualSibs.length} other colour(s) with WOF ≥ ${wofGate}w rank in the top 20% (best: ${peerOf(repPct)}). `;
+        const ab=absBlock('Allow',getPDSTR(best),getWOF(best),'best sibling colourway ('+gm+')');
+        if(ab.overridden){decision=ab.decision;decisionReason=ab.decisionReason;}
         else {
-          const oc=colourOf(best), ow=getWOF(best), opd=getPDSTR(best), tag=emfLookup();
+          const opd=getPDSTR(oldest), tag=emfLookup();
+          const sells='Oldest colour '+named(oldest)+' sells '+(opd*100).toFixed(2)+'%/day';
           if(!tag){
             emf={emfCheck:'notMapped',emfPdstr:opd}; decision="Hold — Don't Raise";
-            decisionReason=NOT_MAINTAINED+' ('+describe()+' is not in the Entry / Mid / Fashion mapping. '+allTop+'.)';
+            decisionReason=NOT_MAINTAINED+' ('+describe()+' is not in the Entry / Mid / Fashion mapping. '+bandTxt.trimEnd()+')';
           } else {
-            const min=EMF_MIN[tag], minTxt=`the ${tag} minimum ${(min*100).toFixed(1)}%/day`;
-            const oldTxt=`the oldest colour ${oc} (${ow}w on floor) sells ${(opd*100).toFixed(1)}%/day`;
-            if(meets(opd,min)){ emf={emfTag:tag,emfMin:min,emfCheck:'ok',emfPdstr:opd}; decisionReason=allTop+' and '+oldTxt+' — at least '+minTxt+'. New colour permitted.'; }
-            else { emf={emfTag:tag,emfMin:min,emfCheck:'below',emfPdstr:opd}; decision='Block'; decisionReason=allTop+', but '+oldTxt+' — below '+minTxt+'. New colour blocked.'; }
+            const min=EMF_MIN[tag], minTxt=`the ${tag} minimum of ${(min*100).toFixed(2)}%/day`;
+            if(!meets(opd,min)){ emf={emfTag:tag,emfMin:min,emfCheck:'below',emfPdstr:opd}; decision='Block'; decisionReason=bandTxt+sells+' — below '+minTxt+'. New colour blocked.'; }
+            else {
+              emf={emfTag:tag,emfMin:min,emfCheck:'ok',emfPdstr:opd};
+              decision=worst===1?'Exception — B&M Head':'Allow';
+              decisionReason=bandTxt+sells+' — meets '+minTxt+'. '+(worst===1
+                ? 'Not all colours are in the top 20%: raise an Exception at Level 8 to the B&M Head with your reason. Counts as Block until approved.'
+                : 'New colour permitted.');
+            }
           }
         }
       }
-      const repSib=worst<2
-        ? sibRanked.reduce((w,x)=>(bandOrd(x.q)<bandOrd(w.q)||(x.q===w.q&&x.pdstr<w.pdstr))?x:w, sibRanked[0])
-        : sibRanked.reduce((b,x)=>x.pdstr>b.pdstr?x:b, sibRanked[0]);
-      return {decision,decisionReason,...base,siblings:allSibs,qualSibs,sibRanked,wof:getWOF(repSib.row),pdstr:repSib.pdstr,quartile_:repSib.q,percentile:pctRank(repSib.pdstr,rankPool),repSibling:repSib.row,...emf};
+      if(emf.emfCheck) emf.emfOn=emfOn;
+      emf.rankNote=rankNote;
+      return {decision,decisionReason,...base,siblings:allSibs,qualSibs,sibRanked,wof:getWOF(repSib.row),pdstr:repSib.pdstr,quartile_:repSib.q,percentile:repPct,repSibling:repSib.row,...emf};
     }
     if(allSibs.length>0){
       const bestSib=allSibs.reduce((b,r)=>getWOF(r)>getWOF(b)?r:b,allSibs[0]);
@@ -182,34 +196,34 @@ function runEngineA(gm, colour, optionType, info) {
     return {decision:'Allow',decisionReason:'No peer pool available. Auto Allow.',...base,siblings:[],qualSibs:[],sibRanked:[],wof,pdstr:null,quartile_:null,percentile:null};
   }
   const pdstr=artRow?getPDSTR(artRow):0;
-  // Step 3: the band among the peers (replaces Q1–Q4)
+  // Step 3: the band among the peers (replaces Q1–Q4); the percentile with one decimal
   const band=bandOf(pdstr,cleanPool);
-  const pct=pctRank(pdstr,cleanPool);
+  const pct=pct1(pdstr,cleanPool);
   const gap=peerAvg>0?(peerAvg-pdstr)/peerAvg*100:0;
-  const head=`True Repeat: ${pct}th pct (${band}) in peer group of ${cleanPool.length} styles (${bsrLabel}). `;
-  const pdTxt=(pdstr*100).toFixed(1);
+  const ranks=band==='Top 20%'?'ranks in the top 20%':band==='20–30%'?'ranks 20–30%':'ranks below the top 30%';
+  const head=`True Repeat: ${ranks} (${pct} percentile of ${cleanPool.length} styles, Brand + MC + MRP + Flag, ${bsrLabel}). `;
+  const sellsA=`Sells ${(pdstr*100).toFixed(2)}%/day`;
   const abA=absBlock('Allow',pdstr,wof,label);
   let dec,reason,emf={};
-  if(band==='Top 20%'){
-    dec='Allow'; reason=head+`PDSTR = ${pdTxt}%/day — top 20%. Allow.`;
-    if(abA.overridden){dec=abA.decision;reason=abA.decisionReason;}
-    else {
-      const tag=emfLookup();
-      if(!tag){
-        emf={emfCheck:'notMapped',emfPdstr:pdstr}; dec="Hold — Don't Raise";
-        reason=NOT_MAINTAINED+' ('+describe()+' is not in the Entry / Mid / Fashion mapping. '+head+`PDSTR = ${pdTxt}%/day.)`;
-      } else {
-        const min=EMF_MIN[tag], minTxt=`the ${tag} minimum ${(min*100).toFixed(1)}%/day`;
-        if(meets(pdstr,min)){ emf={emfTag:tag,emfMin:min,emfCheck:'ok',emfPdstr:pdstr}; reason=head+`PDSTR = ${pdTxt}%/day — top 20% and at least ${minTxt}. Allow.`; }
-        else { emf={emfTag:tag,emfMin:min,emfCheck:'below',emfPdstr:pdstr}; dec='Block'; reason=head+`PDSTR = ${pdTxt}%/day — top 20% but below ${minTxt} (first 3 weeks). Block. Do not raise PO.`; }
+  if(band==='Below 30%'){
+    dec='Block'; reason=head+sellsA+` (peer avg ${(peerAvg*100).toFixed(2)}%/day). Block. Do not raise PO.`;
+  } else if(abA.overridden){dec=abA.decision;reason=abA.decisionReason;}
+  else {
+    const tag=emfLookup();
+    if(!tag){
+      emf={emfCheck:'notMapped',emfPdstr:pdstr}; dec="Hold — Don't Raise";
+      reason=NOT_MAINTAINED+' ('+describe()+' is not in the Entry / Mid / Fashion mapping. '+head.trimEnd()+')';
+    } else {
+      const min=EMF_MIN[tag], minTxt=`the ${tag} minimum of ${(min*100).toFixed(2)}%/day`;
+      if(!meets(pdstr,min)){ emf={emfTag:tag,emfMin:min,emfCheck:'below',emfPdstr:pdstr}; dec='Block'; reason=head+sellsA+' — below '+minTxt+'. Block. Do not raise PO.'; }
+      else {
+        emf={emfTag:tag,emfMin:min,emfCheck:'ok',emfPdstr:pdstr};
+        dec=band==='Top 20%'?'Allow':'Exception — B&M Head';
+        reason=head+sellsA+' — meets '+minTxt+'. '+(band==='Top 20%'?'Allow.':'Not in the top 20%: raise an Exception at Level 8 to the B&M Head with your reason. Counts as Block until approved.');
       }
     }
-  } else if(band==='20–30%'){
-    dec='Exception — B&M Head'; reason=head+`PDSTR = ${pdTxt}%/day — in the 20–30% band. Exception: raise it to the B&M Head with a reason (MRA Level 8), or do not raise.`;
-    if(abA.overridden){dec=abA.decision;reason=abA.decisionReason;}
-  } else {
-    dec='Block'; reason=head+`PDSTR = ${pdTxt}%/day (peer avg ${(peerAvg*100).toFixed(1)}%/day) — below the top 30%. Block. Do not raise PO.`;
   }
+  if(emf.emfCheck) emf.emfOn='this option';
   return {decision:dec,decisionReason:reason,...base,siblings:[],qualSibs:[],sibRanked:[],wof,pdstr,quartile_:band,percentile:pct,gapPct:Math.round(gap*10)/10,...emf};
 }
 /* eslint-enable no-undef */
@@ -218,26 +232,36 @@ const REPLACEMENTS = [
   // Tool 1 result card (renderResult)
   { fn: 'renderResult',
     find: "const pLabel=r.percentile<=25?'Q4 — Slow Seller':r.percentile<=50?'Q3 — Watch':r.percentile<=75?'Q2 — Healthy':'Q1 — Top Seller';",
-    replace: "const pLabel=r.quartile_==='Top 20%'?'Top 20% (Allow)':r.quartile_==='20–30%'?'20–30% (Exception — B&M Head)':r.quartile_==='Below 30%'?'Below 30% (Block)':(r.quartile_||'');" },
+    replace: "const pLabel=r.quartile_||'';" },
+  // the reference view (changes, 27 Nov 2026): rank in peer group, the colour shown, "76.5 percentile — 20–30%"
   { fn: 'renderResult',
-    find: "Step 3 — Quartile Ranking (${r.percentile}th pct",
-    replace: "Step 3 — Percentile Band (${r.percentile}th pct" },
+    find: "Step 3 — Quartile Ranking (${r.percentile}th pct — ${r.cleanPool?.length||r.peerPool?.length||'?'} styles)",
+    replace: "Step 3 — Rank in peer group (${r.percentile} percentile — ${r.cleanPool?.length||r.peerPool?.length||'?'} styles, Brand + MC + MRP + Flag)" },
+  { fn: 'renderResult',
+    find: "Rank within peer group of ${r.cleanPool?.length||r.peerPool?.length||'?'} styles</span>",
+    replace: "${r.rankNote||('Rank within peer group of '+(r.cleanPool?.length||r.peerPool?.length||'?')+' styles')}</span>" },
+  { fn: 'renderResult',
+    find: "${r.percentile}th percentile — ${pLabel}",
+    replace: "${r.percentile} percentile — ${pLabel}" },
+  { fn: 'renderResult',
+    find: "{k:'WOF ≥ '+S.params.wof+'w\\n(Peer Pool)',",
+    replace: "{k:'WOF ≥ '+S.params.wof+'w\\n(Peer Pool · Brand+MC+MRP+Flag)'," },
   { fn: 'renderResult',
     find: "if(r.pdstr!=null && r.peerAvg!=null && r.pdstr<r.peerAvg && r.quartile_&&(r.quartile_==='Q4'||r.quartile_==='Q3')){",
     replace: "if(r.borderTolUsed && r.pdstr!=null && r.peerAvg!=null && r.pdstr<r.peerAvg && r.quartile_&&(r.quartile_==='Q4'||r.quartile_==='Q3')){" },
   { fn: 'renderResult',
     find: '          <span style="flex:1;text-align:center">Q4 Slow</span><span style="flex:1;text-align:center">Q3 Watch</span><span style="flex:1;text-align:center">Q2 Healthy</span><span style="flex:1;text-align:center">Q1 Top</span>',
-    replace: '          <span style="flex:7;text-align:center">Below 30% · Block</span><span style="flex:1;text-align:center">20–30%</span><span style="flex:2;text-align:center">Top 20% · Allow</span>' },
-  // Tool 1 card colours (renderResult) and the decision pill (dpill): the exception is purple
+    replace: '          <span style="flex:7;text-align:center">Below top 30% · Block</span><span style="flex:1;text-align:center">20–30% · Exception</span><span style="flex:2;text-align:center">Top 20% · Allow</span>' },
+  // Tool 1 card colours (renderResult) and the decision pill (dpill): the exception is orange (the reference view)
   { fn: 'renderResult',
     find: "'Watch List':'#854F0B','Cannot Validate':'#6B7280'};",
-    replace: "'Watch List':'#854F0B','Cannot Validate':'#6B7280','Exception — B&M Head':'#7C3AED'};" },
+    replace: "'Watch List':'#854F0B','Cannot Validate':'#6B7280','Exception — B&M Head':'#C2410C'};" },
   { fn: 'renderResult',
     find: "'Watch List':'#FFF3CD','Cannot Validate':'#F5F5F5'};",
-    replace: "'Watch List':'#FFF3CD','Cannot Validate':'#F5F5F5','Exception — B&M Head':'#F3E8FF'};" },
+    replace: "'Watch List':'#FFF3CD','Cannot Validate':'#F5F5F5','Exception — B&M Head':'#FFF7ED'};" },
   { fn: 'renderResult',
     find: "'Watch List':'#FCD34D','Cannot Validate':'#D1D5DB'};",
-    replace: "'Watch List':'#FCD34D','Cannot Validate':'#D1D5DB','Exception — B&M Head':'#C4B5FD'};" },
+    replace: "'Watch List':'#FCD34D','Cannot Validate':'#D1D5DB','Exception — B&M Head':'#FDBA74'};" },
   { fn: 'dpill',
     find: "'Block':'dp-block',",
     replace: "'Block':'dp-block','Exception — B&M Head':'dp-exception'," },
@@ -266,17 +290,17 @@ const REPLACEMENTS = [
     replace: "+' ranks '+r.quartile_+' ('+r.percentile+'th pct) — not allowed by the multi concept rule. Do not raise PO.'" },
   { fn: 'buildDecisionTooltip',
     find: "    if(r.quartile_) return (r.optionType||'Article')+' ranks '+r.quartile_+' ('+r.percentile+'th pct) — healthy performer. PO supported.';",
-    replace: "    if(r.decision==='Exception — B&M Head') return (r.optionType||'Article')+' ranks '+r.quartile_+' ('+r.percentile+'th pct) — 20–30% band. Exception: needs the B&M Head\\'s approval (MRA Level 8).';\n    if(r.quartile_) return (r.optionType||'Article')+' ranks '+r.quartile_+' ('+r.percentile+'th pct) — healthy performer. PO supported.';" },
+    replace: "    if(r.decision==='Exception — B&M Head') return (r.optionType||'Article')+' ranks '+r.quartile_+' ('+r.percentile+'th pct) — 20–30% band, meets its Entry / Mid / Fashion minimum. Exception: needs the B&M Head\\'s approval (MRA Level 8).';\n    if(r.quartile_) return (r.optionType||'Article')+' ranks '+r.quartile_+' ('+r.percentile+'th pct) — healthy performer. PO supported.';" },
   { fn: 'buildDetailedReason',
-    find: "Step 3 — Quartile Ranking ('+r.percentile",
-    replace: "Step 3 — Percentile Band ('+r.percentile" },
+    find: "Step 3 — Quartile Ranking ('+r.percentile+'th pct — '+(r.cleanPool&&r.cleanPool.length||r.peerPool&&r.peerPool.length||'?')+' styles)",
+    replace: "Step 3 — Rank in peer group ('+r.percentile+' percentile — '+(r.cleanPool&&r.cleanPool.length||r.peerPool&&r.peerPool.length||'?')+' styles, Brand + MC + MRP + Flag)" },
   // Tool 2 line detail (buildDetailedReason)
   { fn: 'buildDetailedReason',
     find: "if(r.pdstr!=null&&r.peerAvg!=null&&r.pdstr<r.peerAvg&&(r.quartile_==='Q4'||r.quartile_==='Q3')){",
     replace: "if(r.borderTolUsed&&r.pdstr!=null&&r.peerAvg!=null&&r.pdstr<r.peerAvg&&(r.quartile_==='Q4'||r.quartile_==='Q3')){" },
   { fn: 'buildDetailedReason',
     find: '<span style="flex:1;text-align:center">Q4 Slow</span><span style="flex:1;text-align:center">Q3 Watch</span><span style="flex:1;text-align:center">Q2 Healthy</span><span style="flex:1;text-align:center">Q1 Top</span></div>\';',
-    replace: '<span style="flex:7;text-align:center">Below 30% · Block</span><span style="flex:1;text-align:center">20–30%</span><span style="flex:2;text-align:center">Top 20% · Allow</span></div>\';' },
+    replace: '<span style="flex:7;text-align:center">Below top 30% · Block</span><span style="flex:1;text-align:center">20–30% · Exception</span><span style="flex:2;text-align:center">Top 20% · Allow</span></div>\';' },
 ];
 
 /**

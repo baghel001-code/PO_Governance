@@ -232,13 +232,14 @@ namespace DecisionEngine.Sap
                 SapOutcomePath.MixBelowMin => b != null && b.DecisionReason.StartsWith("No sale in F3", StringComparison.Ordinal)
                     ? "No sale in F3 for the MC: colour share cannot be worked out, treated like a share under the " + Js.NumberToString(p.Mix) + "% minimum"
                     : "Colour mix " + Pct((b?.MixPct ?? 0) * 100) + "% below the " + Js.NumberToString(p.Mix) + "% minimum of its MC-MRP",
-                SapOutcomePath.PeerQ1 => "In the top 20% of its peer group (" + Js.NumberToString(a?.Percentile ?? 0) + "th pct, sell-thru " + pd + "%/day): top seller" + EmfMin(a, true),
-                SapOutcomePath.PeerException => "In the 20–30% band of its peer group (" + Js.NumberToString(a?.Percentile ?? 0) + "th pct, sell-thru " + pd +
-                    "%/day): exception, needs the B&M Head's approval (MRA Level 8)",
-                SapOutcomePath.BlockBelowEmfMinimum => (a?.OptionType == "BOBs" ? "New colour: the other colours are in the top 20%, but the oldest sells " : "In the top 20% but sells ") +
+                SapOutcomePath.PeerQ1 => "In the top 20% of its peer group (" + Js.NumberToString(a?.Percentile ?? 0) + " percentile, sell-thru " + pd + "%/day): top seller" + EmfMin(a, true),
+                SapOutcomePath.PeerException => "In the 20–30% band of its peer group (" + Js.NumberToString(a?.Percentile ?? 0) + " percentile, sell-thru " + pd +
+                    "%/day), meets its Entry / Mid / Fashion minimum: exception, needs the B&M Head's approval (MRA Level 8)",
+                SapOutcomePath.BlockBelowEmfMinimum => (a?.OptionType == "BOBs" ? "New colour: the oldest other colour sells "
+                                                                         : a?.Quartile == BsrPeerRank.BandException ? "In the 20–30% band but sells " : "In the top 20% but sells ") +
                     (a?.EmfPdstr is double ep ? Pct(ep * 100) : pd) + "%/day" + EmfMin(a, false),
                 SapOutcomePath.EmfNotMaintained => "Planner has not maintained this MC-MRP in the master (Entry / Mid / Fashion mapping)",
-                SapOutcomePath.BlockBelowQ1 => "Below the top 30% of its peer group (" + Js.NumberToString(a?.Percentile ?? 0) + "th pct, sell-thru " + pd + "%/day)",
+                SapOutcomePath.BlockBelowQ1 => "Below the top 30% of its peer group (" + Js.NumberToString(a?.Percentile ?? 0) + " percentile, sell-thru " + pd + "%/day)",
                 SapOutcomePath.BlockAbsolute => "Sell-thru " + pd + "%/day below 1% after " + Js.NumberToString(a?.Wof ?? 0) + " weeks on floor: confirmed slow seller",
                 SapOutcomePath.BobsSiblingsOk => "New colour: all other colours of the option are in the top 20%" + EmfMin(a, true),
                 SapOutcomePath.BlockBobsSibling => "New colour: another colour of the option is below the top 30% of its peer group",

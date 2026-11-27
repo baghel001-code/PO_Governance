@@ -76,7 +76,7 @@ namespace POGovernance.Tests.Tool1
             var a = Run(d, "T1", "BLU");
             Assert.Equal("Top 20%", a.Quartile);
             Assert.Equal(Decisions.Allow, a.Decision);
-            Assert.StartsWith("True Repeat: 100th pct (Top 20%) in peer group of 9 styles (CY BSR (AW26)). PDSTR = 9.0%/day — top 20% and at least the Mid minimum 1.5%/day. Allow.", a.DecisionReason);
+            Assert.Equal("True Repeat: ranks in the top 20% (100 percentile of 9 styles, Brand + MC + MRP + Flag, CY BSR (AW26)). Sells 9.00%/day — meets the Mid minimum of 1.50%/day. Allow.", a.DecisionReason);
             Assert.Equal(SapOutcomePath.PeerQ1, Sap(a));
         }
 
@@ -90,7 +90,8 @@ namespace POGovernance.Tests.Tool1
             var a = Run(d, "T1", "BLU");
             Assert.Equal("Below 30%", a.Quartile);
             Assert.Equal(Decisions.Block, a.Decision);
-            Assert.EndsWith("— below the top 30%. Block. Do not raise PO.", a.DecisionReason);
+            Assert.StartsWith("True Repeat: ranks below the top 30% (", a.DecisionReason);
+            Assert.EndsWith("%/day). Block. Do not raise PO.", a.DecisionReason);
             Assert.Null(a.InBorderZone);            // no border zone any more
             Assert.Null(a.BorderTolUsed);
             Assert.Equal(SapOutcomePath.BlockBelowQ1, Sap(a));
@@ -169,7 +170,9 @@ namespace POGovernance.Tests.Tool1
             Assert.Equal(2, a.QualSibs.Count);
             Assert.All(a.SibRanked, s => Assert.Equal("Top 20%", s.Q));
             Assert.Equal(Decisions.Allow, a.Decision);
-            Assert.Equal("BOBs: All 2 sibling colourway(s) with WOF ≥ 4w are in the top 20% (Allow band) and the oldest colour RED (8w on floor) sells 9.0%/day — at least the Mid minimum 1.5%/day. New colour permitted.", a.DecisionReason);
+            Assert.StartsWith("BOBs: All 2 other colour(s) with WOF ≥ 4w rank in the top 20% (best: ", a.DecisionReason);
+            Assert.EndsWith("). Oldest colour RED (8w) sells 9.00%/day — meets the Mid minimum of 1.50%/day. New colour permitted.", a.DecisionReason);
+            Assert.Equal("oldest other colour RED (8w)", a.EmfOn);
             Assert.Equal(SapOutcomePath.BobsSiblingsOk, Sap(a));
         }
 
@@ -179,7 +182,9 @@ namespace POGovernance.Tests.Tool1
             var d = new Builder().Peers().Add("T1", "BLU", 0.09, wof: 6).Add("T1", "RED", 0.055, wof: 8).Data();
             var a = Run(d, "T1", "NEW");
             Assert.Equal(Decisions.Block, a.Decision);
-            Assert.Equal("BOBs: 1 of 2 sibling colourway(s) with WOF ≥ 4w rank below the top 30% (RED). Every other colour must be in the top 20% (Allow band) — new colour blocked.", a.DecisionReason);
+            Assert.StartsWith("BOBs: other colour RED (8w) ranks below the top 30% (", a.DecisionReason);
+            Assert.EndsWith("). Every other colour must be in the top 20% (Allow band) — new colour blocked.", a.DecisionReason);
+            Assert.StartsWith("Worst other colour: RED (8w) at ", a.RankNote);
             Assert.Equal("Below 30%", a.Quartile);             // the worst-ranked colour drives the decision
             Assert.Equal(SapOutcomePath.BlockBobsSibling, Sap(a));
         }

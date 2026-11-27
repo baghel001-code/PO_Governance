@@ -358,15 +358,17 @@ HOLD and BLOCK go to `BMHEAD` instead when `bm_head_required = true` (business r
 | WATCH | `MIX_BELOW_MIN` | MIX-01 | Colour share below the minimum mix (broken / cut size likely) |
 | HOLD | `COVER_NO_HEADROOM` | COVER-02 | Stock + pending already above the norm — no headroom (max 0) |
 | HOLD | `EMF_NOT_MAINTAINED` | EMF-00 | Multi Concept top-20 % option whose Brand × MC × Flag × MRP is not in the Entry / Mid / Fashion mapping — "Planner has not maintained this MC-MRP in the master" |
-| HOLD | `PEER_EXCEPTION` | EXC-L8 | Multi Concept 20–30 % band (new colour: the worst other colour): exception for the **B&M Head** — the answer has `bm_head_required` = true and `route_to` = `BMHEAD`; SAP raises it at MRA Level 8 |
+| HOLD | `PEER_EXCEPTION` | EXC-L8 | Multi Concept 20–30 % band meeting its Entry / Mid / Fashion minimum (new colour: the worst other colour, the minimum on the oldest): exception for the **B&M Head** — the answer has `bm_head_required` = true and `route_to` = `BMHEAD`; SAP raises it at MRA Level 8 |
 | BLOCK | `BLOCK` | BLOCK-PEER | Multi Concept: below the top 30 % of its peer group |
-| BLOCK | `BLOCK` | BLOCK-EMF-MIN | Multi Concept: top 20 % but below the minimum of its Entry / Mid / Fashion type (new colour: the oldest other colour) |
+| BLOCK | `BLOCK` | BLOCK-EMF-MIN | Multi Concept: top 20 % or 20–30 % but below the minimum of its Entry / Mid / Fashion type (new colour: the oldest other colour) |
 | BLOCK | `BLOCK` | BLOCK-BOBS | New colour of an existing option: another colour is below the top 30 % |
 | BLOCK | `BLOCK` | BLOCK-ABS | Absolute block: sell-thru below 1 %/day after 4+ weeks on floor |
 
 **Multi concept rule, Step 3 (23 Nov 2026):** percentile bands replace Q1–Q4. Top 20 % → ALLOW (with the minimum below),
-**20–30 % → HOLD `PEER_EXCEPTION` (EXC-L8) with `bm_head_required` = true and `route_to` = `BMHEAD`** — the exception that SAP
+**20–30 % meeting the Entry / Mid / Fashion minimum → HOLD `PEER_EXCEPTION` (EXC-L8) with `bm_head_required` = true and `route_to` = `BMHEAD`** — the exception that SAP
 raises at MRA Level 8 for the B&M Head — and below the top 30 % → BLOCK (`BLOCK-PEER`). Codes and rule ids keep their names.
+From 27 Nov 2026 a 20–30 % item reaches Level 8 only when it meets its minimum: below it → BLOCK `BLOCK-EMF-MIN`, not in the
+mapping → HOLD `EMF_NOT_MAINTAINED` (as for the top 20 %).
 
 **Multi concept rule, Step 1 (19 Nov 2026):** Multi Concept items are ALLOW (Q1) or BLOCK (Q2–Q4) — never WATCH. The
 codes `PEER_Q2`, `PEER_Q3`, `PEER_Q4`, `BOBS_SIBLING_LOW` and rule ids PEER-Q3-OK, PEER-Q3-GAP, PEER-Q4-WATCH, BOBS-02,
@@ -422,9 +424,9 @@ head). If the SAP side is not ready, the tool's setting `SapInterface:BlockVerdi
 
 ```json
 { "...": "...", "overall_verdict": "BLOCK", "verdict_code": "B", "route_to": "COMMERCIAL",
-  "summary_text": "Item 10: block - Below the top 30% of its peer group (25th pct, sell-thru 1.0%/day)",
+  "summary_text": "Item 10: block - Below the top 30% of its peer group (25 percentile, sell-thru 1.0%/day)",
   "items": [ { "po_item": 10, "verdict": "BLOCK", "verdict_code": "B", "max_qty": null,
-               "reason_code": "BLOCK", "reason_text": "Below the top 30% of its peer group (25th pct, sell-thru 1.0%/day)",
+               "reason_code": "BLOCK", "reason_text": "Below the top 30% of its peer group (25 percentile, sell-thru 1.0%/day)",
                "rule_id": "BLOCK-PEER", "metrics": { "sell_through_pct": 0.97 } } ] }
 ```
 
@@ -433,9 +435,9 @@ head). If the SAP side is not ready, the tool's setting `SapInterface:BlockVerdi
 
 ```json
 { "...": "...", "overall_verdict": "HOLD", "verdict_code": "H", "route_to": "BMHEAD", "bm_head_required": true,
-  "summary_text": "Item 10: hold - In the 20–30% band of its peer group (71th pct, sell-thru 4.0%/day): exception, needs the B&M Head's approval (MRA Level 8)",
+  "summary_text": "Item 10: hold - In the 20–30% band of its peer group (71 percentile, sell-thru 4.0%/day), meets its Entry / Mid / Fashion minimum: exception, needs the B&M Head's approval (MRA Level 8)",
   "items": [ { "po_item": 10, "verdict": "HOLD", "verdict_code": "H", "max_qty": null, "reason_code": "PEER_EXCEPTION",
-               "reason_text": "In the 20–30% band of its peer group (71th pct, sell-thru 4.0%/day): exception, needs the B&M Head's approval (MRA Level 8)",
+               "reason_text": "In the 20–30% band of its peer group (71 percentile, sell-thru 4.0%/day), meets its Entry / Mid / Fashion minimum: exception, needs the B&M Head's approval (MRA Level 8)",
                "rule_id": "EXC-L8", "metrics": { "sell_through_pct": 4.03 } } ] }
 ```
 
@@ -454,7 +456,7 @@ head). If the SAP side is not ready, the tool's setting `SapInterface:BlockVerdi
       "reason_text": "Stock + pending + this PO cover 265 days, above the 79-day norm; max 15,928 pcs for 2 items together (50,000 pcs ordered)",
       "rule_id": "COVER-01", "metrics": { "plan_qty": 6303, "stock_qty": 2707, "open_po_qty": 2703, "headroom_qty": 15928, "cover_days": 265 } },
     { "po_item": 30, "verdict": "ALLOW", "verdict_code": "A", "max_qty": null, "reason_code": "PEER_Q1",
-      "reason_text": "In the top 20% of its peer group (100th pct, sell-thru 5.2%/day): top seller (Mid minimum 1.5%/day met)", "rule_id": "PEER-Q1",
+      "reason_text": "In the top 20% of its peer group (100 percentile, sell-thru 5.2%/day): top seller (Mid minimum 1.5%/day met)", "rule_id": "PEER-Q1",
       "metrics": { "sell_through_pct": 5.2 } } ] }
 ```
 

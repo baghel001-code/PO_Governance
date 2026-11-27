@@ -193,26 +193,31 @@ The **decisions**:
 | **Watch List** | Borderline — the category head must approve (Single Concept: colour share below 2 %, or no sale in F3). Not used for Multi Concept | Wait; the card shows "⏳ Awaiting <name>". The decision appears in **Requests** |
 | **Hold — Don't Raise** (Single Concept) | Stock + open POs already cover more than the norm; the reason shows the Max Permissible (often 0) | Do not raise, or raise at most the quantity shown |
 | **Hold — Don't Raise** (Multi Concept) | The option's MC-MRP is not in the Entry / Mid / Fashion mapping: "Planner has not maintained this MC-MRP in the master." | Ask the planner to maintain it, then request again |
-| **Exception — B&M Head** (Multi Concept) | The option is in the **20–30 % band** of its peers (new colour: the worst other colour) | Type your reason to raise the exception (MRA Level 8) — it goes to the B&M Head for approval — or choose **Don't raise** (nothing is saved) |
+| **Exception — B&M Head** (Multi Concept) | The option is in the **20–30 % band** of its peers (new colour: the worst other colour) and meets its Entry / Mid / Fashion minimum | Type your reason to raise the exception (MRA Level 8) — it goes to the B&M Head for approval — or choose **Don't raise** (nothing is saved) |
 | **Block** | Multi Concept: below the top 30 % of its peers, in the top 20 % but below the minimum of its Entry / Mid / Fashion type, a new colour with another colour below the top 30 %, or sell-through below 1 %/day after 4+ weeks | Do not raise |
 | **Cannot Validate** | The article could not be identified (not in the masters) or the month is invalid | Check the GM and month; tell the planner if the article is missing |
 
 Single Concept cards show the key figures — **Op Stock, Mix %, Daily Rate, Colour STR, Max Permissible** — and
 **▼ Show Step-by-Step Computation** explains every step (stock, colour mix, month-by-month stock roll, STR, Max
 Permissible). Multi Concept cards show the peer pool, the sell-through vs. the peer average and the **percentile band**
-(top 20 % → Allow, 20–30 % → Exception, below 30 % → Block).
+(top 20 % → Allow, 20–30 % → Exception, below 30 % → Block). The card shows **Step 3 — Rank in peer group** (the
+percentile, the number of styles and the peer group Brand + MC + MRP + Flag; for a new colour the worst / best other
+colour shown) on a bar coloured Block (below the top 30 %) · Exception (20–30 %) · Allow (top 20 %), and **Step 4 — EMF
+minimum** (the EMF tag, what it was checked on, the sell-thru per day and the result).
 
 **Multi Concept rule** — for articles not in the Universe Master (Step 1: 19 Nov, Step 2: 20 Nov, Step 3: 23 Nov 2026):
 
 - The option is placed by its position among similar options (same **Brand**, MC, MRP and Flag) on its per-day
   sell-through of the first 3 weeks — the share of those options selling at or below it:
   - **Top 20 %** (above the 80th percentile) **and** the minimum of its Entry / Mid / Fashion type (below) → **Allow**.
-  - **20–30 %** (above the 70th, up to the 80th percentile) → **Exception — B&M Head**: you may raise an exception at MRA
-    Level 8 with your reason; the B&M Head approves or rejects it (section 4.1). No minimum check.
+  - **20–30 %** (above the 70th, up to the 80th percentile) **and** the minimum of its Entry / Mid / Fashion type →
+    **Exception — B&M Head**: you may raise an exception at MRA Level 8 with your reason; the B&M Head approves or rejects
+    it (section 4.1). Below the minimum → **Block**; MC-MRP not in the mapping → **Hold** (from 27 Nov 2026 the exception
+    reaches Level 8 only when the minimum is met).
   - **Below the top 30 %** → **Block**.
 - There is no Watch List for Multi Concept.
 - **New colour of an existing option (BOBs):** the other colours of the option with 4+ weeks on floor are placed the
-  same way and the **worst** one decides: any below 30 % → Block; any in 20–30 % → Exception; all in the top 20 % → Allow
+  same way and the **worst** one decides: any below 30 % → Block; any in 20–30 % → Exception (if the oldest colour meets the minimum); all in the top 20 % → Allow
   when the **oldest** colour meets the minimum. No other colours, or none with 4 weeks on floor → Allow.
 - Unchanged: less than 4 weeks on floor → Allow; new articles → Allow; below 1 %/day after 4+ weeks → Block (any band).
 
@@ -596,7 +601,7 @@ The link works for 90 days. **Anyone with the link can open the page — do not 
 | Allow | green | Multi Concept: in the top 20 % of its peers and meets its Entry / Mid / Fashion minimum, or too little history to judge |
 | Watch List | brown | Category head must approve (Single Concept only): colour share below the minimum, or no sale in F3 |
 | Hold — Don't Raise | red | Single Concept: cover already above the norm — no or limited headroom (Max Permissible). Multi Concept: the MC-MRP is not in the Entry / Mid / Fashion mapping |
-| Exception — B&M Head | purple | Multi Concept 20–30 % band: raise an exception with a reason for the B&M Head, or don't raise |
+| Exception — B&M Head | orange | Multi Concept 20–30 % band: raise an exception with a reason for the B&M Head, or don't raise |
 | Block | red | Multi Concept below the top 30 %, or a confirmed slow seller — do not raise |
 | Cannot Validate | grey | Article or month not recognised |
 

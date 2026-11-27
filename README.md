@@ -51,7 +51,10 @@ selling at or below it (`BsrPeerRank.Band`; `quartile_` now holds the band).
 * **20–30 %** (above the 70th, up to the 80th) → **"Exception — B&M Head"**: the buyer raises it with a reason (the colour
   reason dialog, "Don't raise" saves nothing); it waits on the Approvals page for the **B&M Head** —
   `PoGovSettings:BmHeadEmail` / `BmHeadName` in `POGovApi/appsettings.json` (empty = an admin decides) — and only the B&M Head
-  and admins can approve or reject it. No minimum check; the < 1 %/day absolute block still applies.
+  and admins can approve or reject it. **From 27 Nov 2026 it must meet the Entry / Mid / Fashion minimum first** (below →
+  Block `BLOCK-EMF-MIN`, not mapped → Hold `EMF_NOT_MAINTAINED`; BOBs: on the oldest other colour); the < 1 %/day absolute
+  block still applies. Card view (reference image, 27 Nov): "Step 3 — Rank in peer group (P percentile — N styles, Brand +
+  MC + MRP + Flag)", a Block / Exception / Allow bar (0–70 / 70–80 / 80–100), "Step 4 — EMF minimum" box; the exception is orange.
 * **Below the top 30 %** → **Block**.
 * BOBs: the **worst** band of the other colours decides (below 30 % Block, 20–30 % Exception, all top 20 % → Allow with the
   minimum on the oldest colour).

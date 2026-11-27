@@ -33,7 +33,7 @@ namespace POGovernance.Tests.Tool2
                     t.Add("Step 2 — PDSTR vs Peer Average");
                     foreach (var x in s.Step2) { t.Add(x.Value); t.Add(x.Label); }
                 }
-                if (s.Step3Heading != null) { t.Add(s.Step3Heading); t.AddRange(new[] { "Below 30% · Block", "20–30%", "Top 20% · Allow" }); }
+                if (s.Step3Heading != null) { t.Add(s.Step3Heading); t.AddRange(new[] { "Below top 30% · Block", "20–30% · Exception", "Top 20% · Allow" }); }
                 if (s.Step4 is { } b)
                 {
                     t.Add("Step 4 — Border Zone Check (PDSTR Gap)");

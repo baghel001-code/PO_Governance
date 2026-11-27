@@ -29,7 +29,7 @@ namespace Admin.Components.Shared.Tool2
         {
             "Top 20%" or "Q1" => "#00873E",
             "Q2" => "#059669",
-            "20–30%" => "#7C3AED",
+            "20–30%" => "#C2410C",
             "Q3" => "#D97706",
             _ => "#DC2626",
         };

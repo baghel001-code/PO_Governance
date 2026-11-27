@@ -66,7 +66,7 @@ and `view.statusText` under the Run button (line count = `lines.length`).
      Recommended Action pill in `actionColor`, Max Permissible Qty = `recQty` or "0") + TOTAL row (`totalQty`,
      `totalRetain`).
    - **Tab A** (`rows` = line idx): PO Number, Gen. Material, Colour, Brand, Division, MC Desc, ₹MRP, Del. Month,
-     Released Qty, Option Type, band chip (Top 20% `#00873E`, 20–30% `#7C3AED`, Below 30% `#DC2626`; Q1–Q4 of older runs as before), Percentile
+     Released Qty, Option Type, band chip (Top 20% `#00873E`, 20–30% `#C2410C`, Below 30% `#DC2626`; Q1–Q4 of older runs as before), Percentile
      ("58th"), Decision pill (hover `tooltip`), ▼ → "{decision} — Detailed Computation" + the line's reason.
 6. **Charts** (two cards): "By Division" (`divisionChart`, top 8) and "By Delivery Month" (`monthChart`): label +
    `note` on one line, an 8 px stacked bar with `widths` = [Retain `#00873E`, Reduce `#D97706`, Cancel `#DC2626`,
@@ -91,7 +91,7 @@ and `view.statusText` under the Run button (line count = `lines.length`).
 4. `strSteps` (Single Concept with STR) — grey box "**STR Computation Steps:**" with 4 lines.
 5. `steps` (Multi Concept with a quartile): "Step 1 — Article & Peer Pool" 5 tiles (`value` over `label`, value in
    `color`); "Step 2 — PDSTR vs Peer Average" 4 tiles; `step3Heading` + a rank bar with lines at 25/50/75 % and a
-   13 px dot in `decisionColor` at `step3MarkerPos`%, lines at 70 / 80 %, labels Below 30% · Block | 20–30% | Top 20% · Allow; `step4` (only for a line with `borderTolUsed` — not since the
+   13 px dot in `decisionColor` at `step3MarkerPos`%, segments 0–70 / 70–80 / 80–100 % (red / yellow / green), labels Below top 30% · Block | 20–30% · Exception | Top 20% · Allow; heading "Step 3 — Rank in peer group (<p> percentile — <n> styles, Brand + MC + MRP + Flag)"; `step4` (only for a line with `borderTolUsed` — not since the
    multi concept rule Step 1) "Step 4 — Border Zone Check (PDSTR Gap)" mono box (`threshold`, `gap`, "Result : **{result}**" coloured) + verdict
    bar `message` (`color` on `bg`, left border); `absBlockNote` red bar.
 
